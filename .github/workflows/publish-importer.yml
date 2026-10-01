@@ -1,0 +1,30 @@
+name: Publish importer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build and test
+        run: |
+          docker build --label org.opencontainers.image.source=https://github.com/Vk2026-commits/vektiss-creator-deploy -t ghcr.io/vk2026-commits/vektiss-creator-importer:pilot .
+          docker run --rm --mount type=bind,source="$GITHUB_WORKSPACE/smoke.mjs",target=/tmp/smoke.mjs,readonly --entrypoint node ghcr.io/vk2026-commits/vektiss-creator-importer:pilot /tmp/smoke.mjs
+      - name: Publish private image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          docker push ghcr.io/vk2026-commits/vektiss-creator-importer:pilot
+      - name: Sign out
+        if: always()
+        run: docker logout ghcr.io
