@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 import {importVideo,importMessages} from './social-video';
 import {fullComposition} from './full-composition';
+import {extractVideoFrames,frameTimesHeader} from './video-frames';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -65,7 +66,7 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/prepare-video','/video-import','/video-background','/full-compose'].some(route=>path===prefix+route))return json(res,422,{error:'The hosted pilot currently supports video sources. Article screenshot composition is still local-only.'});
+   if(!['/prepare-video','/video-import','/video-background','/video-frames','/full-compose'].some(route=>path===prefix+route))return json(res,422,{error:'The hosted pilot currently supports video sources. Article screenshot composition is still local-only.'});
    if(activeJob)return json(res,429,{error:'A video is already processing. Please wait and retry.'});
    const id=randomUUID();activeJob=id;
    let inputFile='';let detached=false;
@@ -77,7 +78,8 @@ export function hostedHandler(c:HostingConfig){
     for(const file of await readdir(jobs)){if(file.endsWith('.json')&&(await readFile(resolve(jobs,file),'utf8')).includes(`"created":"${today}`))count++;}
     if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
     const type=req.headers['content-type']?.split(';')[0]??'';
-    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background');
+    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames');
+    const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!['video/mp4','video/webm'].includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
     const limit=binary?SOURCE_MAX_BYTES:4096;
@@ -93,6 +95,7 @@ export function hostedHandler(c:HostingConfig){
     void(async()=>{
      try{
       if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
+      else if(path.endsWith('/video-frames'))job.result=await extractVideoFrames(createReadStream(savedInput),frameTimes);
       else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)),sourceEnd);await writeFile(resolve(media,`${mediaId}.mime`),sourceEnd?'video/mp4':type,{mode:0o600});job.result={id:mediaId};}
       else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
       job.state='done';

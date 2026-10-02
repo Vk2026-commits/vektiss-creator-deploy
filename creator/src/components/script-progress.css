@@ -6,6 +6,11 @@
 .draft-progress progress::-webkit-progress-value{background:#227cf4;border-radius:99px;transition:width .3s ease}
 .draft-progress progress::-moz-progress-bar{background:#227cf4;border-radius:99px}
 .draft-progress small{line-height:1.5;color:#51647c}
+.draft-progress-failed{background:#fff2ef;border-color:#efc5bd}
+.draft-progress progress:indeterminate{background:linear-gradient(90deg,#dce7f6 25%,#227cf4 50%,#dce7f6 75%);background-size:200% 100%;animation:draft-working 1.5s linear infinite}
+.draft-progress progress:indeterminate::-webkit-progress-bar{background:transparent}
+@keyframes draft-working{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.draft-progress progress:indeterminate{animation:none}}
 .script-editor .draft-progress-active{position:fixed;z-index:1000;bottom:max(16px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));box-sizing:border-box;margin:0;padding:18px;background:#f2f7ff;color:#17283f;box-shadow:0 12px 48px #17283f30;border:1px solid #a9caff}
 .script-editor:has(.draft-progress-active){padding-bottom:180px}
 @media(prefers-reduced-motion:reduce){.draft-progress progress::-webkit-progress-value{transition:none}}

@@ -21,7 +21,7 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
  const update=(patch:Partial<ScriptBrief>)=>onChange({...brief,...patch,clarified:false,questions:[],summary:''});
  const updateSource=(patch:Partial<ScriptBrief>)=>update({...patch,...('url' in patch||'kind' in patch?{source:'',source_cut:undefined}:{}),source_summary:undefined,production:undefined});
  const completeSource=async(source:string,source_cut:SourceCut)=>{const next={...brief,source,source_cut,source_summary:undefined,production:undefined,questions:[],summary:'',clarified:false,stage:'source' as const};setEditingSource(false);onChange(next);await onAI('summarize',next);};
- const cutControls=brief.source_cut?<AdjustSourceCut key={brief.source_cut.selected_id} cut={brief.source_cut} profileId={profileId} disabled={busy||preview} onComplete={completeSource} onProcessing={onProcessing??(()=>{})}/>:null;
+ const cutControls=brief.source_cut?<AdjustSourceCut key={brief.source_cut.selected_id} cut={brief.source_cut} profileId={profileId} disabled={busy||preview} onComplete={completeSource} onProcessing={onProcessing??(()=>{})} onProgress={onProgress}/>:null;
  const move=(stage:ScriptBrief['stage'])=>onChange({...brief,stage});
  if(brief.stage==='source'&&brief.source_summary&&!editingSource)return <div className="script-intake source-ready">
   <span className="eyebrow">SOURCE READY</span>

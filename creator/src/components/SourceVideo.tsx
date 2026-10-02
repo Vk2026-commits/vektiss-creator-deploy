@@ -9,22 +9,22 @@ export function SourceVideo({mode,url,profileId,disabled,onUrl,onComplete,onProc
  const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
  const running=useRef(false);
  const [retained,setRetained]=useState<{blob:Blob;id:string;duration:number;reason:string}|null>(null),[end,setEnd]=useState(0);
- const progress=(label:string)=>{setStatus(label);onProgress?.({percent:label.startsWith('Listening')?50:35,label});};
+ const progress=(label:string)=>{setStatus(label);onProgress?.({percent:0,label,indeterminate:true});};
  async function finish(blob:Blob,id:string,duration:number,selectedEnd:number,reason:string){
   const result=await analyzeSelection(blob,id,duration,selectedEnd,reason,profileId,progress);await onComplete(result.text,result.cut);
  }
  async function applyCut(){
-  if(!retained||running.current||disabled)return;running.current=true;setBusy(true);onProcessing(true);setError('');
-  try{await finish(retained.blob,retained.id,retained.duration,end,'Cut selected by you.');setRetained(null);}catch(e){setError(e instanceof Error?e.message:'Could not apply cut. Your source is retained.');}finally{running.current=false;setBusy(false);onProcessing(false);}
+  if(!retained||running.current||disabled)return;running.current=true;setBusy(true);onProcessing(true);setError('');progress('Applying your cut…');
+  try{await finish(retained.blob,retained.id,retained.duration,end,'Cut selected by you.');setRetained(null);}catch(e){const message=e instanceof Error?e.message:'Could not apply cut. Your source is retained.';setError(message);setStatus('');onProgress?.({percent:0,label:message,failed:true});}finally{running.current=false;setBusy(false);onProcessing(false);}
  }
  const valid=mode==='upload'?Boolean(file):(()=>{try{const u=new URL(url);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}})();
  async function create(){
   if(running.current||disabled||!valid||!profileId)return;
-  running.current=true;setBusy(true);onProcessing(true);setError('');onProgress?.({percent:5,label:'Preparing your video…'});
+  running.current=true;setBusy(true);onProcessing(true);setError('');progress('Preparing your video…');
   try{
    let blob:Blob;
    if(mode==='upload'){blob=file!;}else{
-    setStatus('Importing your video…');
+    progress('Importing your video…');
     const response=await mediaFetch('/api/local-capture/video-import',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1'},body:JSON.stringify({url}),signal:AbortSignal.timeout(600000)});
     if(!response.ok){const failure=await response.json().catch(()=>null);throw Error(failure?.error??'Import failed. Try again or upload the video.');}
     blob=await response.blob();
@@ -34,7 +34,7 @@ export function SourceVideo({mode,url,profileId,disabled,onUrl,onComplete,onProc
    const detected=await detectReaction(blob,profileId,progress);
    setEnd(detected.end??detected.boundary.end??detected.duration);
    setRetained({blob,id,duration:detected.duration,reason:detected.boundary.reason});
-   if(detected.end===null){setStatus('Check the cut before creating your script.');return;}
+   if(detected.end===null){setStatus('');onProgress?.({percent:0,label:'Check your cut',waiting:true});return;}
    await finish(blob,id,detected.duration,detected.end,detected.boundary.reason);setRetained(null);
   }catch(e){onProgress?.({percent:0,label:'Could not finish. Please retry.',failed:true});setError(e instanceof Error?e.message:'Could not create your draft. Please retry.');setStatus('');}
   finally{running.current=false;setBusy(false);onProcessing(false);}

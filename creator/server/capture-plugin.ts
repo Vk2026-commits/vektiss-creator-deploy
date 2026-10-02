@@ -7,6 +7,7 @@ import {composeVideo} from './compose-video';
 import {fullComposition} from './full-composition';
 import {importVideo,importMessages} from './social-video';
 import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
+import {extractVideoFrames,frameTimesHeader} from './video-frames';
 
 export function capturePlugin():Plugin{
  let active=false;
@@ -18,12 +19,12 @@ export function capturePlugin():Plugin{
    const host=req.headers.host;const origin=req.headers.origin;
    if(host!=='127.0.0.1:5178'||(origin&&origin!=='http://127.0.0.1:5178')||req.headers['x-creator-capture']!=='1'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'')){res.statusCode=403;res.end();return;}
    try{
-    if(req.method==='POST'&&path==='/api/local-capture/prepare-video'){
+    if(req.method==='POST'&&['/api/local-capture/prepare-video','/api/local-capture/video-frames'].includes(path)){
      if(active){res.statusCode=429;res.end(JSON.stringify({error:'A video is already processing. Please wait.'}));return;}
      if(!['video/mp4','video/webm'].includes(req.headers['content-type']?.split(';')[0]??'')){res.statusCode=415;res.end(JSON.stringify({error:'Choose an MP4 or WebM video.'}));return;}
      if(Number(req.headers['content-length'])>SOURCE_MAX_BYTES){res.statusCode=413;res.end(JSON.stringify({error:importMessages.VIDEO_SIZE}));return;}
      active=true;req.setTimeout(600000,()=>req.destroy());
-     try{const media=await prepareMedia(req);res.setHeader('Content-Type',media.type);res.end(media.body);}
+     try{if(path.endsWith('/video-frames')){const result=await extractVideoFrames(req,frameTimesHeader(req.headers['x-frame-times']));res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));}else{const media=await prepareMedia(req);res.setHeader('Content-Type',media.type);res.end(media.body);}}
      catch(e){const code=e instanceof Error?e.message:'';res.statusCode=422;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:importMessages[code]??'Could not prepare this video. Try an MP4 or WebM file.'}));}
      finally{active=false;}
      return;
