@@ -542,6 +542,10 @@ button {
 .profile-card:hover {
   box-shadow: 0 5px 17px #202c3508;
 }
+.profile-card-details { margin-bottom: 12px; }
+.profile-card-details summary { cursor: pointer; color: #1769c2; font-size: 13px; padding: 12px 0; }
+.profile-full-audience { font-size: 14px; line-height: 1.6; margin: 0 0 16px; overflow-wrap: anywhere; }
+.profile-card .audience { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 0; }
 .card-top {
   display: flex;
   align-items: center;

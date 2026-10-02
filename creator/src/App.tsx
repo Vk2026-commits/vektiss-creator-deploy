@@ -691,6 +691,9 @@ function CreatorWorkspace({
                             <p className="audience">
                               {profile.primary_audience}
                             </p>
+                            <details className="profile-card-details">
+                            <summary>Profile details</summary>
+                            <p className="profile-full-audience">{profile.primary_audience}</p>
                             <span className="card-label">CONTENT PILLARS</span>
                             <div className="tags">
                               {profile.strategy.content_pillars.length ? (
@@ -718,6 +721,7 @@ function CreatorWorkspace({
                                   .join(" · ") || "Your creator voice"}
                               </span>
                             </div>
+                            </details>
                             <footer>
                               {profile.archived_at ? (
                                 <button
