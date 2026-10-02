@@ -1,0 +1,37 @@
+name: Publish Creator
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['creator/**', '.github/workflows/publish-creator.yml']
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build Creator
+        working-directory: creator
+        env:
+          VITE_SUPABASE_URL: https://flvlgxzhjusxdrwojgva.supabase.co
+          # Public anon key, intentionally shipped in the browser. Not a service-role key.
+          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsdmxneHpoanVzeGRyd29qZ3ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1NzEwMzksImV4cCI6MjEwNDE0NzAzOX0.mCra9zJAgh5AvgKkqsVOAlSCD4YEhb-fPIttwaAf0tc
+        run: docker build -f deploy/creator.Dockerfile --build-arg VITE_SUPABASE_URL --build-arg VITE_SUPABASE_PUBLISHABLE_KEY --label org.opencontainers.image.source=https://github.com/Vk2026-commits/vektiss-creator-deploy -t ghcr.io/vk2026-commits/vektiss-creator:pilot -t ghcr.io/vk2026-commits/vektiss-creator:${{ github.sha }} .
+      - name: Publish private image
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          docker push ghcr.io/vk2026-commits/vektiss-creator:pilot
+          docker push ghcr.io/vk2026-commits/vektiss-creator:${{ github.sha }}
+      - name: Sign out
+        if: always()
+        run: docker logout ghcr.io

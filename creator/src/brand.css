@@ -1,0 +1,61 @@
+/* Vektiss product theme: authentic lockup, electric blue, precise surfaces. */
+:root { color: #111820; background: #f8fafc; --ink: #111820; --muted: #637080; --line: #e1e7ee; }
+h1,h2,h3,.brand { font-family: Inter, sans-serif; }
+.brand { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.brand-lockup { position: relative; display: block; width: 150px; height: 39px; overflow: hidden; }
+.brand-lockup img { position: absolute; width: 191px; height: 191px; max-width: none; left: -20px; top: -75px; }
+.brand-product { margin-left: 43px; font: 500 9px Inter,sans-serif; letter-spacing: 4px; color: #96a6b8; }
+.sidebar { background: #080d13; border-right: 1px solid #1b2633; }
+.sidebar .brand { padding: 0 8px; }
+.sidebar nav button.active { background: #0088ff1c; box-shadow: inset 2px 0 #0088ff; color: #fff; }
+.sidebar nav button.active svg { color: #0088ff; }
+.sidebar nav button:hover { background: #ffffff09; color: #fff; }
+.workspace-avatar { background: #121e2c; border-color: #27394c; color: #9ccdff; }
+.new-video,.primary,.avatar-library .button { background: linear-gradient(135deg,#0088ff,#006ce6); color: #fff; box-shadow: 0 5px 15px #0079eb24, inset 0 1px #ffffff26; border-radius: 10px; }
+.primary:hover,.new-video:hover,.avatar-library .button:hover { background: #006ad5; box-shadow: 0 7px 20px #0079eb38; }
+.button { min-height: 44px; }
+.workspace-main { background: radial-gradient(ellipse at 70% 0,#0088ff07,transparent 55%),#f8fafc; }
+.topbar { background: #ffffffd9; border-bottom-color: #e4e9ef; backdrop-filter: blur(16px); }
+.foundation-badge { background: #edf6ff; color: #1763a4; border: 1px solid #d6eaff; }
+.foundation-badge > span { background: #0088ff; box-shadow: 0 0 0 3px #0088ff12; }
+.eyebrow { color: #0877d4; font-size: 10px; letter-spacing: 2px; }
+.page-heading { margin-bottom: 34px; }
+.page-heading h1 { font-size: clamp(28px,3vw,43px); font-weight: 750; letter-spacing: -1.8px; line-height: 1.13; margin: 15px 0; }
+.page-heading p { font-size: 14px; color: #667180; }
+.strategy-strip { background: linear-gradient(110deg,#eef7ff,#fff); border-color: #d9e8f5; border-radius: 14px; padding: 25px; box-shadow: 0 4px 18px #152d4703; }
+.strip-symbol { background: #fff; color: #0088ff; border-color: #cde6ff; }
+.strategy-strip p { color: #64788b; }
+.strip-stat { border-color: #d4e2ef; }
+.profile-card,.creator-summary,.create-panel,.strategy-preview { border-color: #e0e7ef; border-radius: 16px; box-shadow: 0 3px 6px #152d4703,0 14px 35px #152d4704; }
+.profile-card { transition: border-color .2s,box-shadow .2s,transform .2s; }
+.profile-card:hover { border-color: #a9d3fc; box-shadow: 0 12px 32px #005bbb0c; transform: translateY(-2px); }
+.profile-card h2 { font-weight: 700; letter-spacing: -.45px; }
+.audience { color: #647080; }
+.card-tone { color: #65778d; }
+.add-profile-card { background: #ffffff70; border-color: #cbd9e6; border-radius: 16px; }
+.search { background: #fff; border-color: #dfe7ef; border-radius: 9px; }
+.tabs button.selected { color: #006bd1; border-color: #0088ff; }
+.preview-banner { background: #eef6ff; border-color: #dceafb; color: #486d90; }
+.mini-icon { color: #0088ff; background: #edf6ff; border-color: #d6eaff; }
+.modal { border-radius: 18px; box-shadow: 0 30px 100px #08142638; }
+.field input,.field textarea { border-color: #dce4ed; border-radius: 9px; }
+.field input:focus,.field textarea:focus { border-color: #0088ff; box-shadow: 0 0 0 3px #0088ff12; }
+.auth-page { background: #fbfcfe; }
+.auth-story { background: radial-gradient(ellipse at 70% 35%,#0079eb21,transparent 60%),linear-gradient(#ffffff04 1px,transparent 1px),linear-gradient(90deg,#ffffff04 1px,transparent 1px),#080d13; background-size: auto,64px 64px,64px 64px,auto; padding: 48px 64px; }
+.auth-story .eyebrow { color: #4ba6ff; letter-spacing: 2.3px; }
+.auth-story h1 { font-size: clamp(40px,4.7vw,72px); font-weight: 750; letter-spacing: -3px; line-height: 1.08; color: #fff; }
+.auth-story h1 em { color: #0088ff; }
+.auth-story p { font-size: 15px; color: #99a9ba; line-height: 1.8; }
+.auth-story .auth-footer { color: #8191a4; }
+.auth-panel { background: radial-gradient(ellipse at top right,#0088ff09,transparent 65%); }
+.auth-card { max-width: 400px; background: #fff; padding: 34px; border: 1px solid #e1e8f0; border-radius: 20px; box-shadow: 0 18px 70px #162e4b09,0 2px 5px #162e4b04; }
+.auth-card h2 { font-size: 30px; font-weight: 750; line-height: 1.2; letter-spacing: -1.2px; }
+.auth-card > p { color: #667487; font-size: 13px; }
+.auth-bottom { color: #748195; }
+.preview-entry small { color: #748195; }
+.setup-note { background: #eef6ff; color: #0877d4; }
+.setup-note p { color: #60778b; }
+.loading-screen { background: #080d13; color: #a2b2c4; }
+@media(max-width: 900px) { .auth-story { padding: 38px; } .auth-panel { padding: 30px; } .page-heading h1 { font-size: 30px; } }
+@media(max-width: 700px) { .auth-story { min-height: auto; padding: 30px 25px; } .auth-story h1 { letter-spacing: -1.8px; } .auth-card { padding: 26px; } .sidebar .brand { display: flex; } .sidebar .brand-product { display: none; } .sidebar .brand-lockup { width: 105px; height: 28px; } .sidebar .brand-lockup img { width: 134px; height: 134px; left: -14px; top: -53px; } .page-heading h1 { letter-spacing: -1px; font-size: 29px; } .page-heading p { font-size: 13px; } .strategy-strip { padding: 18px; } }
+@media(prefers-reduced-motion:reduce) { .profile-card,.button { transition: none; } .profile-card:hover,.button:hover { transform: none; } }
