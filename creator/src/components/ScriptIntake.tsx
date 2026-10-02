@@ -7,11 +7,12 @@ import { ContentSearch } from './ContentSearch';
 import { useId, useState } from 'react';
 import {AdjustSourceCut} from './AdjustSourceCut';
 import type {SourceCut} from '../domain/source-cut';
-export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProcessing,onProgress}:{brief:ScriptBrief;onChange:(b:ScriptBrief)=>void;profileId:string;busy:boolean;preview:boolean;onAI:(action:'summarize'|'clarify'|'generate',brief?:ScriptBrief)=>Promise<void>;onProcessing?:(busy:boolean)=>void;onProgress?:(progress:DraftProgress)=>void}) {
+import {recoveryRead} from '../lib/recovery-storage';
+export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProcessing,onProgress,scope}:{scope?:string;brief:ScriptBrief;onChange:(b:ScriptBrief)=>void;profileId:string;busy:boolean;preview:boolean;onAI:(action:'summarize'|'clarify'|'generate',brief?:ScriptBrief)=>Promise<void>;onProcessing?:(busy:boolean)=>void;onProgress?:(progress:DraftProgress)=>void}) {
  const [voice,setVoice]=useState(false);
  const [takeMode,setTakeMode]=useState<'voice'|'type'>('voice');
  const [editingSource,setEditingSource]=useState(false);
- const [videoInput,setVideoInput]=useState<'search'|'link'|'upload'>('search');
+ const [videoInput,setVideoInput]=useState<'search'|'link'|'upload'>(()=>scope&&brief.kind==='video'&&recoveryRead(`vektiss:source-workflow:v1:${scope}:${profileId}`)?(brief.url?'link':'upload'):'search');
  const tabsId=useId();
  const pending=brief.questions.findIndex(q=>!q.answer.trim());
  const questionIndex=pending<0?brief.questions.length-1:pending;
@@ -38,7 +39,7 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
  <div id={`${tabsId}-method-panel`} hidden={brief.stage==='source'&&videoInput==='search'}>
  {brief.stage==='source'&&<><h2>First, let’s understand the source.</h2><p>Add your {brief.kind==='video'?'video':'article'}. AI will use it and your profile to write your script.</p><label>Source type<select disabled={busy} value={brief.kind} onChange={e=>updateSource({kind:e.target.value as 'article'|'video'})}><option value="article">Article</option><option value="video">Video</option></select></label>{brief.kind==='article'&&<label>Article link<input disabled={busy} type="url" maxLength={2000} value={brief.url} onChange={e=>updateSource({url:e.target.value})} placeholder="https://…"/></label>}
  {brief.kind==='video'?<>
- {videoInput!=='search'&&<SourceVideo key={`${videoInput}:${profileId}`} onProgress={onProgress} mode={videoInput} url={brief.url} profileId={profileId} disabled={busy||preview} onUrl={url=>updateSource({url})} onProcessing={onProcessing??(()=>{})} onComplete={completeSource}/>}
+ {videoInput!=='search'&&<SourceVideo scope={scope?`${scope}:${profileId}`:undefined} key={`${videoInput}:${profileId}`} onProgress={onProgress} mode={videoInput} url={brief.url} profileId={profileId} disabled={busy||preview} onUrl={url=>updateSource({url})} onProcessing={onProcessing??(()=>{})} onComplete={completeSource}/>}
  {brief.source&&<details><summary>Review video analysis</summary><SourceReport text={brief.source}/></details>}{brief.source&&brief.source.trim().length<40&&<p role="alert">This earlier import contains too little speech. Select Create my script to include visuals and on-screen text.</p>}</>:<details><summary>Paste article text instead</summary><label>Article text / relevant excerpt<textarea disabled={busy} maxLength={40000} rows={5} value={brief.source} onChange={e=>updateSource({source:e.target.value})} placeholder="Paste the article here if the website blocks access."/></label></details>}
  {brief.kind==='article'&&(brief.source_summary?<section className="script-direction" aria-label="Source summary"><span className="eyebrow">WHAT THE SOURCE SAYS</span><h2>Here’s the summary.</h2><SourceReport text={brief.source_summary}/><button type="button" className="button" disabled={busy} onClick={()=>onAI('generate')}>Create my draft →</button></section>:<button type="button" className="button" disabled={busy||preview||!profileId||(brief.source.trim().length<40&&!(brief.kind==='article'&&brief.url.trim()))} onClick={()=>{setEditingSource(false);onAI('summarize');}}>{busy?'Reading and summarizing…':'Create my script →'}</button>)}
  {brief.kind==='article'&&<p><small>AI uses your source and profile. You review the script and angle next.</small></p>}</>}

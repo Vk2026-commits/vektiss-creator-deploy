@@ -7,6 +7,8 @@ import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 import {importVideo,importMessages} from './social-video';
 import {fullComposition} from './full-composition';
 import {extractVideoFrames,frameTimesHeader} from './video-frames';
+import {createSavedDraft,DraftError} from './script-draft';
+import {sourceWorkflow} from './source-workflow';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -66,9 +68,18 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/prepare-video','/video-import','/video-background','/video-frames','/full-compose'].some(route=>path===prefix+route))return json(res,422,{error:'The hosted pilot currently supports video sources. Article screenshot composition is still local-only.'});
+   if(!['/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'The hosted pilot currently supports video sources. Article screenshot composition is still local-only.'});
+   const requestedId=req.headers['x-creator-job'];
+   if(requestedId!==undefined&&(typeof requestedId!=='string'||!uuid.test(requestedId)))return json(res,400,{error:'Invalid job identifier.'});
+   if(typeof requestedId==='string'){
+    const previous=await readFile(resolve(jobs,`${requestedId}.json`),'utf8').catch(()=>null);
+    if(previous){
+     if((JSON.parse(previous) as Job).route!==path)return json(res,409,{error:'Job identifier belongs to another operation.'});
+     return json(res,202,{poll:`${prefix}/jobs/${requestedId}`});
+    }
+   }
    if(activeJob)return json(res,429,{error:'A video is already processing. Please wait and retry.'});
-   const id=randomUUID();activeJob=id;
+   const id=typeof requestedId==='string'?requestedId:randomUUID();activeJob=id;
    let inputFile='';let detached=false;
    try{
     // Fixed one-worker pilot: reserve headroom for input, conversion and final composition.
@@ -78,7 +89,7 @@ export function hostedHandler(c:HostingConfig){
     for(const file of await readdir(jobs)){if(file.endsWith('.json')&&(await readFile(resolve(jobs,file),'utf8')).includes(`"created":"${today}`))count++;}
     if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
     const type=req.headers['content-type']?.split(';')[0]??'';
-    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames');
+    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||(path.endsWith('/source-workflow')&&type!=='application/json');
     const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!['video/mp4','video/webm'].includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
@@ -94,12 +105,14 @@ export function hostedHandler(c:HostingConfig){
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
      try{
-      if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
+      if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      else if(path.endsWith('/script-draft'))job.result=await createSavedDraft(input,authorization,c);
+      else if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
       else if(path.endsWith('/video-frames'))job.result=await extractVideoFrames(createReadStream(savedInput),frameTimes);
       else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)),sourceEnd);await writeFile(resolve(media,`${mediaId}.mime`),sourceEnd?'video/mp4':type,{mode:0o600});job.result={id:mediaId};}
       else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
       job.state='done';
-     }catch(e){job.state='failed';job.error=importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
+     }catch(e){job.state='failed';job.error=e instanceof DraftError?e.message:importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
      finally{await unlink(savedInput).catch(()=>{});try{await writeFile(metadata,JSON.stringify(job),{mode:0o600});}finally{activeJob='';}}
     })().catch(()=>{activeJob='';});
     return json(res,202,{poll:`${prefix}/jobs/${id}`});

@@ -14,9 +14,17 @@ import './scripts.css';
 import './video-workspace.css';
 import {videoStep,videoSteps} from '../domain/video-workflow';
 import {suggestedVideoTitle} from '../domain/video-title';
+import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
+import {mediaFetch} from '../lib/media-fetch';
 
 export function Scripts({ profiles, selectedId, userId, preview }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
+  const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
+  const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
+  useEffect(()=>recoveryWrite(`${recoveryKey}:workspace`,workspaceId),[recoveryKey,workspaceId]);
+  const pendingDraftKey=`vektiss:pending-draft:v1:${userId}`;
+  const draftController=useRef<AbortController|null>(null);
+  useEffect(()=>()=>draftController.current?.abort(),[]);
   const empty = (): ScriptInput => ({ content_profile_id: selectedId ?? profiles.find(p => !p.archived_at)?.id ?? '', title: '', hook: '', body: '', cta: '', brief:emptyBrief() });
   const [draft, setDraft] = useState<ScriptInput>(empty);
   const [current, setCurrent] = useState<Script | null>(null);
@@ -58,9 +66,24 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
   }, [selectedId, dirty, current]);
   useEffect(() => {
     let active = true;
-    repo.list().then(items => { if (active) setSaved(items); }).catch(e => { if (active) setError(explainError(e)); }).finally(() => { if (active) setLoading(false); });
+    repo.list().then(items => { if (active) {
+      setSaved(items);
+      const restored=items.find(item=>item.id===recoveryRead(recoveryKey));
+      if(restored){setCurrent(restored);setDraft(restored);setPlanning(Boolean(restored.brief.production));}
+      const pending=recoveryRead(pendingDraftKey);
+      if(!preview&&import.meta.env.PROD&&pending){
+        try{
+          const command=JSON.parse(pending);
+          const item=items.find(item=>item.id===command.script_id);
+          if(item&&typeof command.revision==='string'&&['summarize','clarify','generate'].includes(command.action)){
+            setCurrent(item);setDraft(item);setPlanning(false);void recoverDraft(pending,true);
+          }else recoveryWrite(pendingDraftKey,null);
+        }catch{recoveryWrite(pendingDraftKey,null);}
+      }
+    } }).catch(e => { if (active) setError(explainError(e)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [repo]);
+  }, [repo,recoveryKey,pendingDraftKey,preview]);
+  useEffect(()=>{if(!loading)recoveryWrite(recoveryKey,current?.id??null);},[current?.id,loading,recoveryKey]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -74,10 +97,32 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
     if(busy||sourceProcessing||generating.current)return;
     setEditingScript(false);
     if (dirty && !window.confirm('Some changes have not saved yet. Leave this video anyway?')) return;
+    setWorkspaceId(item?.id??crypto.randomUUID());
     const parsed = briefSchema.safeParse(item?.brief);
     setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:parsed.success ? parsed.data : {...emptyBrief(),stage:'review'}} : empty()); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
   }
   function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
+  async function recoverDraft(body:string,resume=false){
+    const controller=new AbortController();draftController.current?.abort();draftController.current=controller;
+    generating.current=true;setBusy(true);setDirty(false);setError('');
+    setDraftProgress({percent:85,label:'Writing your saved script…'});
+    try{
+      const response=await mediaFetch('/api/local-capture/script-draft',{method:'POST',headers:{'Content-Type':'application/json'},body,signal:controller.signal},undefined,resume);
+      const result=await response.json();
+      if(!response.ok){recoveryWrite(pendingDraftKey,null);throw Error(result.error??'Could not finish your saved draft.');}
+      // Read the latest row rather than overwriting newer edits with a job result.
+      const items=await repo.list();if(controller.signal.aborted)return;
+      const item=items.find(item=>item.id===result.id);if(!item)throw Error('Saved draft is unavailable. Reopen My videos.');
+      recoveryWrite(pendingDraftKey,null);setSaved(items);setCurrent(item);setDraft(item);setDirty(false);setEditingScript(false);
+      setDraftProgress({percent:100,label:'Your draft is ready'});
+    }catch(e){if(!controller.signal.aborted){
+      // A summary may have saved before the writing stage failed. Restore its
+      // latest revision so retrying does not conflict with that checkpoint.
+      try{const items=await repo.list();const id=JSON.parse(body).script_id;const item=items.find(item=>item.id===id);if(!controller.signal.aborted&&item){setSaved(items);setCurrent(item);setDraft(item);setDirty(false);}}catch{/* Preserve current inputs if offline. */}
+      if(!controller.signal.aborted){setError(e instanceof Error?e.message:'Could not reconnect to the saved draft.');setDraftProgress({percent:85,label:'Draft interrupted. Your saved source is preserved.',failed:true});}
+    }}
+    finally{if(!controller.signal.aborted){generating.current=false;setBusy(false);}}
+  }
   async function runAI(action:'summarize'|'clarify'|'generate', override?:ScriptBrief) {
     if(busy||generating.current)return;
     generating.current=true;setDraftProgress({percent:70,label:action==='summarize'?'Understanding your source…':'Writing your script…'});
@@ -85,6 +130,12 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
     try {
       const input={...draft,brief:override??draft.brief,title:draft.title.trim() || 'Untitled video'};
       let snapshot=await repo.save(input,current);setCurrent(snapshot);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);
+      if(!preview&&import.meta.env.PROD){
+        setDraft(snapshot);setDirty(false);
+        const body=JSON.stringify({script_id:snapshot.id,revision:snapshot.updated_at,action});
+        recoveryWrite(recoveryKey,snapshot.id);recoveryWrite(pendingDraftKey,body);
+        await recoverDraft(body);return;
+      }
       let result=await scriptAI(action,draft.content_profile_id,{...input.brief,questions:input.brief.questions.filter(q=>q.answer.trim())});
       let next:ScriptInput;
       if(action==='summarize') {
@@ -131,13 +182,13 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
         {!planning&&draftProgress&&<ScriptProgress progress={draftProgress}/>}
         {planning&&draft.brief.production?<VideoPlan script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
-        <fieldset disabled={busy||sourceProcessing}>
+        <fieldset disabled={loading||busy||sourceProcessing}>
           <details className="script-context" open={!profile}><summary><span className="context-caption">Your audience</span><strong>{profile?.name || 'Choose who this video is for'}</strong><span className="context-action">Change settings</span></summary>
           <label>Content profile<select value={draft.content_profile_id} onChange={e => change('content_profile_id', e.target.value)}><option value="">Choose an audience</option>{profiles.filter(p => !p.archived_at || p.id === draft.content_profile_id).map(p => <option value={p.id} key={p.id}>{p.name}{p.archived_at ? ' (archived)' : ''}</option>)}</select></label>
           {profile && <details><summary>Audience and voice details</summary><div className="script-direction"><p>{profile.primary_audience}</p><small>Tone: {profile.strategy.tone.join(' · ') || 'Your natural voice'}</small>{profile.strategy.things_to_avoid.length > 0 && <p>Avoid: {profile.strategy.things_to_avoid.join(' · ')}</p>}</div></details>}
           <details><summary>{draft.title&&!draft.title.startsWith('Untitled')?'Edit video title':'AI will name your video after reading the source'}</summary><label>Video title (optional)<input maxLength={200} value={draft.title.startsWith('Untitled')?'':draft.title} onChange={e => change('title', e.target.value)} placeholder="Leave blank for an AI title" /></label></details>
           </details>
-          <ScriptIntake brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>
+          {!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
           {draft.brief.stage==='review' && <>
           {!editingScript&&<div className="ai-script-preview"><p>{draft.hook}</p><p>{draft.body}</p><p>{draft.cta}</p></div>}

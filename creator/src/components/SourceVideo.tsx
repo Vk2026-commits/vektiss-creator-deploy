@@ -5,7 +5,8 @@ import {detectReaction} from '../lib/video-analysis';
 import {saveSourceVideo,analyzeSelection} from '../lib/source-cut';
 import type {SourceCut} from '../domain/source-cut';
 import {SourceCutControls} from './SourceCutControls';
-export function SourceVideo({mode,url,profileId,disabled,onUrl,onComplete,onProcessing,onProgress}:{mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(source:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(progress:DraftProgress)=>void}){
+import {HostedSourceVideo} from './HostedSourceVideo';
+export function SourceVideo({mode,url,profileId,disabled,onUrl,onComplete,onProcessing,onProgress,scope}:{scope?:string;mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(source:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(progress:DraftProgress)=>void}){
  const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[status,setStatus]=useState(''),[error,setError]=useState('');
  const running=useRef(false);
  const [retained,setRetained]=useState<{blob:Blob;id:string;duration:number;reason:string}|null>(null),[end,setEnd]=useState(0);
@@ -39,6 +40,7 @@ export function SourceVideo({mode,url,profileId,disabled,onUrl,onComplete,onProc
   }catch(e){onProgress?.({percent:0,label:'Could not finish. Please retry.',failed:true});setError(e instanceof Error?e.message:'Could not create your draft. Please retry.');setStatus('');}
   finally{running.current=false;setBusy(false);onProcessing(false);}
  }
+ if(import.meta.env.PROD&&scope)return <HostedSourceVideo {...{scope,mode,url,profileId,disabled,onUrl,onComplete,onProcessing,onProgress}}/>;
  return <section aria-busy={busy}>
   {retained&&!busy&&<section><p>{retained.reason}</p><SourceCutControls blob={retained.blob} end={end} onEnd={setEnd} disabled={disabled} onDuration={duration=>setRetained(value=>value?{...value,duration}:null)}/><button type="button" className="button" disabled={disabled||end<1} onClick={()=>void applyCut()}>Use this cut & create script →</button></section>}
   {mode==='link'?<label>Paste a video link<input type="url" value={url} placeholder="https://…" disabled={busy||disabled} onChange={e=>{setRetained(null);setEnd(0);onUrl(e.target.value);setError('');}}/></label>:<label>Choose your video<input type="file" accept="video/mp4,video/webm" disabled={busy||disabled} onChange={e=>{const chosen=e.target.files?.[0];if(!chosen)return;setRetained(null);setEnd(0);if(chosen.size>500*1024*1024){setError('Choose a video up to 500 MB.');setFile(null);e.target.value='';return;}setFile(chosen);setError('');}}/></label>}
