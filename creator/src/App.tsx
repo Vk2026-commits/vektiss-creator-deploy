@@ -222,7 +222,7 @@ function SignIn({
             {supabase
               ? sent
                 ? "Check your inbox."
-                : "Welcome to your creative team."
+                : "Sign in to Creator."
               : "Your Creator workspace starts here."}
           </h2>
           {supabase ? (

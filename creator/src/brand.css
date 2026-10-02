@@ -52,6 +52,22 @@ h1,h2,h3,.brand { font-family: Inter, sans-serif; }
 .auth-card h2 { font-size: 30px; font-weight: 750; line-height: 1.2; letter-spacing: -1.2px; }
 .auth-card > p { color: #667487; font-size: 13px; }
 .auth-bottom { color: #748195; }
+/* Mobile sign-in is one compact surface, not a stacked marketing split. */
+@media (max-width: 700px) {
+  .auth-page { background: #080d13; color: #f4f7fc; padding: 0 20px; }
+  .auth-page .auth-story { background: none; padding: 24px 0 8px; min-height: 0; }
+  .auth-page .auth-story > div:nth-child(2), .auth-page .auth-story .auth-footer { display: none; }
+  .auth-page .auth-story .brand { gap: 8px; }
+  .auth-page .auth-panel { background: none; padding: 16px 0 28px; display: flex; flex-direction: column; align-items: stretch; }
+  .auth-page .auth-card { max-width: 440px; margin: 0 auto; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .auth-page .auth-card h2 { color: #f4f7fc; font-size: 28px; line-height: 1.2; margin: 12px 0; letter-spacing: -.7px; }
+  .auth-page .auth-card > p { color: #adbdcf; font-size: 15px; line-height: 1.5; margin: 0 0 24px; }
+  .auth-page .field > span { color: #dce6f2; font-size: 14px; }
+  .auth-page .field input { background: #fff; color: #111820; min-height: 48px; font-size: 16px; }
+  .auth-page .auth-card form .button { min-height: 48px; margin-top: 16px; }
+  .auth-page .auth-bottom { position: static; text-align: center; color: #9aacbf; margin: 28px 0 0; }
+  .auth-page .preview-entry { color: #adbdcf; border-color: #293647; }
+}
 .preview-entry small { color: #748195; }
 .setup-note { background: #eef6ff; color: #0877d4; }
 .setup-note p { color: #60778b; }
