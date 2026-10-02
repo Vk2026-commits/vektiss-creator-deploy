@@ -23,9 +23,9 @@ export function HostedSourceVideo(props:Props){
  async function run(operation:string,body?:BodyInit,type='application/json',resume=false){
   controller.current?.abort();const current=new AbortController();controller.current=current;
   setBusy(true);setError('');callbacks.current.onProcessing(true);
-  callbacks.current.onProgress?.({percent:35,label:resume?'Reconnecting to saved source analysis…':'Analyzing your source on the server…'});
+  callbacks.current.onProgress?.({percent:10,label:resume?'Reconnecting to saved source analysis…':'Sending source — keep this page open until accepted…'});
   try{
-   const response=await mediaFetch('/api/local-capture/source-workflow',{method:'POST',headers:{'Content-Type':type,'X-Profile-Id':props.profileId},body,signal:current.signal},operation,resume);
+   const response=await mediaFetch('/api/local-capture/source-workflow',{method:'POST',headers:{'Content-Type':type,'X-Profile-Id':props.profileId},body,signal:current.signal},operation,resume,()=>{if(!current.signal.aborted)callbacks.current.onProgress?.({percent:35,label:'Source accepted. Analyzing on the server — safe to lock your phone.'});});
    const result=await response.json();if(!response.ok)throw Error(result.error??'Source analysis could not finish.');
    if(current.signal.aborted)return;
    if(result.waiting){

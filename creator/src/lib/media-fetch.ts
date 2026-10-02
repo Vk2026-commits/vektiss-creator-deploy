@@ -3,7 +3,7 @@ import {onResume} from './resume-events';
 import {recoveryRead,recoveryWrite} from './recovery-storage';
 
 // Same-origin only: never forward a user's session to a URL returned by a provider.
-export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:string,resumeOnly=false):Promise<Response>{
+export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:string,resumeOnly=false,onAccepted?:()=>void):Promise<Response>{
  if(!/^\/api\/local-capture(?:\/|$)/.test(path))throw Error('Invalid media route.');
  const signal=init.signal??new AbortController().signal;
  const owner=(await supabase?.auth.getSession())?.data.session?.user.id;
@@ -43,7 +43,7 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
  }
  const headers=new Headers(init.headers);if(requestId)headers.set('X-Creator-Job',requestId);
  let response:Response;
- if(savedPoll&&!requestId)response=await read(savedPoll);
+ if(savedPoll&&!requestId){onAccepted?.();response=await read(savedPoll);}
  else if((init.method??'GET').toUpperCase()==='GET')response=await read(path);
  else{
   try{response=await request(path,{...init,headers});}
@@ -53,6 +53,7 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
   const job=await response.json();
   if(typeof job.poll!=='string'||!pollPattern.test(job.poll))throw Error('Invalid processing response.');
   if(recoveryKey)recoveryWrite(recoveryKey,job.poll);
+  onAccepted?.();
   await wait();response=await read(job.poll);
  }
  // Retain successful jobs for reload recovery. A deliberate retry can resubmit
