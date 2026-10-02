@@ -17,7 +17,7 @@ import {suggestedVideoTitle} from '../domain/video-title';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {mediaFetch} from '../lib/media-fetch';
 
-export function Scripts({ profiles, selectedId, userId, preview }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean }) {
+export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -42,6 +42,14 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
   const [error, setError] = useState('');
   const [planning,setPlanning]=useState(false);
   const latest=useRef(draft);latest.current=draft;
+  const appliedAudience=useRef<number|null>(null);
+  useEffect(()=>{
+    if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing)return;
+    appliedAudience.current=audienceChoice.version;
+    if(latest.current.content_profile_id===audienceChoice.id)return;
+    setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
+    setPlanning(false);setDirty(true);setMessage('Audience selected. Your source is still here.');
+  },[audienceChoice,loading,busy,sourceProcessing]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
   useEffect(()=>{
     if(!dirty||busy||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
@@ -170,7 +178,7 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
     } catch (e) { setError(explainError(e)); } finally { setBusy(false); }
   }
   return <div className="scripts-workspace">
-    <div className="page-heading"><h1>Your video workspace</h1></div>
+    <div className="page-heading"><h1>Create video</h1></div>
     <label className="mobile-project-picker">My videos<select disabled={busy||loading} value={current?.id??''} onChange={e=>open(saved.find(item=>item.id===e.target.value)??null)}><option value="">+ New video</option>{saved.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     <div className="scripts-grid">
       <aside className="scripts-list"><button className="button" disabled={busy} onClick={() => open(null)}>+ New video</button><h2>My videos</h2>
@@ -183,6 +191,7 @@ export function Scripts({ profiles, selectedId, userId, preview }: { profiles: C
         {!planning&&draftProgress&&<ScriptProgress progress={draftProgress}/>}
         {planning&&draft.brief.production?<VideoPlan script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
         <fieldset disabled={loading||busy||sourceProcessing}>
+          {onAddAudience&&<div className="audience-shortcut"><span>{profile?'Need a different audience?':'Who are you talking to? Add an audience to get started.'}</span><button type="button" onClick={onAddAudience}>+ Add audience</button></div>}
           <details className="script-context" open={!profile}><summary><span className="context-caption">Your audience</span><strong>{profile?.name || 'Choose who this video is for'}</strong><span className="context-action">Change settings</span></summary>
           <label>Content profile<select value={draft.content_profile_id} onChange={e => change('content_profile_id', e.target.value)}><option value="">Choose an audience</option>{profiles.filter(p => !p.archived_at || p.id === draft.content_profile_id).map(p => <option value={p.id} key={p.id}>{p.name}{p.archived_at ? ' (archived)' : ''}</option>)}</select></label>
           {profile && <details><summary>Audience and voice details</summary><div className="script-direction"><p>{profile.primary_audience}</p><small>Tone: {profile.strategy.tone.join(' · ') || 'Your natural voice'}</small>{profile.strategy.things_to_avoid.length > 0 && <p>Avoid: {profile.strategy.things_to_avoid.join(' · ')}</p>}</div></details>}

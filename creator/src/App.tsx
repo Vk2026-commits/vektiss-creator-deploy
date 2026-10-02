@@ -328,7 +328,9 @@ function CreatorWorkspace({
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [page, setPage] = useState<Page>("profiles");
+  const [page, setPage] = useState<Page>("create");
+  const [choosingAudience,setChoosingAudience]=useState(false);
+  const [audienceChoice,setAudienceChoice]=useState<{id:string;version:number}|null>(null);
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [creatorOpen, setCreatorOpen] = useState(false);
@@ -398,7 +400,8 @@ function CreatorWorkspace({
     } catch {
       /* Selection remains available for this session. */
     }
-    setPage("create");
+    if(choosingAudience)setAudienceChoice(value=>({id:profile.id,version:(value?.version??0)+1}));
+    setChoosingAudience(false);setPage("create");
   }
   async function action(fn: () => Promise<void>, message: string) {
     if (busy) return;
@@ -499,7 +502,7 @@ function CreatorWorkspace({
                 ? "Content Profiles"
                 : page === "creator"
                   ? "Creator profile"
-                  : page === "avatars" ? "Avatar library" : "My videos"}
+                  : page === "avatars" ? "Avatar library" : "Create video"}
             </strong>
           </div>
           <span className="foundation-badge">
@@ -566,6 +569,7 @@ function CreatorWorkspace({
               {page === "avatars" && <AvatarLibrary preview={preview} />}
               {page === "profiles" && (
                 <>
+                  {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}
                   <div className="page-heading">
                     <div>
                       <span className="eyebrow">
@@ -742,7 +746,7 @@ function CreatorWorkspace({
                                   className="use-profile"
                                   onClick={() => select(profile)}
                                 >
-                                  Create a video
+                                  {choosingAudience?'Use this audience':'Create a video'}
                                   <ArrowRight size={17} />
                                 </button>
                               )}
@@ -902,7 +906,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create'}><Scripts profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} /></div>
+              <div hidden={page !== 'create'}><Scripts profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>
@@ -970,6 +974,7 @@ function CreatorWorkspace({
                   : current,
               );
               setNotice("Content Profile saved.");
+              if(choosingAudience){select(result);setContentEdit(null);}
             }}
           />
         </Modal>
