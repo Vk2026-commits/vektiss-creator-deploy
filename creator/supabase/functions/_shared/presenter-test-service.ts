@@ -68,7 +68,11 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Validate the chosen voice through this user's connected HeyGen account.
   const selectedVoice=await selectedVoiceForPlan(plan,avatar,async id=>new HeyGenCatalog(await keyFor(user,avatar.connection_id)).getVoice(id));
   const scope=command.scope??'test';
+  if(plan.voice_engine!==undefined&&!['auto','fish'].includes(plan.voice_engine))throw new PublicError('VOICE_ENGINE','Choose a supported voice engine.',400);
   const snapshot={scope,avatar_id:avatar.provider_avatar_id,voice_id:selectedVoice?.provider_voice_id??avatar.provider_voice_id,avatar_name:avatar.name,voice_name:selectedVoice?.name??avatar.voice_name,script:scope==='full'?fullScript(script):testExcerpt(script),aspect_ratio:plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9'};
+  // Include the engine in the paid-job revision; never reuse audio from another engine.
+  const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string};
+  if(plan.voice_engine==='fish')engineSnapshot.voice_engine='fish';
   if(!snapshot.script.trim())throw new PublicError('SCRIPT','The script is empty.');
   // Size, article and save timestamps do not change the paid presenter asset.
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({connection_id:avatar.connection_id,snapshot})));

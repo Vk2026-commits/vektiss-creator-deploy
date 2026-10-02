@@ -1,4 +1,5 @@
 import { PresenterPlacement } from './PresenterPlacement';
+import {STEPHEN_AVATAR} from '../domain/avatar-framing';
 import {VoicePicker} from './VoicePicker';
 import { useEffect, useRef, useState } from 'react';
 import { AvatarPicture } from './AvatarPicture';
@@ -23,7 +24,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
  },[]);
  useEffect(()=>{heading.current?.focus();heading.current?.scrollIntoView({block:'start'});},[plan.step]);
  useEffect(()=>{if(preview)return;let active=true;setLoading(true);setError('');avatarRepository.library().then(lib=>{if(active)setAvatars(lib.avatars.filter(a=>usableAvatar(a,lib.connections)));}).catch(()=>{if(active)setError('Could not load your avatar library.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[preview,retry]);
- const update=(patch:Partial<Plan>)=>onChange({...plan,...patch});
+ const update=(patch:Partial<Plan>)=>onChange({...plan,...patch,...(patch.avatar_id&&patch.avatar_id!==plan.avatar_id?{voice_engine:patch.avatar_id===STEPHEN_AVATAR?'fish' as const:'auto' as const}:{})});
  const words=scriptText(script).split(/\s+/).filter(Boolean).length;
  const selectedAvatar=avatars.find(a=>a.id===plan.avatar_id);
  const presenterReady=plan.presenter==='avatar'&&Boolean(selectedAvatar);
