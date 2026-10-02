@@ -6,7 +6,7 @@ import {captureArticle} from './article-capture';
 import {composeVideo} from './compose-video';
 import {fullComposition} from './full-composition';
 import {importVideo,importMessages} from './social-video';
-import {prepareMedia,SOURCE_MAX_BYTES} from './prepare-media';
+import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 
 export function capturePlugin():Plugin{
  let active=false;
@@ -34,10 +34,10 @@ export function capturePlugin():Plugin{
      if(active){res.statusCode=429;res.end(JSON.stringify({error:'A video is already processing. Please wait.'}));return;}
      const id=randomUUID();await mkdir(directory,{recursive:true});
      active=true;
-     try{await prepareMedia(req,path=>copyFile(path,resolve(directory,`${id}.video`),1));}
+     try{await prepareMedia(req,path=>copyFile(path,resolve(directory,`${id}.video`),1),cutEndHeader(req.headers['x-source-end']));}
      catch(e){res.statusCode=422;res.end(JSON.stringify({error:importMessages[e instanceof Error?e.message:'']??'Could not save this video.'}));return;}
      finally{active=false;}
-     await writeFile(resolve(directory,`${id}.mime`),type!,{flag:'wx',mode:0o600});
+     await writeFile(resolve(directory,`${id}.mime`),req.headers['x-source-end']?'video/mp4':type!,{flag:'wx',mode:0o600});
      res.setHeader('Content-Type','application/json');res.end(JSON.stringify({id}));return;
     }
     if(req.method==='GET'&&/^\/api\/local-capture\/video-background\/[a-f0-9-]{36}$/.test(path)){

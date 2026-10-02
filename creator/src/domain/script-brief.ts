@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { videoPlanSchema } from './video-plan.ts';
+import {sourceCutSchema} from './source-cut.ts';
 export const briefSchema = z.object({
   kind: z.enum(['article', 'video']),
   url: z.string().max(2000).refine(v => !v || /^https?:\/\//i.test(v), 'Use an http or https source URL.'),
@@ -12,6 +13,7 @@ export const briefSchema = z.object({
   clarified: z.boolean(),
   stage: z.enum(['source', 'perspective', 'clarify', 'review']),
   production: videoPlanSchema.optional(),
+  source_cut: sourceCutSchema.optional(),
 });
 export type ScriptBrief = z.infer<typeof briefSchema>;
 export const emptyBrief = (): ScriptBrief => ({kind:'article',url:'',source:'',notes:'',questions:[],summary:'',review:'',clarified:false,stage:'source'});

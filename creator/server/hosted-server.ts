@@ -3,7 +3,7 @@ import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,copyFile,open,unlink,readdir,stat,statfs} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {prepareMedia,SOURCE_MAX_BYTES} from './prepare-media';
+import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 import {importVideo,importMessages} from './social-video';
 import {fullComposition} from './full-composition';
 
@@ -78,6 +78,7 @@ export function hostedHandler(c:HostingConfig){
     if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
     const type=req.headers['content-type']?.split(';')[0]??'';
     const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background');
+    const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!['video/mp4','video/webm'].includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
     const limit=binary?SOURCE_MAX_BYTES:4096;
     if(Number(req.headers['content-length'])>limit)return json(res,413,{error:'Upload is too large.'});
@@ -92,7 +93,7 @@ export function hostedHandler(c:HostingConfig){
     void(async()=>{
      try{
       if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
-      else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)));await writeFile(resolve(media,`${mediaId}.mime`),type,{mode:0o600});job.result={id:mediaId};}
+      else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)),sourceEnd);await writeFile(resolve(media,`${mediaId}.mime`),sourceEnd?'video/mp4':type,{mode:0o600});job.result={id:mediaId};}
       else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
       job.state='done';
      }catch(e){job.state='failed';job.error=importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}

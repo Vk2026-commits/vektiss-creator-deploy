@@ -3,8 +3,9 @@ import {supabase} from './supabase';
 import {scriptAI} from './script-ai';
 import {withDeadline} from './request-deadline';
 import {sampleTimes,refinementTimes} from './video-sampling';
+import {boundarySchema,automaticEnd,type Boundary} from '../domain/source-cut';
 
-export async function videoFrames(blob:Blob):Promise<{time:number;image:string}[]> {
+export async function videoFrames(blob:Blob,selectedTimes?:number[]):Promise<{time:number;image:string}[]> {
  const video=document.createElement('video');video.muted=true;video.playsInline=true;video.preload='auto';
  const url=URL.createObjectURL(blob);
  const wait=(event:string)=>new Promise<void>((resolve,reject)=>{
@@ -20,7 +21,7 @@ export async function videoFrames(blob:Blob):Promise<{time:number;image:string}[
   canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
   const context=canvas.getContext('2d');if(!context)throw Error('Video preview is unavailable.');
   const frames:{time:number;image:string}[]=[];
-  const times=sampleTimes(video.duration),changes:number[]=[];
+  const times=selectedTimes??sampleTimes(video.duration),changes:number[]=[];
   const thumbnail=document.createElement('canvas');thumbnail.width=32;thumbnail.height=32;
   const small=thumbnail.getContext('2d');if(!small)throw Error('Video preview is unavailable.');
   let previous:Uint8ClampedArray|undefined;
@@ -35,11 +36,47 @@ export async function videoFrames(blob:Blob):Promise<{time:number;image:string}[
    let change=0;if(previous)for(let i=0;i<pixels.length;i++)if(i%4!==3)change+=Math.abs(pixels[i]-previous[i]);
    changes.push(change/(32*32*3*255));previous=pixels;
   }
-  for(const time of refinementTimes(times,changes))await capture(time);
+  if(!selectedTimes)for(const time of refinementTimes(times,changes))await capture(time);
   frames.sort((a,b)=>a.time-b.time);
   if(JSON.stringify(frames).length>9*1024*1024)throw Error('Video frames are too large to analyze. Try a lower-resolution copy.');
   return frames;
  }finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
+}
+
+export async function prepareAnalysis(blob:Blob){
+ const response=await mediaFetch('/api/local-capture/prepare-video',{method:'POST',headers:{'Content-Type':blob.type},body:blob});
+ if(!response.ok)throw Error('Could not prepare the source. Please retry.');
+ return response.blob();
+}
+export async function detectReaction(blob:Blob,profileId:string,progress:(s:string)=>void){
+ progress('Checking for another creator’s reaction…');
+ const prepared=await prepareAnalysis(blob);
+ const frames=await videoFrames(prepared);
+ const duration=await sourceDuration(blob);
+ let transcript='';try{transcript=(await scriptAI('transcribe',profileId,undefined,prepared)).text??'';}catch{/* Visual-only detection must disclose missing audio. */}
+ async function detect(images:typeof frames):Promise<Boundary>{
+  const body=new FormData();body.set('action','video-boundary');body.set('profileId',profileId);body.set('frames',JSON.stringify(images));body.set('transcript',transcript);body.set('audioUnavailable',String(!transcript));
+  const {data,error}=await withDeadline(signal=>supabase!.functions.invoke('script-assistant',{body,signal}),90000,'Reaction detection timed out. Your source is retained.');
+  if(error)throw Error('Could not check the reaction boundary. Retry or set the cut yourself.');return boundarySchema.parse(data);
+ }
+ let boundary=await detect(frames);
+ const coarse=automaticEnd(boundary,duration);
+ if(boundary.status==='separate'&&coarse!==null){
+  progress('Finding the exact reaction cut…');
+  const times:number[]=[];for(let t=Math.max(0,coarse-4);t<Math.min(duration-.02,frames.at(-1)!.time,coarse+4);t+=.25)times.push(t);
+  const refined=await detect(await videoFrames(prepared,times));
+  boundary=refined.status==='separate'&&refined.end!==null&&refined.end>=times[0]&&refined.end<=times.at(-1)!
+   ?refined:{status:'uncertain',end:coarse,confidence:'low',reason:'A reaction was detected, but its exact start needs your review.'};
+ }
+ return {boundary,duration,end:automaticEnd(boundary,duration)};
+}
+async function sourceDuration(blob:Blob):Promise<number>{
+ const video=document.createElement('video'),url=URL.createObjectURL(blob);
+ try{return await new Promise<number>((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(Error('Cannot read source duration.')),10000);
+  video.onloadedmetadata=()=>{clearTimeout(timer);Number.isFinite(video.duration)&&video.duration>0&&video.duration<=180?resolve(video.duration):reject(Error('Choose a video up to 3 minutes.'));};
+  video.onerror=()=>{clearTimeout(timer);reject(Error('Cannot decode this source.'));};video.src=url;
+ });}finally{video.removeAttribute('src');video.load();URL.revokeObjectURL(url);}
 }
 
 export async function analyzeVideo(blob:Blob,profileId:string,progress:(s:string)=>void=()=>{},prepared=false) {
