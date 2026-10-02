@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
 import { briefSchema } from '../../../src/domain/script-brief.ts';
 import { readArticle } from '../_shared/article-reader.ts';
 import {scriptInputError} from '../../../src/domain/script-generation-guard.ts';
@@ -26,7 +27,7 @@ Deno.serve(async request=>{
  const origin=request.headers.get('origin');
  const headers:Record<string,string>={'content-type':'application/json','cache-control':'no-store','vary':'Origin','access-control-allow-headers':'authorization, apikey, content-type, x-client-info','access-control-allow-methods':'POST, OPTIONS'};
  const respond=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
- if(origin && origin!==Deno.env.get('APP_ORIGIN'))return respond({code:'ORIGIN'},403);
+ if(origin && !isAllowedAppOrigin(origin,Deno.env.get('APP_ORIGIN'),Deno.env.get('CREATOR_ADDITIONAL_ORIGINS')))return respond({code:'ORIGIN'},403);
  if(origin)headers['access-control-allow-origin']=origin;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  if(request.method!=='POST')return respond({code:'METHOD'},405);

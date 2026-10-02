@@ -1,5 +1,6 @@
 import {createClient} from '@supabase/supabase-js';
 import {z} from 'zod';
+import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
 declare const Deno:{env:{get(k:string):string|undefined};serve(h:(r:Request)=>Promise<Response>):void};
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false}});
 const schema=z.object({query:z.string().trim().min(3).max(500),platform:z.enum(['all','youtube','instagram','tiktok']),profileId:z.string().uuid()});
@@ -7,7 +8,7 @@ Deno.serve(async request=>{
  const origin=request.headers.get('origin');
  const headers:Record<string,string>={'content-type':'application/json','cache-control':'no-store','vary':'Origin','access-control-allow-headers':'authorization, apikey, content-type, x-client-info','access-control-allow-methods':'POST, OPTIONS'};
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
- if(origin&&origin!==Deno.env.get('APP_ORIGIN'))return reply({code:'ORIGIN'},403);
+ if(origin&&!isAllowedAppOrigin(origin,Deno.env.get('APP_ORIGIN'),Deno.env.get('CREATOR_ADDITIONAL_ORIGINS')))return reply({code:'ORIGIN'},403);
  if(origin)headers['access-control-allow-origin']=origin;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
  if(request.method!=='POST')return reply({code:'METHOD'},405);

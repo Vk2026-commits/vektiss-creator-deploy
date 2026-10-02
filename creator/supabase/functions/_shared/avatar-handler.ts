@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAllowedAppOrigin } from "./app-origins.ts";
 import { avatarCommandSchema, PublicError } from "./avatar-contract.ts";
 import type { AvatarService } from "./avatar-service.ts";
 
@@ -39,6 +40,7 @@ async function readBody(request: Request) {
 
 export function createAvatarHandler(options: {
   appOrigin: string;
+  additionalOrigins?: string;
   authenticate: (token: string) => Promise<string | null>;
   service: AvatarService;
 }) {
@@ -50,7 +52,7 @@ export function createAvatarHandler(options: {
       vary: "Origin",
       "x-content-type-options": "nosniff",
     });
-    if (origin && origin !== options.appOrigin)
+    if (origin && !isAllowedAppOrigin(origin, options.appOrigin, options.additionalOrigins))
       return new Response(
         JSON.stringify({
           error: { code: "ORIGIN", message: "Origin not allowed." },

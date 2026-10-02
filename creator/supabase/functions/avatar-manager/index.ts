@@ -25,6 +25,7 @@ const vault = credentialVault(
 );
 const handler = createAvatarHandler({
   appOrigin: new URL(required("APP_ORIGIN")).origin,
+  additionalOrigins: Deno.env.get("CREATOR_ADDITIONAL_ORIGINS"),
   authenticate: async (token) => {
     const { data, error } = await db.auth.getUser(token);
     return error ? null : (data.user?.id ?? null);

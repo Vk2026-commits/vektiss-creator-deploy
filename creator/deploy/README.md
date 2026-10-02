@@ -1,4 +1,22 @@
-# Bunny pilot — not deployed
+# Bunny pilot — deployed 2026-10-02
+
+Creator: https://mc-zdnmms5ls0.bunny.run
+
+- Bunny app: `WWV1BV2bs4oVBWj`; one Miami region, one instance maximum.
+- Image: `ghcr.io/vk2026-commits/vektiss-creator:pilot` (initial release `2e66e4d`).
+- Private persistent volume: `creator-media`, 10 GB at `/data` ($1/month plus usage).
+- Importer: existing `54AEU2i2UD4LTkS`, also capped at one instance.
+- Hosted worker requires a verified session and the configured owner allowlist.
+- Health 200, unauthenticated media 401, `.env` 404 verified live.
+- Supabase redirect added without replacing existing site URL; exact hosted and
+  local origins verified for all three Creator functions; unknown origins rejected.
+- Sign-in page checked at 390x844. Signed-in upload, volume permissions, import,
+  and final download still require an end-to-end test. No paid render was started.
+- Pilot supports video sources; legacy article composition remains local-only.
+- Source files that exist only on the Mac must be uploaded again from the phone.
+
+Deploy edge functions with `--import-map supabase/functions/deno.json`.
+`CREATOR_ADDITIONAL_ORIGINS` allows the exact hosted origin alongside `APP_ORIGIN`.
 
 Approved budget target: USD 10/month; not a hard cap.
 
@@ -26,16 +44,12 @@ distributing or operating a modified network service.
 - Authentication smoke test passed on 2026-10-01: no key is rejected with
   `error.api.auth.key.missing`; a valid ephemeral key reaches URL validation.
   This does not verify a real TikTok download or access from Bunny's network.
-- Build the host architecture before publishing. An owner-controlled Docker Hub
-  or GitHub container registry is not connected yet.
+- AMD64 Creator image published through the owner-controlled GitHub registry.
 - Verify unauthorized requests fail and the authorized TikTok test succeeds.
-- Replace development-only Vite middleware with an authenticated media worker.
-- Enforce user ownership on all media, captures, jobs and downloads.
-- Put persistent files in private storage; never share the current local directory.
-- Add quotas, bounded concurrency, cleanup and job status polling.
-- Configure exact hosted origins and Supabase authentication redirects.
+- Authenticated hosted media worker, per-user storage, quota checks, single-job
+  concurrency and polling are implemented. Retained job outputs count toward the
+  storage quota; automatic retention cleanup is not implemented yet.
 - Test login, import, layout, consent and MP4 download from a phone.
 
-Do not publish the local Vite server as the hosted application. Its loopback-only
-security assumptions do not apply to a public service. The full app is not yet
-ready for a hosted deployment.
+The hosted app uses its own authenticated server, not the local Vite server.
+Keep the pilot owner-only until authenticated end-to-end checks are complete.
