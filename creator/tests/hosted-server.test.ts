@@ -11,9 +11,9 @@ const owner='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 let server:Server|undefined,dir='';const realFetch=globalThis.fetch;
 afterEach(async()=>{vi.restoreAllMocks();if(server)await new Promise<void>(r=>server!.close(()=>r()));if(dir)await rm(dir,{recursive:true,force:true});});
-async function setup(){
+async function setup(webOrigin?:string){
  dir=await mkdtemp(join(tmpdir(),'creator-host-test-'));await mkdir(join(dir,'public'));await writeFile(join(dir,'public/index.html'),'Creator');
- const config:HostingConfig={origin:'https://creator.example',data:join(dir,'data'),dist:join(dir,'public'),supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[owner]};await mkdir(config.data);
+ const config:HostingConfig={origin:'https://creator.example',webOrigin,data:join(dir,'data'),dist:join(dir,'public'),supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[owner]};await mkdir(config.data);
  server=createServer(hostedHandler(config));await new Promise<void>(r=>server!.listen(0,'127.0.0.1',r));
  const address=server.address() as {port:number};
  vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify({id:owner}),{status:200}));
@@ -28,6 +28,11 @@ it('serves the app but rejects unauthenticated media and cross-origin requests',
  expect((await realFetch(url+'/api/local-capture/exports',{headers:{'X-Creator-Capture':'1'}})).status).toBe(401);
  expect((await realFetch(url+'/api/local-capture/exports',{headers:{...headers,Origin:'https://evil.example'}})).status).toBe(403);
  expect((await realFetch(url+'/.env')).status).toBe(404);
+});
+it('accepts the exact configured website origin but still requires authentication',async()=>{
+ const {url}=await setup('https://creator.vektiss.com');
+ expect((await realFetch(url+'/api/local-capture/exports',{headers:{'X-Creator-Capture':'1',Origin:'https://creator.vektiss.com'}})).status).toBe(401);
+ expect((await realFetch(url+'/api/local-capture/exports',{headers:{'X-Creator-Capture':'1',Origin:'https://evil.creator.vektiss.com'}})).status).toBe(403);
 });
 it('does not allow another account or access to another account’s media',async()=>{
  const {url,headers,config}=await setup();const id='33333333-3333-4333-8333-333333333333';

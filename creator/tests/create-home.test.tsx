@@ -14,4 +14,6 @@ it('defaults the signed-in home to video creation and keeps the editor mounted o
  expect(app).toContain("hidden={page !== 'create'}");
  expect(app).toContain("setPage('profiles')");
  expect(app).toContain('Use this audience');
+ const nav=app.split('<nav aria-label="Main navigation">')[1].split('</nav>')[0];
+ expect(nav.indexOf('My videos')).toBeLessThan(nav.indexOf('Content Profiles'));
 });

@@ -439,6 +439,7 @@ function CreatorWorkspace({
         </button>
         <span className="nav-caption">WORKSPACE</span>
         <nav aria-label="Main navigation">
+          <button className={page === 'create' ? 'active' : ''} onClick={() => setPage('create')}><Edit3 size={18} /> My videos</button>
           <button
             className={page === "profiles" ? "active" : ""}
             onClick={() => setPage("profiles")}
@@ -460,7 +461,6 @@ function CreatorWorkspace({
             <UsersRound size={19} />
             Avatar library
           </button>
-        <button className={page === 'create' ? 'active' : ''} onClick={() => setPage('create')}><Edit3 size={18} /> My videos</button>
         </nav>
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
         <div className="upcoming">

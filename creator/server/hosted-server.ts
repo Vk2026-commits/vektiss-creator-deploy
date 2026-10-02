@@ -12,9 +12,10 @@ import {sourceWorkflow} from './source-workflow';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
-export type HostingConfig={origin:string;data:string;dist:string;supabaseUrl:string;publicKey:string;users:string[]};
+export type HostingConfig={origin:string;webOrigin?:string;data:string;dist:string;supabaseUrl:string;publicKey:string;users:string[]};
 export function validateHostingConfig(c:HostingConfig){
  if(new URL(c.origin).origin!==c.origin||!c.origin.startsWith('https://'))throw Error('Set the exact HTTPS Creator origin.');
+ if(c.webOrigin&&(new URL(c.webOrigin).origin!==c.webOrigin||!c.webOrigin.startsWith('https://')))throw Error('Set the exact HTTPS website origin.');
  if(!c.supabaseUrl.startsWith('https://')||!c.publicKey||!c.users.length||c.users.some(id=>!uuid.test(id)))throw Error('Hosted pilot requires Supabase configuration and explicit allowed user IDs.');
  if(resolve(c.data)===resolve(c.dist))throw Error('Media storage must be separate from public files.');
  return c;
@@ -41,7 +42,7 @@ export function hostedHandler(c:HostingConfig){
     const body=await readFile(file);const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.webp':'image/webp','.woff2':'font/woff2','.ico':'image/x-icon'};
     res.setHeader('Content-Type',types[extname(file)]);return res.end(req.method==='HEAD'?undefined:body);
    }
-   if(!path.startsWith(prefix)||req.headers['x-creator-capture']!=='1'||(req.headers.origin&&req.headers.origin!==c.origin))return json(res,403,{error:'Request not allowed'});
+   if(!path.startsWith(prefix)||req.headers['x-creator-capture']!=='1'||(req.headers.origin&&req.headers.origin!==c.origin&&req.headers.origin!==c.webOrigin))return json(res,403,{error:'Request not allowed'});
    const authorization=req.headers.authorization??'';
    if(!authorization.startsWith('Bearer '))return json(res,401,{error:'Sign in to access your media.'});
    const auth=await fetch(`${c.supabaseUrl}/auth/v1/user`,{headers:{Authorization:authorization,apikey:c.publicKey},signal:AbortSignal.timeout(15000)});
@@ -122,7 +123,7 @@ export function hostedHandler(c:HostingConfig){
 }
 
 export function startHosted(){
- const c=validateHostingConfig({origin:process.env.CREATOR_ORIGIN??'',data:process.env.CREATOR_DATA_DIR??'/data',dist:resolve('dist'),supabaseUrl:process.env.VITE_SUPABASE_URL??'',publicKey:process.env.VITE_SUPABASE_PUBLISHABLE_KEY??'',users:(process.env.CREATOR_ALLOWED_USERS??'').split(',').filter(Boolean)});
+ const c=validateHostingConfig({origin:process.env.CREATOR_ORIGIN??'',webOrigin:process.env.CREATOR_WEB_ORIGIN??'https://creator.vektiss.com',data:process.env.CREATOR_DATA_DIR??'/data',dist:resolve('dist'),supabaseUrl:process.env.VITE_SUPABASE_URL??'',publicKey:process.env.VITE_SUPABASE_PUBLISHABLE_KEY??'',users:(process.env.CREATOR_ALLOWED_USERS??'').split(',').filter(Boolean)});
  process.umask(0o077);
  const server=createServer(hostedHandler(c));server.requestTimeout=600000;server.headersTimeout=30000;
  server.listen(Number(process.env.PORT??8080),'0.0.0.0',()=>console.log('Creator hosted pilot listening'));
