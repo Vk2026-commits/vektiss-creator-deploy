@@ -9,10 +9,10 @@ import type {DraftProgress} from './ScriptProgress';
 
 const waitingSchema=z.object({original_id:z.string().uuid(),duration:z.number().positive(),end:z.number().positive(),reason:z.string(),waiting:z.literal(true)});
 const checkpointSchema=z.object({operation:z.string().uuid(),waiting:waitingSchema.optional()});
-type Props={scope:string;mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(text:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void};
+type Props={initialFile?:File;hideInput?:boolean;scope:string;mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(text:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void};
 export function HostedSourceVideo(props:Props){
  const key=`vektiss:source-workflow:v1:${props.scope}`;
- const [file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [file,setFile]=useState<File|null>(props.initialFile??null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [waiting,setWaiting]=useState<z.infer<typeof waitingSchema>|null>(null),[blob,setBlob]=useState<Blob|null>(null),[end,setEnd]=useState(0);
  const controller=useRef<AbortController|null>(null);
  const callbacks=useRef(props);callbacks.current=props;
@@ -55,7 +55,7 @@ export function HostedSourceVideo(props:Props){
   else void run(operation,JSON.stringify({url:props.url}));
  }
  return <section aria-busy={busy}>
-  {waiting&&blob?<><p>{waiting.reason}</p><SourceCutControls blob={blob} end={end} onEnd={setEnd} disabled={busy||props.disabled} onDuration={()=>{}}/></>:props.mode==='link'?<label>Paste a video link<input type="url" value={props.url} disabled={busy||props.disabled} onChange={e=>props.onUrl(e.target.value)}/></label>:<label>Choose your video<input type="file" accept="video/mp4,video/webm" disabled={busy||props.disabled} onChange={e=>{const value=e.target.files?.[0];if(value&&value.size<=500*1024*1024){setFile(value);setError('');}else{setFile(null);setError('Choose a video up to 500 MB.');}}}/></label>}
+  {waiting&&blob?<><p>{waiting.reason}</p><SourceCutControls blob={blob} end={end} onEnd={setEnd} disabled={busy||props.disabled} onDuration={()=>{}}/></>:props.hideInput?null:props.mode==='link'?<label>Paste a video link<input type="url" value={props.url} disabled={busy||props.disabled} onChange={e=>props.onUrl(e.target.value)}/></label>:<label>Choose your video<input type="file" accept="video/mp4,video/webm" disabled={busy||props.disabled} onChange={e=>{const value=e.target.files?.[0];if(value&&value.size<=500*1024*1024){setFile(value);setError('');}else{setFile(null);setError('Choose a video up to 500 MB.');}}}/></label>}
   <p><small>Up to 3 minutes · 500 MB. Keep this page open while uploading. Once accepted, analysis continues on the server.</small></p>
   <button className="button" type="button" disabled={busy||props.disabled||!props.profileId||(!waiting&&(props.mode==='upload'?!file:!props.url.trim()))} onClick={start}>{busy?'Processing saved source…':waiting?'Use this cut & create script →':'Create my script →'}</button>
   {error&&<p role="alert">{error}</p>}

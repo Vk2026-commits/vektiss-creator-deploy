@@ -8,13 +8,14 @@ import {z} from 'zod';
 import {publicResource,captureUrl} from './public-network';
 import {mediaBinary} from './media-binaries';
 import {DraftError} from './script-draft';
+import {captureArticle} from './article-capture';
 const exec=promisify(execFile);
 const decode=(s:string)=>s.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)));
 export function socialGraphicUrl(value:string){
  const url=captureUrl(value);
- if(!['instagram.com','tiktok.com'].some(h=>url.hostname===h||url.hostname.endsWith('.'+h)))throw new DraftError('Paste a public Instagram or TikTok post link, or upload a screenshot.');
  return url;
 }
+export function socialGraphicHost(host:string){return ['instagram.com','tiktok.com','youtube.com','youtu.be'].some(h=>host===h||host.endsWith('.'+h));}
 export function graphicMetadata(html:string){
  const tags=[...html.matchAll(/<meta\b[^>]*>/gi)].map(m=>{
   const attrs:Record<string,string>={};for(const a of m[0].matchAll(/([\w:-]+)\s*=\s*(["'])(.*?)\2/gs))attrs[a[1].toLowerCase()]=decode(a[3]);return attrs;
@@ -41,12 +42,17 @@ export async function graphicSource(root:string,file:string,type:string,input:un
  let bytes:Buffer,title='Uploaded screenshot',source_url='',caption='';
  if(type==='application/json'){
   const url=socialGraphicUrl(z.string().parse(options.url));source_url=url.href;
+  if(!socialGraphicHost(url.hostname)){
+   try{const article=await captureArticle(source_url);bytes=article.png;title=article.title;caption=article.caption;}
+   catch{throw new DraftError('This page could not be captured publicly. Upload a screenshot instead.');}
+  }else{
   const page=await publicResource(source_url,AbortSignal.timeout(25000),0,2*1024*1024);
   if(page.status!==200||!page.headers['content-type']?.includes('text/html'))throw new DraftError('This post could not be opened publicly. Upload a screenshot instead.');
   const meta=graphicMetadata(page.body.toString('utf8'));title=meta.title;caption=meta.caption??'';
   const image=await publicResource(new URL(meta.image,source_url).href,AbortSignal.timeout(25000),0,10*1024*1024);
   if(image.status!==200||!/^image\/(png|jpeg|webp)(;|$)/i.test(image.headers['content-type']??''))throw new DraftError('The post graphic could not be captured. Upload a screenshot instead.');
   bytes=image.body;
+  }
  }else bytes=await readFile(file);
  if(!bytes.length||bytes.length>10*1024*1024)throw new DraftError('Choose a PNG, JPEG or WebP image under 10 MB.');
  const folder=await mkdtemp(resolve(tmpdir(),'creator-graphic-'));

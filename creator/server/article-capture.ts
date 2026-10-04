@@ -3,7 +3,7 @@ import {captureUrl,publicResource} from './public-network';
 
 export async function captureArticle(value:string){
  const url=captureUrl(value).href;
- const browser=await chromium.launch({channel:'chrome',headless:true,chromiumSandbox:true,timeout:15000});
+ const browser=await chromium.launch({...process.env.CREATOR_CHROMIUM_PATH?{executablePath:process.env.CREATOR_CHROMIUM_PATH}:{channel:'chrome'},headless:true,chromiumSandbox:true,timeout:15000});
  const deadline=AbortSignal.timeout(45000);
  const close=()=>{void browser.close();};deadline.addEventListener('abort',close,{once:true});
  try{
@@ -36,6 +36,8 @@ export async function captureArticle(value:string){
   const box=await heading.boundingBox();
   if(!box||box.y<0||box.y+box.height>844||box.x<0||box.x+box.width>391)throw Error('The whole headline does not fit. Upload a mobile screenshot with the full title.');
   const png=await page.screenshot({type:'png',fullPage:false,animations:'disabled',timeout:8000});
-  return {png,title,source_url:url};
+  const article=page.locator('article').first();
+  const excerpt=await article.count()?await article.innerText({timeout:3000}):body;
+  return {png,title,source_url:url,caption:excerpt.trim().slice(0,2000)};
  }finally{deadline.removeEventListener('abort',close);await browser.close();}
 }
