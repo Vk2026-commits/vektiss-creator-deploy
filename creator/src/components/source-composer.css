@@ -1,0 +1,11 @@
+.source-composer{border:1px solid #cbd9ea;border-radius:20px;background:#fff;padding:14px;box-shadow:0 4px 18px #17447808}
+.source-composer:focus-within{outline:2px solid #2185ff;outline-offset:2px}
+.source-composer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:100px;width:100%;font-size:16px;background:transparent}
+.source-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.source-composer-footer .attach-source{width:44px;height:44px;border:1px solid #cbd9ea;border-radius:50%;font-size:28px;padding:0}
+.source-attachment{display:flex;gap:12px;align-items:center;padding:10px;background:#f0f6fc;border-radius:12px;margin-bottom:10px;overflow-wrap:anywhere}
+.source-attachment img,.source-attachment video{width:64px;height:76px;object-fit:contain;border-radius:8px}
+.source-attachment span{flex:1;min-width:0}
+.source-attachment button{min-width:44px;min-height:44px}
+.source-composer-help{font-size:13px;line-height:1.5;margin:10px 0;color:#526780}
+.resolved-video{display:block;max-height:340px;max-width:100%;margin:12px auto;border-radius:12px}

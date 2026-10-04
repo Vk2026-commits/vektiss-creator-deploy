@@ -26,7 +26,7 @@ export function graphicMetadata(html:string){
  const caption=(get('og:description')??get('twitter:description')??get('description')??'').trim().slice(0,2000);
  return {image,title:(get('og:title')??'Social post graphic').slice(0,2000),...(caption?{caption}:{})};
 }
-export async function graphicSource(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string}){
+export async function graphicSource(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string},prepared?:{body:Buffer;title:string;source_url:string;caption?:string}){
  const media=resolve(root,'.local-captures');
  const options=type==='application/json'?z.object({url:z.string().max(2000).optional(),id:z.string().uuid().optional(),analyze:z.boolean().optional(),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()}).strict().parse(input):{};
  if(options.analyze){
@@ -40,7 +40,8 @@ export async function graphicSource(root:string,file:string,type:string,input:un
   return z.object({text:z.string().min(40).max(12000)}).parse(await response.json());
  }
  let bytes:Buffer,title='Uploaded screenshot',source_url='',caption='';
- if(type==='application/json'){
+ if(prepared){bytes=prepared.body;title=prepared.title;source_url=prepared.source_url;caption=prepared.caption??'';}
+ else if(type==='application/json'){
   const url=socialGraphicUrl(z.string().parse(options.url));source_url=url.href;
   if(!socialGraphicHost(url.hostname)){
    try{const article=await captureArticle(source_url);bytes=article.png;title=article.title;caption=article.caption;}

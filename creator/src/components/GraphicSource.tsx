@@ -25,7 +25,7 @@ export function GraphicSource({mode,initialFile,capture,url,profileId,disabled,o
  }
  return <section aria-label="Screenshot or graphic source">
   {!capture&&<button type="button" className="button" disabled={disabled||!!working||(mode==='link'?!url.trim():!initialFile)} onClick={()=>void run(mode==='upload'?initialFile:undefined)}>{mode==='link'?'Capture post / article':'Preview screenshot'}</button>}
-  {mode==='link'&&<p><small>We capture an article headline view or the available social graphic, which may be a cover or first slide. Check the preview before continuing.</small></p>}
+  {mode==='link'&&<p><small>Check the captured source before continuing.</small></p>}
   {working&&<div role="status"><p>{working}</p><progress aria-label={working}/><small>Progress is tracked on the server. If your phone sleeps, return and retry this same operation to reconnect.</small></div>}
   {error&&<p role="alert">{error}</p>}
   {capture&&<><div style={{maxWidth:300,margin:'16px auto'}} className="graphic-source-preview"><GraphicImage id={capture.id}/></div><p>Is this the graphic you want to react to?</p>

@@ -24,15 +24,15 @@ it('fails closed without an explicit pilot account or HTTPS origin',()=>{
  expect(()=>validateHostingConfig({origin:'http://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[owner]})).toThrow();
  expect(()=>validateHostingConfig({origin:'https://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[]})).toThrow();
 });
-it('saves screenshots through a durable job and serves only the owner’s graphic',async()=>{
+it.each(['graphic-source','source-resolve'])('saves screenshots through durable %s and serves only the owner’s graphic',async operation=>{
  const {url,headers}=await setup();const path=join(dir,'graphic.png');
  await promisify(execFile)(mediaBinary('ffmpeg'),['-v','error','-f','lavfi','-i','color=blue:s=64x64','-frames:v','1',path]);
- const route=url+'/api/local-capture/graphic-source';
+ const route=url+'/api/local-capture/'+operation;
  expect((await realFetch(route,{method:'POST',headers:{...headers,'Content-Type':'image/svg+xml'},body:'<svg/>'})).status).toBe(415);
  const response=await realFetch(route,{method:'POST',headers:{...headers,'Content-Type':'image/png'},body:await readFile(path)});
  expect(response.status).toBe(202);const {poll}=await response.json();let result=response;
  for(let i=0;i<400;i++){await new Promise(r=>setTimeout(r,50));result=await realFetch(url+poll,{headers});if(result.status!==202)break;}
- expect(result.status).toBe(200);const capture=await result.json();expect(capture.source_url).toBe('');
+ expect(result.status).toBe(200);const data=await result.json(),capture=operation==='source-resolve'?data.capture:data;expect(capture.source_url).toBe('');
  const saved=await realFetch(url+'/api/local-capture/graphic/'+capture.id,{headers});expect(saved.status).toBe(200);expect(saved.headers.get('content-type')).toBe('image/png');
  expect((await realFetch(url+'/api/local-capture/graphic/'+capture.id)).status).toBe(403);
 },30000);

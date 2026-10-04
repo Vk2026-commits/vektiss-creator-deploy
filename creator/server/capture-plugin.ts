@@ -1,6 +1,8 @@
 import type {Plugin} from 'vite';
 import {mkdir,readFile,writeFile,readdir,stat,copyFile,unlink} from 'node:fs/promises';
 import {graphicSource} from './graphic-source';
+import {resolveSource} from './source-resolve';
+import {sourceWorkflow} from './source-workflow';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {captureArticle} from './article-capture';
@@ -21,15 +23,16 @@ export function capturePlugin():Plugin{
    if(host!=='127.0.0.1:5178'||(origin&&origin!=='http://127.0.0.1:5178')||req.headers['x-creator-capture']!=='1'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'')){res.statusCode=403;res.end();return;}
    try{
     if(req.method==='GET'&&/^\/api\/local-capture\/graphic\/[a-f0-9-]{36}$/.test(path)){res.setHeader('Content-Type','image/png');res.end(await readFile(resolve(directory,`${path.split('/').pop()}.png`)));return;}
-    if(req.method==='POST'&&path==='/api/local-capture/graphic-source'){
+    if(req.method==='POST'&&['/api/local-capture/graphic-source','/api/local-capture/source-resolve','/api/local-capture/source-workflow'].includes(path)){
      if(active){res.statusCode=429;res.end(JSON.stringify({error:'Media is already processing. Please wait.'}));return;}
      const type=req.headers['content-type']?.split(';')[0]??'';
-     if(!['application/json','image/png','image/jpeg','image/webp'].includes(type)){res.statusCode=415;res.end(JSON.stringify({error:'Choose a PNG, JPEG or WebP screenshot.'}));return;}
+     if(!['application/json','image/png','image/jpeg','image/webp',...(path.endsWith('/graphic-source')?[]:['video/mp4','video/webm'])].includes(type)){res.statusCode=415;res.end(JSON.stringify({error:'Choose a supported video or screenshot.'}));return;}
      active=true;const file=resolve(directory,`${randomUUID()}.upload`);
      try{
-      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>(type==='application/json'?32*1024:10*1024*1024))throw Error('Screenshot is too large.');chunks.push(chunk);}
+      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>(type==='application/json'?32*1024:type.startsWith('video/')?SOURCE_MAX_BYTES:10*1024*1024))throw Error('Source is too large.');chunks.push(chunk);}
       await mkdir(directory,{recursive:true});const body=Buffer.concat(chunks);await writeFile(file,body,{mode:0o600});
-      const result=await graphicSource(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',{supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY});
+      const handler=path.endsWith('/source-resolve')?resolveSource:path.endsWith('/source-workflow')?sourceWorkflow:graphicSource;
+      const result=await handler(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',{supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY});
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
      }catch(e){res.statusCode=422;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e instanceof Error?e.message:'Could not save graphic.'}));}
      finally{active=false;await unlink(file).catch(()=>{});}return;

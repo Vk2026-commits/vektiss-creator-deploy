@@ -1,7 +1,7 @@
 import {loadEnv} from 'vite';
 // Server-only configuration. Never expose these values through VITE_* variables.
 const hostedOrigin = 'https://mc-4rr8dq8lv6.bunny.run';
-export async function cobaltVideo(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>) {
+export async function cobaltMedia(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>,videoOnly=false) {
  const env=loadEnv(process.env.NODE_ENV??'development',process.cwd(),'CREATOR_COBALT_');
  const origin=env.CREATOR_COBALT_URL??'http://127.0.0.1:9000';
  const key=env.CREATOR_COBALT_KEY;
@@ -12,16 +12,21 @@ export async function cobaltVideo(url:string,consume?:(source:AsyncIterable<Uint
  catch { throw Error('VIDEO_SETUP'); }
  const result=await response.json();
  if(!response.ok||result.status==='error')throw Error(/login|private|age|sensitive|auth/i.test(result.error?.code??'')?'VIDEO_LOGIN':'VIDEO_EXTRACT');
- if(result.status!=='tunnel'||typeof result.url!=='string')throw Error('VIDEO_FORMAT');
- const tunnel=new URL(result.url);
+ const first=result.status==='picker'?result.picker?.[0]:null;
+ if(first&&(!['photo','video'].includes(first.type)||videoOnly&&first.type!=='video'))throw Error('VIDEO_FORMAT');
+ const target=first?.url??result.url;
+ if(!['tunnel','picker'].includes(result.status)||typeof target!=='string')throw Error('VIDEO_FORMAT');
+ const tunnel=new URL(target);
  if(tunnel.origin!==origin||tunnel.pathname!=='/tunnel'||tunnel.username||tunnel.password)throw Error('VIDEO_EXTRACT');
  const media=await fetch(tunnel,{signal,redirect:'error'});
  const type=media.headers.get('content-type')?.split(';')[0];
- if(!media.ok||!media.body||!['video/mp4','video/webm'].includes(type??''))throw Error('VIDEO_FORMAT');
- if(consume)return consume(media.body as unknown as AsyncIterable<Uint8Array>);
+ const video=['video/mp4','video/webm'].includes(type??'');
+ if(!media.ok||!media.body||(!video&&!['image/png','image/jpeg','image/webp'].includes(type??''))||videoOnly&&!video)throw Error('VIDEO_FORMAT');
+ if(consume&&video)return {...await consume(media.body as unknown as AsyncIterable<Uint8Array>),firstOnly:!!first};
  const reader=media.body.getReader(),chunks:Uint8Array[]=[];let size=0;
  try { while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>10*1024*1024)throw Error('VIDEO_FORMAT');chunks.push(value);} }
  finally { await reader.cancel(); }
  if(!size)throw Error('VIDEO_FORMAT');
- return {body:Buffer.concat(chunks),type:type!};
+ return {body:Buffer.concat(chunks),type:type!,firstOnly:!!first};
 }
+export async function cobaltVideo(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>){return cobaltMedia(url,consume,true);}

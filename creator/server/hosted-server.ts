@@ -10,6 +10,7 @@ import {extractVideoFrames,frameTimesHeader} from './video-frames';
 import {createSavedDraft,DraftError} from './script-draft';
 import {sourceWorkflow} from './source-workflow';
 import {graphicSource} from './graphic-source';
+import {resolveSource} from './source-resolve';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -72,7 +73,7 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
+   if(!['/source-resolve','/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
    const requestedId=req.headers['x-creator-job'];
    if(requestedId!==undefined&&(typeof requestedId!=='string'||!uuid.test(requestedId)))return json(res,400,{error:'Invalid job identifier.'});
    if(typeof requestedId==='string'){
@@ -93,8 +94,9 @@ export function hostedHandler(c:HostingConfig){
     for(const file of await readdir(jobs)){if(file.endsWith('.json')&&(await readFile(resolve(jobs,file),'utf8')).includes(`"created":"${today}`))count++;}
     if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
     const type=req.headers['content-type']?.split(';')[0]??'';
-    const graphic=path.endsWith('/graphic-source');
-    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||((path.endsWith('/source-workflow')||graphic)&&type!=='application/json');
+    const resolving=path.endsWith('/source-resolve');
+    const graphic=path.endsWith('/graphic-source')||(resolving&&type.startsWith('image/'));
+    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||((path.endsWith('/source-workflow')||graphic||resolving)&&type!=='application/json');
     const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!(graphic?['image/png','image/jpeg','image/webp']:['video/mp4','video/webm']).includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
@@ -110,7 +112,8 @@ export function hostedHandler(c:HostingConfig){
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
      try{
-      if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
       else if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
       else if(path.endsWith('/script-draft'))job.result=await createSavedDraft(input,authorization,c);
       else if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});

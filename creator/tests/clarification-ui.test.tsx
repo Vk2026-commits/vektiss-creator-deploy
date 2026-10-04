@@ -6,21 +6,21 @@ const props={onChange:()=>{},profileId:'p',busy:false,preview:false,onAI:async()
 it('defaults to a clear link path and offers a unified file upload',()=>{
  const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),kind:'video'}}/>);
  
- expect(html).toMatch(/aria-pressed="true"[^>]*>Paste a link/);
- expect(html).toMatch(/aria-pressed="false"[^>]*>Upload a file/);
+ expect(html).toContain('Paste a link or add a video or screenshot');
+ expect(html).toContain('Add video or screenshot');
  expect(html).toContain('Instagram, TikTok, YouTube');
  expect(html).not.toContain('Find content');
  expect(html).not.toContain('Perplexity');
  expect(html).not.toContain('Where to look');
  expect(html).not.toContain('Paste a transcript');
- expect(html).not.toContain('type="file"');
+ expect(html).toContain('type="file"');
  expect(html).not.toContain('Record voice note');
  expect(html).not.toContain('Add your article.');
  
 });
 it('accepts an article URL without perspective or pasted text',()=>{
  const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),url:'https://example.com/article'}}/>);
- expect(html).toContain('Capture post / article');expect(html).not.toContain('Your perspective / reviewed');
+ expect(html).toContain('Continue');expect(html).not.toContain('Your perspective / reviewed');
 });
 it('shows the source summary before the separate perspective screen',()=>{
  const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),source_summary:'An article summary.'}}/>);

@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
 import {sourceCutSchema} from './source-cut.ts';
+import {resolvedSourceSchema} from './resolved-source.ts';
 export const briefSchema = z.object({
   kind: z.enum(['article', 'video','graphic']),
+  prepared_source:resolvedSourceSchema.optional(),
   graphic_capture:graphicCaptureSchema.optional(),
   url: z.string().max(2000).refine(v => !v || /^https?:\/\//i.test(v), 'Use an http or https source URL.'),
   source: z.string().max(40000),

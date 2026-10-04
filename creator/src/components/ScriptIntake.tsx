@@ -16,7 +16,7 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
  const [answer,setAnswer]=useState('');
  const submit=()=>{const next={...brief,questions:brief.questions.map((q,i)=>i===questionIndex?{...q,answer:answer.trim()}:q).filter(q=>q.answer.trim())};onChange(next);onAI('clarify',next);setAnswer('');setVoice(false);};
  const update=(patch:Partial<ScriptBrief>)=>onChange({...brief,...patch,clarified:false,questions:[],summary:''});
- const updateSource=(patch:Partial<ScriptBrief>)=>update({...patch,...('url' in patch||'kind' in patch?{source:'',source_cut:undefined,graphic_capture:undefined}:{}),source_summary:undefined,production:undefined});
+ const updateSource=(patch:Partial<ScriptBrief>)=>update({...('url' in patch||'kind' in patch?{source:'',source_cut:undefined,graphic_capture:undefined}:{}),...patch,source_summary:undefined,production:undefined});
  const completeSource=async(source:string,source_cut:SourceCut)=>{const next={...brief,source,source_cut,source_summary:undefined,production:undefined,questions:[],summary:'',clarified:false,stage:'source' as const};setEditingSource(false);onChange(next);await onAI('summarize',next);};
  const cutControls=brief.source_cut?<AdjustSourceCut key={brief.source_cut.selected_id} cut={brief.source_cut} profileId={profileId} disabled={busy||preview} onComplete={completeSource} onProcessing={onProcessing??(()=>{})} onProgress={onProgress}/>:null;
  const move=(stage:ScriptBrief['stage'])=>onChange({...brief,stage});
