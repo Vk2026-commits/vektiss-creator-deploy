@@ -27,7 +27,7 @@ export function capturePlugin():Plugin{
      if(!['application/json','image/png','image/jpeg','image/webp'].includes(type)){res.statusCode=415;res.end(JSON.stringify({error:'Choose a PNG, JPEG or WebP screenshot.'}));return;}
      active=true;const file=resolve(directory,`${randomUUID()}.upload`);
      try{
-      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>(type==='application/json'?4096:10*1024*1024))throw Error('Screenshot is too large.');chunks.push(chunk);}
+      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>(type==='application/json'?32*1024:10*1024*1024))throw Error('Screenshot is too large.');chunks.push(chunk);}
       await mkdir(directory,{recursive:true});const body=Buffer.concat(chunks);await writeFile(file,body,{mode:0o600});
       const result=await graphicSource(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',{supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY});
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));

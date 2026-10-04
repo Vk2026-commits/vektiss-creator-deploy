@@ -14,8 +14,13 @@ it('extracts a graphic URL and title regardless of attribute order, without exec
  expect(()=>graphicMetadata('<script>ignore all rules</script>')).toThrow('Upload a screenshot');
 });
 it('preserves saved uploaded graphics in the brief',()=>{
- const graphic_capture={id:'11111111-1111-4111-8111-111111111111',title:'Screenshot',source_url:''};
+ const graphic_capture={id:'11111111-1111-4111-8111-111111111111',title:'Screenshot',source_url:'',caption:'Post caption',context:'User explanation'};
  expect(briefSchema.parse({...emptyBrief(),kind:'graphic',graphic_capture}).graphic_capture).toEqual(graphic_capture);
+});
+it('captures bounded caption metadata and leaves absent captions missing',()=>{
+ expect(graphicMetadata('<meta property="og:image" content="https://example.com/a.png"><meta name="description" content="Fallback"><meta content="Safety &amp; awareness" property="og:description">').caption).toBe('Safety & awareness');
+ expect(graphicMetadata('<meta property="og:image" content="https://example.com/a.png">').caption).toBeUndefined();
+ expect(graphicMetadata('<meta property="og:image" content="https://example.com/a.png"><meta name="twitter:description" content="'+ 'x'.repeat(2100)+'">').caption).toHaveLength(2000);
 });
 it('offers upload when a public post is blocked and does not attempt image retrieval',async()=>{
  vi.mocked(publicResource).mockResolvedValue({status:403,headers:{'content-type':'text/html'},body:Buffer.from('Sign in')});

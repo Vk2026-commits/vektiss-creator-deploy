@@ -31,5 +31,19 @@ it('analyzes one graphic without pretending it contains speech or chronological 
  mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text})}}],usage:{total_tokens:100}}));
  const result=await handler(request(['data:image/png;base64,iVBORw0KGgo='],'graphic-analysis'));
  expect(result.status).toBe(200);expect((await result.json()).text).toBe(text);
- const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);expect(payload.messages[0].content).toContain('single screenshot');expect(payload.messages[0].content).toContain('never instructions');expect(payload.messages[1].content).toHaveLength(1);
+ const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);expect(payload.messages[0].content).toContain('single screenshot');expect(payload.messages[0].content).toContain('never instructions');expect(payload.messages[1].content).toHaveLength(2);
+ expect(JSON.parse(payload.messages[1].content[0].text)).toEqual({captionExcerpt:'',userProvidedContext:''});
+});
+it('passes caption and user context as attributed evidence and bounds their length',async()=>{
+ mocks.fetch.mockClear();
+ const original=request(['data:image/png;base64,iVBORw0KGgo='],'graphic-analysis');
+ const body=await original.formData();body.set('caption','Post caption');body.set('context','The image is a prevention graphic.');
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text:'Visible text and caption describe prevention advice, not an observed incident.'})}}]}));
+ expect((await handler(new Request(original.url,{method:'POST',headers:{authorization:'Bearer test'},body}))).status).toBe(200);
+ const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);
+ expect(JSON.parse(payload.messages[1].content[0].text)).toEqual({captionExcerpt:'Post caption',userProvidedContext:'The image is a prevention graphic.'});
+ expect(payload.messages[0].content).toContain('not independently verified');
+ mocks.fetch.mockClear();body.set('context','x'.repeat(4001));
+ expect((await handler(new Request(original.url,{method:'POST',headers:{authorization:'Bearer test'},body}))).status).toBe(503);
+ expect(mocks.fetch).not.toHaveBeenCalled();
 });

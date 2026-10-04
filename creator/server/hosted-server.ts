@@ -98,7 +98,7 @@ export function hostedHandler(c:HostingConfig){
     const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!(graphic?['image/png','image/jpeg','image/webp']:['video/mp4','video/webm']).includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
-    const limit=binary?(graphic?10*1024*1024:SOURCE_MAX_BYTES):4096;
+    const limit=binary?(graphic?10*1024*1024:SOURCE_MAX_BYTES):(graphic?32*1024:4096);
     if(Number(req.headers['content-length'])>limit)return json(res,413,{error:'Upload is too large.'});
     inputFile=resolve(jobs,`${id}.input`);const handle=await open(inputFile,'wx',0o600);let size=0;
     req.setTimeout(600000,()=>req.destroy());

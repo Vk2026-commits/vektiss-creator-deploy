@@ -1,6 +1,6 @@
 import { z } from 'zod';
 export const presenterPositions=['bottom-left','bottom-center','bottom-right','middle-left','middle-right'] as const;
-export const graphicCaptureSchema=z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().max(2000)});
+export const graphicCaptureSchema=z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().max(2000),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()});
 // Anchors may extend outside the frame; the canvas/export crops the overflow.
 export const freePlacementSchema=z.object({x:z.number().min(-2).max(3),y:z.number().min(-2).max(3),width:z.number().min(5).max(100)}).strict();
 export const videoPlanSchema=z.object({
