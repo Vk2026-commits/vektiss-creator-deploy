@@ -7,6 +7,7 @@ import {mediaBinary} from '../server/media-binaries';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {hostedHandler,validateHostingConfig,type HostingConfig} from '../server/hosted-server';
+vi.mock('node:fs/promises',async importOriginal=>({...await importOriginal<typeof import('node:fs/promises')>(),statfs:vi.fn(async()=>({bavail:10*1024*1024,bsize:4096}))}));
 const owner='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 let server:Server|undefined,dir='';const realFetch=globalThis.fetch;
@@ -23,6 +24,18 @@ it('fails closed without an explicit pilot account or HTTPS origin',()=>{
  expect(()=>validateHostingConfig({origin:'http://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[owner]})).toThrow();
  expect(()=>validateHostingConfig({origin:'https://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[]})).toThrow();
 });
+it('saves screenshots through a durable job and serves only the owner’s graphic',async()=>{
+ const {url,headers}=await setup();const path=join(dir,'graphic.png');
+ await promisify(execFile)(mediaBinary('ffmpeg'),['-v','error','-f','lavfi','-i','color=blue:s=64x64','-frames:v','1',path]);
+ const route=url+'/api/local-capture/graphic-source';
+ expect((await realFetch(route,{method:'POST',headers:{...headers,'Content-Type':'image/svg+xml'},body:'<svg/>'})).status).toBe(415);
+ const response=await realFetch(route,{method:'POST',headers:{...headers,'Content-Type':'image/png'},body:await readFile(path)});
+ expect(response.status).toBe(202);const {poll}=await response.json();let result=response;
+ for(let i=0;i<400;i++){await new Promise(r=>setTimeout(r,50));result=await realFetch(url+poll,{headers});if(result.status!==202)break;}
+ expect(result.status).toBe(200);const capture=await result.json();expect(capture.source_url).toBe('');
+ const saved=await realFetch(url+'/api/local-capture/graphic/'+capture.id,{headers});expect(saved.status).toBe(200);expect(saved.headers.get('content-type')).toBe('image/png');
+ expect((await realFetch(url+'/api/local-capture/graphic/'+capture.id)).status).toBe(403);
+},30000);
 it('serves the app but rejects unauthenticated media and cross-origin requests',async()=>{
  const {url,headers}=await setup();expect((await realFetch(url)).status).toBe(200);
  expect((await realFetch(url+'/api/local-capture/exports',{headers:{'X-Creator-Capture':'1'}})).status).toBe(401);

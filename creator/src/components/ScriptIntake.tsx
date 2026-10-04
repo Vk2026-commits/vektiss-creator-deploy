@@ -3,6 +3,7 @@ import { SourceReport } from './SourceReport';
 import { type ScriptBrief } from '../domain/script-brief';
 import { VoiceNote } from './VoiceNote';
 import { SourceVideo } from './SourceVideo';
+import {GraphicSource} from './GraphicSource';
 import { ContentSearch } from './ContentSearch';
 import { useId, useState } from 'react';
 import {AdjustSourceCut} from './AdjustSourceCut';
@@ -20,7 +21,7 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
  const [answer,setAnswer]=useState('');
  const submit=()=>{const next={...brief,questions:brief.questions.map((q,i)=>i===questionIndex?{...q,answer:answer.trim()}:q).filter(q=>q.answer.trim())};onChange(next);onAI('clarify',next);setAnswer('');setVoice(false);};
  const update=(patch:Partial<ScriptBrief>)=>onChange({...brief,...patch,clarified:false,questions:[],summary:''});
- const updateSource=(patch:Partial<ScriptBrief>)=>update({...patch,...('url' in patch||'kind' in patch?{source:'',source_cut:undefined}:{}),source_summary:undefined,production:undefined});
+ const updateSource=(patch:Partial<ScriptBrief>)=>update({...patch,...('url' in patch||'kind' in patch?{source:'',source_cut:undefined,graphic_capture:undefined}:{}),source_summary:undefined,production:undefined});
  const completeSource=async(source:string,source_cut:SourceCut)=>{const next={...brief,source,source_cut,source_summary:undefined,production:undefined,questions:[],summary:'',clarified:false,stage:'source' as const};setEditingSource(false);onChange(next);await onAI('summarize',next);};
  const cutControls=brief.source_cut?<AdjustSourceCut key={brief.source_cut.selected_id} cut={brief.source_cut} profileId={profileId} disabled={busy||preview} onComplete={completeSource} onProcessing={onProcessing??(()=>{})} onProgress={onProgress}/>:null;
  const move=(stage:ScriptBrief['stage'])=>onChange({...brief,stage});
@@ -34,6 +35,9 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
   <button type="button" disabled={busy} onClick={()=>{setVideoInput(brief.url?'link':'upload');setEditingSource(true);}}>Change source</button>
  </div>;
  return <div className="script-intake">
+ {brief.stage==='source'&&<button type="button" disabled={busy} aria-pressed={brief.kind==='graphic'} onClick={()=>{updateSource({kind:brief.kind==='graphic'?'video':'graphic',url:''});setVideoInput('link');}}>{brief.kind==='graphic'?'← Use a video or article':'React to a screenshot / graphic'}</button>}
+ {brief.stage==='source'&&brief.kind==='graphic'&&<><h2>Add a screenshot or graphic</h2><GraphicSource capture={brief.graphic_capture} url={brief.url} profileId={profileId} disabled={busy||preview} onUrl={url=>updateSource({url})} onProcessing={onProcessing??(()=>{})} onCapture={graphic_capture=>update({...{graphic_capture,url:graphic_capture.source_url},source:'',source_summary:undefined,source_cut:undefined,production:undefined})} onComplete={async source=>{const next={...brief,source,source_summary:undefined,production:undefined,questions:[],summary:'',clarified:false};setEditingSource(false);onChange(next);await onAI('summarize',next);}}/></>}
+ <div hidden={brief.stage==='source'&&brief.kind==='graphic'}>
  {brief.stage==='source'&&editingSource&&brief.source_summary&&<button type="button" onClick={()=>setEditingSource(false)}>← Back to the gist</button>}
  {brief.stage==='source'&&<><div className="video-input-tabs" role="tablist" aria-label="Choose a source method">{(['search','link','upload'] as const).map((mode,index)=><button type="button" role="tab" key={mode} id={`${tabsId}-method-${mode}`} aria-controls={`${tabsId}-method-panel`} aria-selected={videoInput===mode} tabIndex={videoInput===mode?0:-1} onClick={()=>{setVideoInput(mode);if(mode==='upload'&&brief.kind!=='video')updateSource({kind:'video'});}} onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const modes=['search','link','upload'] as const;const next=modes[e.key==='Home'?0:e.key==='End'?2:(index+(e.key==='ArrowLeft'?2:1))%3];setVideoInput(next);if(next==='upload'&&brief.kind!=='video')updateSource({kind:'video'});document.getElementById(`${tabsId}-method-${next}`)?.focus();}}}>{mode==='search'?'Find content':mode==='link'?'Paste link':'Upload file'}</button>)}</div>{videoInput==='search'&&<ContentSearch profileId={profileId} disabled={busy||preview} onSelect={(url,kind)=>{updateSource({url,kind});setVideoInput('link');}}/>}</>}
  <div id={`${tabsId}-method-panel`} hidden={brief.stage==='source'&&videoInput==='search'}>
@@ -48,6 +52,7 @@ export function ScriptIntake({brief,onChange,profileId,busy,preview,onAI,onProce
  {brief.stage==='review'&&<><h2>Your script, ready for review.</h2><p>Based on your profile and source. Review, then approve.</p>{brief.review&&<details><summary>Accuracy & source notes</summary><SourceReport text={brief.review}/></details>}<button type="button" onClick={()=>move('source')}>Review source and notes</button></>}
  {brief.stage==='review'&&cutControls}
  {preview&&<p>Local preview: you can save a brief, but AI and transcription require a signed-in account.</p>}
+ </div>
  </div>
  </div>;
 }

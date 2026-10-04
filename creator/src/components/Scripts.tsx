@@ -169,7 +169,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   async function save(production?:Plan) {
     setBusy(true); setError(''); setMessage('');
     try {
-      const next={...draft,title:draft.title.trim()||'Untitled video',brief:{...draft.brief,...(production?{production}:draft.brief.stage==='review'?{production:{...(draft.brief.production??newVideoPlan()),...(draft.brief.source_cut?{video_background:{id:draft.brief.source_cut.selected_id,source_url:draft.brief.url}}:{}),presenter:'avatar' as const,approved_at:new Date().toISOString(),step:'presenter' as const}}:{})}};
+      const next={...draft,title:draft.title.trim()||'Untitled video',brief:{...draft.brief,...(production?{production}:draft.brief.stage==='review'?{production:{...(draft.brief.production??newVideoPlan()),...(draft.brief.source_cut?{video_background:{id:draft.brief.source_cut.selected_id,source_url:draft.brief.url}}:{}),...(draft.brief.kind==='graphic'&&draft.brief.graphic_capture?{article_capture:draft.brief.graphic_capture}:{}),presenter:'avatar' as const,approved_at:new Date().toISOString(),step:'presenter' as const}}:{})}};
       const item = await repo.save(next, current);
       setCurrent(item); setDraft(item); setDirty(false);
       setSaved(items => [item, ...items.filter(s => s.id !== item.id)]);

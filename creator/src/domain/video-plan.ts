@@ -1,5 +1,6 @@
 import { z } from 'zod';
 export const presenterPositions=['bottom-left','bottom-center','bottom-right','middle-left','middle-right'] as const;
+export const graphicCaptureSchema=z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().max(2000)});
 // Anchors may extend outside the frame; the canvas/export crops the overflow.
 export const freePlacementSchema=z.object({x:z.number().min(-2).max(3),y:z.number().min(-2).max(3),width:z.number().min(5).max(100)}).strict();
 export const videoPlanSchema=z.object({
@@ -17,7 +18,7 @@ export const videoPlanSchema=z.object({
  presenter_position:z.enum(presenterPositions).default('bottom-right'),
  presenter_size:z.number().min(15).max(90).default(28),
  presenter_placement:freePlacementSchema.optional(),
- article_capture:z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().url().max(2000)}).optional(),
+ article_capture:graphicCaptureSchema.optional(),
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });
 export type VideoPlan=z.infer<typeof videoPlanSchema>;

@@ -9,6 +9,7 @@ import {fullComposition} from './full-composition';
 import {extractVideoFrames,frameTimesHeader} from './video-frames';
 import {createSavedDraft,DraftError} from './script-draft';
 import {sourceWorkflow} from './source-workflow';
+import {graphicSource} from './graphic-source';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -60,6 +61,8 @@ export function hostedHandler(c:HostingConfig){
     if(job.file){res.setHeader('Content-Type',job.type??'video/mp4');const stream=createReadStream(resolve(jobs,`${id}.mp4`));stream.on('error',()=>res.destroy());stream.pipe(res);return;}
     return json(res,200,job.result);
    }
+   const graphicMatch=path.match(/^\/api\/local-capture\/graphic\/([a-f0-9-]{36})$/);
+   if(req.method==='GET'&&graphicMatch&&uuid.test(graphicMatch[1])){res.setHeader('Content-Type','image/png');return res.end(await readFile(resolve(media,`${graphicMatch[1]}.png`)));}
    const mediaMatch=path.match(/^\/api\/local-capture\/(video-background|exports)\/([a-f0-9-]{36}|[a-f0-9]{64})$/);
    if(req.method==='GET'&&mediaMatch){
     const [,kind,id]=mediaMatch;if(kind==='video-background'&&!uuid.test(id))return json(res,404,{error:'Not found'});
@@ -69,7 +72,7 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'The hosted pilot currently supports video sources. Article screenshot composition is still local-only.'});
+   if(!['/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
    const requestedId=req.headers['x-creator-job'];
    if(requestedId!==undefined&&(typeof requestedId!=='string'||!uuid.test(requestedId)))return json(res,400,{error:'Invalid job identifier.'});
    if(typeof requestedId==='string'){
@@ -90,11 +93,12 @@ export function hostedHandler(c:HostingConfig){
     for(const file of await readdir(jobs)){if(file.endsWith('.json')&&(await readFile(resolve(jobs,file),'utf8')).includes(`"created":"${today}`))count++;}
     if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
     const type=req.headers['content-type']?.split(';')[0]??'';
-    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||(path.endsWith('/source-workflow')&&type!=='application/json');
+    const graphic=path.endsWith('/graphic-source');
+    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||((path.endsWith('/source-workflow')||graphic)&&type!=='application/json');
     const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
-    if(binary&&!['video/mp4','video/webm'].includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
-    const limit=binary?SOURCE_MAX_BYTES:4096;
+    if(binary&&!(graphic?['image/png','image/jpeg','image/webp']:['video/mp4','video/webm']).includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
+    const limit=binary?(graphic?10*1024*1024:SOURCE_MAX_BYTES):4096;
     if(Number(req.headers['content-length'])>limit)return json(res,413,{error:'Upload is too large.'});
     inputFile=resolve(jobs,`${id}.input`);const handle=await open(inputFile,'wx',0o600);let size=0;
     req.setTimeout(600000,()=>req.destroy());
@@ -106,7 +110,8 @@ export function hostedHandler(c:HostingConfig){
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
      try{
-      if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      else if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
       else if(path.endsWith('/script-draft'))job.result=await createSavedDraft(input,authorization,c);
       else if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
       else if(path.endsWith('/video-frames'))job.result=await extractVideoFrames(createReadStream(savedInput),frameTimes);

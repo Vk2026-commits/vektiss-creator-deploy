@@ -21,3 +21,4 @@
 .presenter-placement fieldset { border: 0; padding: 0; }
 .presenter-placement small { color: #61738b; line-height: 1.5; }
 @media(max-width:600px) { .presenter-placement { grid-template-columns: 1fr; gap: 16px; } .presenter-placement .article-layout-stage { width: 120px; margin: auto; } }
+.graphic-source-preview img{display:block;max-width:100%;height:auto;max-height:420px;object-fit:contain;margin:auto}

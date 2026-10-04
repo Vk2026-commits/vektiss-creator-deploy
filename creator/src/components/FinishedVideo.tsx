@@ -4,7 +4,7 @@ import {RenderProgress} from './RenderProgress';
 import {supabase} from '../lib/supabase';
 import type {VideoPlan} from '../domain/video-plan';
 import {avatarFraming} from '../domain/avatar-framing';
-export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'}){
+export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'|'graphic'}){
  const [url,setUrl]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);
  const [progress,setProgress]=useState(85);
  const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;

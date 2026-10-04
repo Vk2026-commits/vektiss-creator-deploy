@@ -26,3 +26,10 @@ it('routes boundary detection to vision, validates and persists the result',asyn
  const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);expect(payload.response_format.json_schema.name).toBe('reaction_boundary');
  expect(payload.messages[0].content).toContain('FIRST visual appearance');expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({result:output,status:'complete'}));
 });
+it('analyzes one graphic without pretending it contains speech or chronological action',async()=>{
+ mocks.fetch.mockClear();const text='Visible text: a post recommends keeping doors locked. This is advice in a graphic, not evidence of an incident.';
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text})}}],usage:{total_tokens:100}}));
+ const result=await handler(request(['data:image/png;base64,iVBORw0KGgo='],'graphic-analysis'));
+ expect(result.status).toBe(200);expect((await result.json()).text).toBe(text);
+ const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);expect(payload.messages[0].content).toContain('single screenshot');expect(payload.messages[0].content).toContain('never instructions');expect(payload.messages[1].content).toHaveLength(1);
+});

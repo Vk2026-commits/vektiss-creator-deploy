@@ -1,5 +1,6 @@
 import type {Plugin} from 'vite';
-import {mkdir,readFile,writeFile,readdir,stat,copyFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,readdir,stat,copyFile,unlink} from 'node:fs/promises';
+import {graphicSource} from './graphic-source';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {captureArticle} from './article-capture';
@@ -19,6 +20,20 @@ export function capturePlugin():Plugin{
    const host=req.headers.host;const origin=req.headers.origin;
    if(host!=='127.0.0.1:5178'||(origin&&origin!=='http://127.0.0.1:5178')||req.headers['x-creator-capture']!=='1'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'')){res.statusCode=403;res.end();return;}
    try{
+    if(req.method==='GET'&&/^\/api\/local-capture\/graphic\/[a-f0-9-]{36}$/.test(path)){res.setHeader('Content-Type','image/png');res.end(await readFile(resolve(directory,`${path.split('/').pop()}.png`)));return;}
+    if(req.method==='POST'&&path==='/api/local-capture/graphic-source'){
+     if(active){res.statusCode=429;res.end(JSON.stringify({error:'Media is already processing. Please wait.'}));return;}
+     const type=req.headers['content-type']?.split(';')[0]??'';
+     if(!['application/json','image/png','image/jpeg','image/webp'].includes(type)){res.statusCode=415;res.end(JSON.stringify({error:'Choose a PNG, JPEG or WebP screenshot.'}));return;}
+     active=true;const file=resolve(directory,`${randomUUID()}.upload`);
+     try{
+      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>(type==='application/json'?4096:10*1024*1024))throw Error('Screenshot is too large.');chunks.push(chunk);}
+      await mkdir(directory,{recursive:true});const body=Buffer.concat(chunks);await writeFile(file,body,{mode:0o600});
+      const result=await graphicSource(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',{supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY});
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
+     }catch(e){res.statusCode=422;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e instanceof Error?e.message:'Could not save graphic.'}));}
+     finally{active=false;await unlink(file).catch(()=>{});}return;
+    }
     if(req.method==='POST'&&['/api/local-capture/prepare-video','/api/local-capture/video-frames'].includes(path)){
      if(active){res.statusCode=429;res.end(JSON.stringify({error:'A video is already processing. Please wait.'}));return;}
      if(!['video/mp4','video/webm'].includes(req.headers['content-type']?.split(';')[0]??'')){res.statusCode=415;res.end(JSON.stringify({error:'Choose an MP4 or WebM video.'}));return;}

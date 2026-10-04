@@ -4,6 +4,8 @@ import {providerVideo,testExcerpt,testPayload,fullScript,type TestCommand} from 
 import {credentialVault,type SealedCredential} from './credential-crypto.ts';
 import {HeyGenCatalog} from './heygen.ts';
 import {selectedVoiceForPlan} from './selected-voice.ts';
+import {spokenEmergencyNumber,steveReactionProfile} from '../../../src/domain/reaction-script.ts';
+import {STEPHEN_AVATAR} from '../../../src/domain/avatar-framing.ts';
 
 export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof credentialVault>){
  async function displayJob(job:Record<string,unknown>){
@@ -70,6 +72,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const scope=command.scope??'test';
   if(plan.voice_engine!==undefined&&!['auto','fish'].includes(plan.voice_engine))throw new PublicError('VOICE_ENGINE','Choose a supported voice engine.',400);
   const snapshot={scope,avatar_id:avatar.provider_avatar_id,voice_id:selectedVoice?.provider_voice_id??avatar.provider_voice_id,avatar_name:avatar.name,voice_name:selectedVoice?.name??avatar.voice_name,script:scope==='full'?fullScript(script):testExcerpt(script),aspect_ratio:plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9'};
+  if(script.content_profile_id===steveReactionProfile||plan.avatar_id===STEPHEN_AVATAR)snapshot.script=spokenEmergencyNumber(snapshot.script);
   // Include the engine in the paid-job revision; never reuse audio from another engine.
   const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string};
   if(plan.voice_engine==='fish')engineSnapshot.voice_engine='fish';
