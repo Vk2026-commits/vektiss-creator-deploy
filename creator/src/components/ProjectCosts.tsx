@@ -19,12 +19,13 @@ export function ProjectCosts({preview=false}:{preview?:boolean}){
  async function load(){
   setBusy(true);setError('');
   try{
+   if(!preview){const access=await supabase!.rpc('creator_is_cost_admin');if(access.error||access.data!==true)throw Error('ADMIN_REQUIRED');}
    if(preview){setData({videos:[{id:'demo',title:'Sample project — demonstration only',brief:{}}],ai:[{id:'demo-ai',project_id:'demo',model:'gpt-4o-mini',action:'generate',status:'complete',estimated_cost_usd:.012,pricing_version:'Demo rates'}],jobs:[{id:'demo-job',project_id:'demo',operation:'full-compose',status:'done',elapsed_ms:12000,retained_bytes:20000000,upload_bytes:10000000,assets:[{key:'demo.mp4',bytes:20000000}],started_at:'2026-10-04'}],renders:[{id:'demo-render',script_id:'demo',status:'completed',provider_video_id:null,snapshot:{scope:'full'}}],entries:[]});return;}
    const [videos,ai,jobs,renders,entries]=await Promise.all([
     rows<Video>('creator_scripts','id,title,brief'),rows<AI>('creator_ai_generations','id,project_id,model,action,status,estimated_cost_usd,pricing_version'),
     rows<ProcessingUsage>('creator_processing_usage','*'),rows<Render>('creator_presenter_tests','id,script_id,status,provider_video_id,snapshot'),rows<Entry>('creator_cost_entries','*')]);
    setData({videos,ai,jobs,renders,entries});
-  }catch{setError('Cost records could not load. Refresh to retry; the cost-tracking database migration must be installed.');}finally{setBusy(false);}
+  }catch{setData(null);setError('Administrator access is required. If you are an administrator, refresh to retry.');}finally{setBusy(false);}
  }
  useEffect(()=>{void load();},[]);
  const keys=data?[...new Set([...data.videos.map(v=>v.brief.cost_project_id??v.id),...data.ai.map(a=>a.project_id),...data.jobs.map(j=>j.project_id)].filter((v):v is string=>!!v))]:[];

@@ -20,5 +20,16 @@ it('isolates usage, rejects cross-account render credit entries and deduplicates
   await db.query("select set_config('request.jwt.claim.sub',$1,false)",[owner]);
   await db.query("insert into creator_cost_entries(id,user_id,project_id,kind,render_id,quantity,unit_rate_usd) values($1,$1,$1,'heygen',$1,146,.048)",[owner]);
   await expect(db.query("update creator_cost_entries set quantity=0")).rejects.toThrow();
+  await db.exec("reset role;alter table auth.users add column raw_app_meta_data jsonb default '{}';");
+  await db.exec(await readFile(new URL('../supabase/migrations/202610050002_admin_costs.sql',import.meta.url),'utf8'));
+  await db.exec('set role authenticated');
+  expect((await db.query('select creator_is_cost_admin() as allowed')).rows).toEqual([{allowed:false}]);
+  expect((await db.query('select * from creator_cost_entries')).rows).toHaveLength(0);
+  await expect(db.query("insert into creator_cost_entries(id,user_id,project_id,kind,quantity,unit_rate_usd) values($2,$1,$1,'support',1,1)",[owner,other])).rejects.toThrow();
+  await db.exec('reset role');
+  await db.query(`update auth.users set raw_app_meta_data='{"creator_cost_admin":true}' where id=$1`,[owner]);
+  await db.exec('set role authenticated');
+  expect((await db.query('select creator_is_cost_admin() as allowed')).rows).toEqual([{allowed:true}]);
+  expect((await db.query('select * from creator_cost_entries')).rows).toHaveLength(1);
  }finally{await db.close();}
 },30000);

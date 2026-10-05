@@ -330,6 +330,15 @@ function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("create");
+  const [costAdmin, setCostAdmin] = useState(false);
+  useEffect(() => {
+    let live = true;
+    setCostAdmin(false);
+    if (!preview && supabase) void supabase.rpc('creator_is_cost_admin').then(({data,error}) => {
+      if (live) setCostAdmin(!error && data === true);
+    });
+    return () => { live = false; };
+  }, [userId, preview]);
   const [choosingAudience,setChoosingAudience]=useState(false);
   const [audienceChoice,setAudienceChoice]=useState<{id:string;version:number}|null>(null);
   const [query, setQuery] = useState("");
@@ -441,7 +450,6 @@ function CreatorWorkspace({
         <span className="nav-caption">WORKSPACE</span>
         <nav aria-label="Main navigation">
           <button className={page === 'create' ? 'active' : ''} onClick={() => setPage('create')}><Edit3 size={18} /> My videos</button>
-          <button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18} /> Project costs</button>
           <button
             className={page === "profiles" ? "active" : ""}
             onClick={() => setPage("profiles")}
@@ -464,6 +472,7 @@ function CreatorWorkspace({
             Avatar library
           </button>
         </nav>
+        {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Project costs</button></nav></>}
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
         <div className="upcoming">
           <span>
@@ -569,7 +578,7 @@ function CreatorWorkspace({
           ) : (
             <>
               {page === "avatars" && <AvatarLibrary preview={preview} />}
-              {page === 'costs' && <ProjectCosts preview={preview}/>}
+              {page === 'costs' && costAdmin && <ProjectCosts/>}
               {page === "profiles" && (
                 <>
                   {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}
