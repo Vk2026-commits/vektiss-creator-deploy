@@ -9,7 +9,9 @@ import {join} from 'node:path';
 import {mediaBinary} from '../server/media-binaries';
 it('only auto-cuts a confident separate reaction within the source',()=>{
  const result={status:'separate' as const,end:56,confidence:'high' as const,reason:'Visual transition'};
- expect(automaticEnd(result,130)).toBe(56);
+ expect(automaticEnd(result,130)).toBe(55.65);
+ expect(automaticEnd({...result,end:41.04},130)).toBe(40.69);
+ expect(automaticEnd({...result,end:1.2},130)).toBeNull();
  for(const status of ['overlap','uncertain'] as const)expect(automaticEnd({...result,status},130)).toBeNull();
  expect(automaticEnd({...result,confidence:'low'},130)).toBeNull();
  expect(automaticEnd({...result,end:131},130)).toBeNull();
