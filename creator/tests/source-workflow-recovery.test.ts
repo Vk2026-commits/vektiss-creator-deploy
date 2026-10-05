@@ -8,10 +8,11 @@ vi.mock('../server/video-frames',()=>({extractVideoFrames:async(source:{destroy:
 const profile='11111111-1111-4111-8111-111111111111';
 let root='';afterEach(async()=>{vi.restoreAllMocks();if(root)await rm(root,{recursive:true,force:true});});
 async function setup(){root=await mkdtemp(join(tmpdir(),'source-workflow-'));await mkdir(join(root,'.local-captures'));const input=join(root,'upload');await writeFile(input,'original');return input;}
-const config={supabaseUrl:'https://example.supabase.co',publicKey:'public'};
+const config={supabaseUrl:'https://example.supabase.co',publicKey:'public',costProjectId:profile};
 it('guards the refined automatic cut once and saves a distinct clip for intro and loops',async()=>{
  const input=await setup();let detections=0;
  vi.spyOn(globalThis,'fetch').mockImplementation(async(_url,init)=>{
+  expect((init!.body as FormData).get('projectId')).toBe(profile);
   const action=(init!.body as FormData).get('action');
   if(action==='video-boundary'){detections++;return Response.json({status:'separate',end:20,confidence:'high',reason:'Another creator appears.'});}
   return Response.json({text:'Selected original footage.'});

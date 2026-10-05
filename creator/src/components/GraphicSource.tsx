@@ -3,7 +3,7 @@ import {mediaFetch} from '../lib/media-fetch';
 import {graphicCaptureSchema,type VideoPlan} from '../domain/video-plan';
 import {GraphicImage} from './GraphicPreview';
 type Capture=NonNullable<VideoPlan['article_capture']>;
-export function GraphicSource({mode,initialFile,capture,url,profileId,disabled,onCapture,onComplete,onProcessing}:{mode:'link'|'upload';initialFile?:File;capture?:Capture;url:string;profileId:string;disabled:boolean;onCapture:(capture:Capture)=>void;onComplete:(text:string)=>Promise<void>;onProcessing:(busy:boolean)=>void}){
+export function GraphicSource({costProjectId,mode,initialFile,capture,url,profileId,disabled,onCapture,onComplete,onProcessing}:{costProjectId?:string;mode:'link'|'upload';initialFile?:File;capture?:Capture;url:string;profileId:string;disabled:boolean;onCapture:(capture:Capture)=>void;onComplete:(text:string)=>Promise<void>;onProcessing:(busy:boolean)=>void}){
  const [working,setWorking]=useState('');const [error,setError]=useState('');
  const active=useRef<AbortController|null>(null);
  useEffect(()=>()=>active.current?.abort(),[]);
@@ -14,8 +14,8 @@ export function GraphicSource({mode,initialFile,capture,url,profileId,disabled,o
   try{
    const payload=JSON.stringify(analyze?{id:capture?.id,analyze:true,caption:capture?.caption??'',context:capture?.context??''}:{url});
    const digest=analyze?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(payload))),byte=>byte.toString(16).padStart(2,'0')).join(''):'';
-   const tag=analyze?`graphic-analysis:v2:${profileId}:${digest}`:file?`graphic-upload:${file.name}:${file.size}:${file.lastModified}`:`graphic-link:v3:${url}`;
-   const response=await mediaFetch('/api/local-capture/graphic-source',{method:'POST',headers:{'Content-Type':file?.type??'application/json','X-Profile-Id':profileId},body:file??payload,signal:abort.signal},tag);
+   const tag=`${costProjectId??'legacy'}:`+(analyze?`graphic-analysis:v2:${profileId}:${digest}`:file?`graphic-upload:${file.name}:${file.size}:${file.lastModified}`:`graphic-link:v3:${url}`);
+   const response=await mediaFetch('/api/local-capture/graphic-source',{method:'POST',headers:{'Content-Type':file?.type??'application/json','X-Profile-Id':profileId,...(costProjectId?{'X-Cost-Project':costProjectId}:{})},body:file??payload,signal:abort.signal},tag);
    const result=await response.json();if(!response.ok)throw Error(result.error??'Could not capture this graphic. Try uploading a screenshot.');
    if(abort.signal.aborted)return;
    if(analyze){if(typeof result.text!=='string'||result.text.length<40)throw Error('Could not read enough from this graphic. Try a clearer screenshot.');onProcessing(false);await onComplete(result.text);}

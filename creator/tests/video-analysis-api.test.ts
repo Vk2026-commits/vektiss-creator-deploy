@@ -18,6 +18,15 @@ it('analyzes frames even when speech is shorter than forty characters and persis
 it('rejects remote image URLs instead of fetching arbitrary resources',async()=>{
  mocks.fetch.mockClear();const result=await handler(request(['http://127.0.0.1/private']));expect(result.status).toBe(503);expect(mocks.fetch).not.toHaveBeenCalled();
 });
+it('preserves billable usage when the provider response fails validation',async()=>{
+ mocks.update.mockClear();mocks.fetch.mockClear();
+ const usage={prompt_tokens:1000,completion_tokens:100};
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'length',message:{content:'invalid'}}],usage}));
+ const response=await handler(request(['data:image/jpeg;base64,/9j/']));
+ expect(response.status).toBe(503);
+ expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({usage,estimated_cost_usd:expect.any(Number)}));
+ expect(mocks.update).toHaveBeenLastCalledWith({status:'error'});
+});
 it('routes boundary detection to vision, validates and persists the result',async()=>{
  mocks.fetch.mockClear();const output={status:'separate',end:55.75,confidence:'high',reason:'Separate presenter appears.'};
  mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(output)}}]}));

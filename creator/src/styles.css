@@ -1618,13 +1618,15 @@ dialog::backdrop {
   .sidebar nav {
     grid-column: 1/-1;
     flex-direction: row;
+    min-width: 0;
+    overflow-x: auto;
     border-top: 1px solid #303745;
     padding-top: 8px;
   }
   .sidebar nav button {
-    flex: 1;
+    flex: 0 0 auto;
     justify-content: center;
-    min-height: 36px;
+    min-height: 44px;
     font-size: 10px;
   }
   .nav-count {

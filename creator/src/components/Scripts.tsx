@@ -25,7 +25,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const pendingDraftKey=`vektiss:pending-draft:v1:${userId}`;
   const draftController=useRef<AbortController|null>(null);
   useEffect(()=>()=>draftController.current?.abort(),[]);
-  const empty = (): ScriptInput => ({ content_profile_id: selectedId ?? profiles.find(p => !p.archived_at)?.id ?? '', title: '', hook: '', body: '', cta: '', brief:emptyBrief() });
+  const empty = (): ScriptInput => ({ content_profile_id: selectedId ?? profiles.find(p => !p.archived_at)?.id ?? '', title: '', hook: '', body: '', cta: '', brief:{...emptyBrief(),cost_project_id:workspaceId} });
   const [draft, setDraft] = useState<ScriptInput>(empty);
   const [current, setCurrent] = useState<Script | null>(null);
   const [saved, setSaved] = useState<Script[]>([]);
@@ -77,7 +77,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     repo.list().then(items => { if (active) {
       setSaved(items);
       const restored=items.find(item=>item.id===recoveryRead(recoveryKey));
-      if(restored){setCurrent(restored);setDraft(restored);setPlanning(Boolean(restored.brief.production));}
+      if(restored){setCurrent(restored);setDraft({...restored,brief:{...restored.brief,cost_project_id:restored.brief.cost_project_id??restored.id}});setPlanning(Boolean(restored.brief.production));}
       const pending=recoveryRead(pendingDraftKey);
       if(!preview&&import.meta.env.PROD&&pending){
         try{
@@ -105,9 +105,9 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     if(busy||sourceProcessing||generating.current)return;
     setEditingScript(false);
     if (dirty && !window.confirm('Some changes have not saved yet. Leave this video anyway?')) return;
-    setWorkspaceId(item?.id??crypto.randomUUID());
+    const nextWorkspace=item?.id??crypto.randomUUID();setWorkspaceId(nextWorkspace);
     const parsed = briefSchema.safeParse(item?.brief);
-    setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:parsed.success ? parsed.data : {...emptyBrief(),stage:'review'}} : empty()); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
+    setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
   }
   function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
   async function recoverDraft(body:string,resume=false){

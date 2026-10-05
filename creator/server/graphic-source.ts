@@ -26,7 +26,7 @@ export function graphicMetadata(html:string){
  const caption=(get('og:description')??get('twitter:description')??get('description')??'').trim().slice(0,2000);
  return {image,title:(get('og:title')??'Social post graphic').slice(0,2000),...(caption?{caption}:{})};
 }
-export async function graphicSource(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string},prepared?:{body:Buffer;title:string;source_url:string;caption?:string}){
+export async function graphicSource(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string;costProjectId?:string},prepared?:{body:Buffer;title:string;source_url:string;caption?:string}){
  const media=resolve(root,'.local-captures');
  const options=type==='application/json'?z.object({url:z.string().max(2000).optional(),id:z.string().uuid().optional(),analyze:z.boolean().optional(),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()}).strict().parse(input):{};
  if(options.analyze){
@@ -34,6 +34,7 @@ export async function graphicSource(root:string,file:string,type:string,input:un
   const png=await readFile(resolve(media,`${id}.png`));
   if(png.length>6*1024*1024)throw new DraftError('This graphic is too detailed to analyze. Upload a smaller screenshot.');
   const form=new FormData();form.set('action','graphic-analysis');form.set('profileId',profileId);form.set('frames',JSON.stringify([`data:image/png;base64,${png.toString('base64')}`]));
+  if(config.costProjectId)form.set('projectId',config.costProjectId);
   form.set('caption',options.caption??'');form.set('context',options.context??'');
   const response=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers:{Authorization:authorization,apikey:config.publicKey},body:form,signal:AbortSignal.timeout(120000)});
   if(!response.ok)throw new DraftError('Could not analyze the graphic. Your image is saved; please retry.');

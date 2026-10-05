@@ -10,6 +10,7 @@ import { authRedirectUrl } from './lib/auth-redirect';
 import { signInError } from './lib/auth-errors';
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import { Scripts } from "./components/Scripts";
+import { ProjectCosts } from './components/ProjectCosts';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -311,7 +312,7 @@ function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "avatars";
+type Page = "profiles" | "creator" | "create" | "avatars" | "costs";
 function CreatorWorkspace({
   repo,
   userId,
@@ -440,6 +441,7 @@ function CreatorWorkspace({
         <span className="nav-caption">WORKSPACE</span>
         <nav aria-label="Main navigation">
           <button className={page === 'create' ? 'active' : ''} onClick={() => setPage('create')}><Edit3 size={18} /> My videos</button>
+          <button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18} /> Project costs</button>
           <button
             className={page === "profiles" ? "active" : ""}
             onClick={() => setPage("profiles")}
@@ -502,7 +504,7 @@ function CreatorWorkspace({
                 ? "Content Profiles"
                 : page === "creator"
                   ? "Creator profile"
-                  : page === "avatars" ? "Avatar library" : "Create video"}
+                  : page === "avatars" ? "Avatar library" : page === 'costs' ? 'Project costs' : "Create video"}
             </strong>
           </div>
           <span className="foundation-badge">
@@ -567,6 +569,7 @@ function CreatorWorkspace({
           ) : (
             <>
               {page === "avatars" && <AvatarLibrary preview={preview} />}
+              {page === 'costs' && <ProjectCosts preview={preview}/>}
               {page === "profiles" && (
                 <>
                   {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}

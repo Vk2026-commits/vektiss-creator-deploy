@@ -9,7 +9,7 @@ import type {DraftProgress} from './ScriptProgress';
 
 const waitingSchema=z.object({original_id:z.string().uuid(),duration:z.number().positive(),end:z.number().positive(),reason:z.string(),waiting:z.literal(true)});
 const checkpointSchema=z.object({operation:z.string().uuid(),waiting:waitingSchema.optional()});
-type Props={originalId?:string;initialFile?:File;hideInput?:boolean;scope:string;mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(text:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void};
+type Props={costProjectId?:string;originalId?:string;initialFile?:File;hideInput?:boolean;scope:string;mode:'link'|'upload';url:string;profileId:string;disabled:boolean;onUrl:(url:string)=>void;onComplete:(text:string,cut:SourceCut)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void};
 export function HostedSourceVideo(props:Props){
  const key=`vektiss:source-workflow:v1:${props.scope}`;
  const [file,setFile]=useState<File|null>(props.initialFile??null),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -25,7 +25,7 @@ export function HostedSourceVideo(props:Props){
   setBusy(true);setError('');callbacks.current.onProcessing(true);
   callbacks.current.onProgress?.({percent:10,label:resume?'Reconnecting to saved source analysis…':'Sending source — keep this page open until accepted…'});
   try{
-   const response=await mediaFetch('/api/local-capture/source-workflow',{method:'POST',headers:{'Content-Type':type,'X-Profile-Id':props.profileId},body,signal:current.signal},operation,resume,()=>{if(!current.signal.aborted)callbacks.current.onProgress?.({percent:35,label:'Source accepted. Analyzing on the server — safe to lock your phone.'});});
+   const response=await mediaFetch('/api/local-capture/source-workflow',{method:'POST',headers:{'Content-Type':type,'X-Profile-Id':props.profileId,...(props.costProjectId?{'X-Cost-Project':props.costProjectId}:{})},body,signal:current.signal},operation,resume,()=>{if(!current.signal.aborted)callbacks.current.onProgress?.({percent:35,label:'Source accepted. Analyzing on the server — safe to lock your phone.'});});
    const result=await response.json();if(!response.ok)throw Error(result.error??'Source analysis could not finish.');
    if(current.signal.aborted)return;
    if(result.waiting){

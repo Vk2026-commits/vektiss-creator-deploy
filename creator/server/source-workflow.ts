@@ -9,7 +9,7 @@ import {extractVideoFrames} from './video-frames';
 import {automaticEnd,boundarySchema} from '../src/domain/source-cut';
 import {DraftError} from './script-draft';
 
-type Context={supabaseUrl:string;publicKey:string};
+type Context={supabaseUrl:string;publicKey:string;costProjectId?:string};
 // One durable hosted job owns the whole analysis. The phone only reads its status.
 export async function sourceWorkflow(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:Context){
  const media=resolve(root,'.local-captures');
@@ -26,6 +26,7 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
  const original=resolve(media,`${originalId}.video`);
  async function ai(action:string,frames?:unknown,transcript='',blob?:Buffer){
   const body=new FormData();body.set('action',action);body.set('profileId',profileId);
+  if(config.costProjectId)body.set('projectId',config.costProjectId);
   if(blob)body.set('file',new Blob([new Uint8Array(blob)],{type:'video/mp4'}),'source.mp4');
   if(frames){body.set('frames',JSON.stringify(frames));body.set('transcript',transcript);body.set('audioUnavailable',String(!transcript));}
   const response=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers:{Authorization:authorization,apikey:config.publicKey},body,signal:AbortSignal.timeout(150000)});

@@ -1,0 +1,6 @@
+.project-costs{max-width:1000px;margin:auto;padding:24px;background:#fff;border-radius:20px;color:#142238}
+.project-costs header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.project-costs label{display:grid;gap:6px;margin:12px 0}.project-costs input,.project-costs select{padding:12px;border:1px solid #c5d2e1;border-radius:8px;width:100%;min-width:0;font-size:16px}
+.cost-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.cost-metrics div{background:#f2f7ff;border-radius:12px;padding:16px}.cost-metrics dt{font-size:14px}.cost-metrics dd{margin:6px 0 0;font-size:24px;font-weight:700}
+.project-costs p{line-height:1.5}.project-costs small{display:block;overflow-wrap:anywhere}.project-costs summary{cursor:pointer;padding:14px 0}.project-costs li{margin:12px 0;overflow-wrap:anywhere}.project-costs button{min-height:44px}.project-costs [role=alert]{color:#a31e19}
+@media(max-width:600px){.project-costs{padding:16px}.cost-metrics{grid-template-columns:1fr}.project-costs h1{font-size:26px}}

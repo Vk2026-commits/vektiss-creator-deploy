@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
 import type { ScriptBrief } from '../domain/script-brief';
 import { withDeadline } from './request-deadline';
-export async function scriptAI(action: string, profileId: string, brief?: ScriptBrief, audio?: Blob) {
+export async function scriptAI(action: string, profileId: string, brief?: ScriptBrief, audio?: Blob, projectId?:string) {
   if (!supabase) throw new Error('AI requires a signed-in account.');
   let body: FormData | object = { action, profileId, brief };
   if (audio) { const form = new FormData(); form.set('action','transcribe'); form.set('profileId',profileId); const extension=audio.type.includes('mp4')?'mp4':audio.type.includes('mpeg')?'mp3':audio.type.includes('wav')?'wav':audio.type.includes('ogg')?'ogg':audio.type.includes('m4a')?'m4a':'webm'; form.set('file',audio,`note.${extension}`); body=form; }
+  if(body instanceof FormData&&(projectId??brief?.cost_project_id))body.set('projectId',(projectId??brief?.cost_project_id)!);
   const {data,error} = await withDeadline(signal=>supabase!.functions.invoke('script-assistant',{body,signal}),120000,audio?'Transcription timed out. Your recording is still here—download it for safekeeping, then retry.':'AI timed out. Your inputs are still here; please retry.');
   if (error) {
     let code = '';

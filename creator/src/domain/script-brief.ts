@@ -3,6 +3,7 @@ import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
 import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 export const briefSchema = z.object({
+  cost_project_id:z.string().uuid().optional(),
   kind: z.enum(['article', 'video','graphic']),
   prepared_source:resolvedSourceSchema.optional(),
   graphic_capture:graphicCaptureSchema.optional(),

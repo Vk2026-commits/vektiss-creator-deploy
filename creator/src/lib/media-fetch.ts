@@ -42,6 +42,11 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
   }
  }
  const headers=new Headers(init.headers);if(requestId)headers.set('X-Creator-Job',requestId);
+ let project=headers.get('X-Cost-Project');
+ if(!project&&typeof init.body==='string'){try{project=JSON.parse(init.body).script_id??null;}catch{/* Binary/source body. */}}
+ const retryKey=owner&&project?`vektiss:failed-operation:v1:${owner}:${project}:${path}`:recoveryKey?`${recoveryKey}:failed`:null;
+ const retryOf=retryKey?recoveryRead(retryKey):null;
+ if(requestId&&retryOf&&/^[a-f0-9-]{36}$/.test(retryOf))headers.set('X-Creator-Retry-Of',retryOf);
  let response:Response;
  if(savedPoll&&!requestId){onAccepted?.();response=await read(savedPoll);}
  else if((init.method??'GET').toUpperCase()==='GET')response=await read(path);
@@ -58,6 +63,11 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
  }
  // Retain successful jobs for reload recovery. A deliberate retry can resubmit
  // a terminal failed export, but never a paid avatar render.
- if(recoveryKey&&!response.ok&&response.status!==401)recoveryWrite(recoveryKey,null);
+ if(recoveryKey&&!response.ok&&response.status!==401){
+  const failed=recoveryRead(recoveryKey)?.split('/').at(-1);
+  if(failed&&retryKey&&[409,422].includes(response.status))recoveryWrite(retryKey,failed);
+  recoveryWrite(recoveryKey,null);
+ }
+ if(retryKey&&response.ok)recoveryWrite(retryKey,null);
  return response;
 }

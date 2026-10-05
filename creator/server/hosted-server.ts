@@ -1,6 +1,6 @@
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {createReadStream} from 'node:fs';
-import {mkdir,readFile,writeFile,copyFile,open,unlink,readdir,stat,statfs} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,copyFile,open,unlink,readdir,stat,statfs,rename} from 'node:fs/promises';
 import {resolve,extname,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
@@ -11,6 +11,7 @@ import {createSavedDraft,DraftError} from './script-draft';
 import {sourceWorkflow} from './source-workflow';
 import {graphicSource} from './graphic-source';
 import {resolveSource} from './source-resolve';
+import {reportProcessing,mediaInventory} from './project-usage';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -22,7 +23,8 @@ export function validateHostingConfig(c:HostingConfig){
  if(resolve(c.data)===resolve(c.dist))throw Error('Media storage must be separate from public files.');
  return c;
 }
-type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string};
+type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean};
+async function saveJob(path:string,job:Job){const temp=`${path}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(job),{mode:0o600});await rename(temp,path);}
 function json(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));}
 async function bytesUsed(dir:string):Promise<number>{
  const entries=await readdir(dir,{withFileTypes:true}).catch(()=>[]);
@@ -57,6 +59,16 @@ export function hostedHandler(c:HostingConfig){
    if(req.method==='GET'&&jobMatch){
     const id=jobMatch[1];if(!uuid.test(id))return json(res,404,{error:'Not found'});
     const job:Job=JSON.parse(await readFile(resolve(jobs,`${id}.json`),'utf8'));
+    if(job.cost){
+     if(job.state==='running'&&activeJob!==id&&job.cost.status!=='interrupted'){job.cost={...job.cost,status:'interrupted',finished_at:new Date().toISOString()};job.costSynced=false;}
+     if(!job.costSynced&&(job.state!=='running'||activeJob!==id)){
+      try{await reportProcessing(c,authorization,job.cost);job.costSynced=true;
+       // Do not overwrite a concurrently completed worker's metadata with running state.
+       const latest:Job=JSON.parse(await readFile(resolve(jobs,`${id}.json`),'utf8'));
+       if(latest.state===job.state)await saveJob(resolve(jobs,`${id}.json`),job);
+      }catch{console.error('cost-telemetry-retry',id);}
+     }
+    }
     if(job.state==='running')return activeJob===id?json(res,202,{poll:`${prefix}/jobs/${id}`}):json(res,409,{error:'Processing was interrupted by a restart. Retry; saved sources and paid renders are preserved.'});
     if(job.state==='failed')return json(res,422,{error:job.error});
     if(job.file){res.setHeader('Content-Type',job.type??'video/mp4');const stream=createReadStream(resolve(jobs,`${id}.mp4`));stream.on('error',()=>res.destroy());stream.pipe(res);return;}
@@ -106,15 +118,34 @@ export function hostedHandler(c:HostingConfig){
     req.setTimeout(600000,()=>req.destroy());
     try{for await(const chunk of req){size+=chunk.length;if(size>limit)throw Error('VIDEO_SIZE');await handle.writeFile(chunk);}}finally{await handle.close();}
     const input=binary?null:JSON.parse(await readFile(inputFile,'utf8'));
+    let projectId=req.headers['x-cost-project'];
+    if(projectId!==undefined&&(typeof projectId!=='string'||!uuid.test(projectId)))return json(res,400,{error:'Invalid project identifier.'});
+    if(input?.script_id&&uuid.test(input.script_id)){
+     const checked=await fetch(`${c.supabaseUrl}/rest/v1/creator_scripts?id=eq.${input.script_id}&select=id,brief`,{headers:{Authorization:authorization,apikey:c.publicKey},signal:AbortSignal.timeout(15000)});
+     if(!checked.ok)return json(res,403,{error:'Could not verify this project.'});
+     const [script]=await checked.json();if(!script)return json(res,403,{error:'Project not found.'});
+     projectId=script.brief?.cost_project_id??script.id;
+    }
+    const context={...c,costProjectId:typeof projectId==='string'?projectId:undefined};
+    const retryOf=req.headers['x-creator-retry-of'];
+    if(retryOf!==undefined){
+     if(typeof retryOf!=='string'||!uuid.test(retryOf))return json(res,400,{error:'Invalid retry identifier.'});
+     const prior:Job=JSON.parse(await readFile(resolve(jobs,`${retryOf}.json`),'utf8'));
+     if(prior.route!==path||prior.cost?.project_id!==(projectId??null)||prior.state==='done')return json(res,409,{error:'Retry does not match the failed operation.'});
+    }
+    const before=new Map((await mediaInventory(root)).map(asset=>[asset.key,asset.modified]));
+    const started=Date.now();
     const job:Job={state:'running',route:path,created:new Date().toISOString()};
-    const metadata=resolve(jobs,`${id}.json`);await writeFile(metadata,JSON.stringify(job),{mode:0o600});
+    job.cost={id,user_id:user.id,project_id:projectId??null,retry_of:retryOf??null,operation:path,status:'running',started_at:job.created,upload_bytes:size};
+    const metadata=resolve(jobs,`${id}.json`);await saveJob(metadata,job);
+    try{await reportProcessing(c,authorization,job.cost);job.costSynced=true;await saveJob(metadata,job);}catch{console.error('cost-telemetry-start',id);}
     const savedInput=inputFile;inputFile='';detached=true;
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
      try{
-      if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
-      else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
-      else if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,c);
+      if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
+      else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
+      else if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(path.endsWith('/script-draft'))job.result=await createSavedDraft(input,authorization,c);
       else if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
       else if(path.endsWith('/video-frames'))job.result=await extractVideoFrames(createReadStream(savedInput),frameTimes);
@@ -122,7 +153,13 @@ export function hostedHandler(c:HostingConfig){
       else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
       job.state='done';
      }catch(e){job.state='failed';job.error=e instanceof DraftError?e.message:importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
-     finally{await unlink(savedInput).catch(()=>{});try{await writeFile(metadata,JSON.stringify(job),{mode:0o600});}finally{activeJob='';}}
+     finally{
+      const assets=(await mediaInventory(root).catch(()=>[])).filter(asset=>before.get(asset.key)!==asset.modified).map(({key,bytes})=>({key,bytes}));
+      job.cost={...job.cost,status:job.state,finished_at:new Date().toISOString(),elapsed_ms:Date.now()-started,retained_bytes:assets.reduce((n,a)=>n+a.bytes,0),assets};
+      job.costSynced=false;
+      await unlink(savedInput).catch(()=>{});
+      try{await saveJob(metadata,job);try{await reportProcessing(c,authorization,job.cost);job.costSynced=true;await saveJob(metadata,job);}catch{console.error('cost-telemetry-finish',id);}}finally{activeJob='';}
+     }
     })().catch(()=>{activeJob='';});
     return json(res,202,{poll:`${prefix}/jobs/${id}`});
    }finally{if(inputFile)await unlink(inputFile).catch(()=>{});if(!detached&&activeJob===id)activeJob='';}

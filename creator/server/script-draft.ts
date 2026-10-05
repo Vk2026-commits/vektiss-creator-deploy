@@ -23,7 +23,7 @@ export async function createSavedDraft(input:unknown,authorization:string,config
   snapshot=items[0];
  }
  async function ai(action:string,brief:ScriptBrief){
-  const result=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body:JSON.stringify({action,profileId:next.content_profile_id,brief}),signal:AbortSignal.timeout(150000)});
+  const result=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body:JSON.stringify({action,profileId:next.content_profile_id,brief:{...brief,cost_project_id:brief.cost_project_id??request.script_id}}),signal:AbortSignal.timeout(150000)});
   const data=await result.json();
   if(!result.ok)throw new DraftError(data?.code==='RATE_LIMIT'?'AI request limit reached. Your saved source is preserved; retry later.':data?.code==='SCRIPT_STYLE'?'The draft did not meet the profile’s style. Retry the draft using your saved source.':'AI could not finish. Your saved source and previous script are preserved.');
   return data;

@@ -4,7 +4,7 @@ import { scriptAI } from '../lib/script-ai';
 import { analyzeVideo } from '../lib/video-analysis';
 import './voice-note.css';
 
-export function VoiceNote({ profileId, onText, disabled = false, label = 'Voice note', uploadOnly = false }: {profileId:string;onText:(text:string)=>void;disabled?:boolean;label?:string;uploadOnly?:boolean}) {
+export function VoiceNote({ projectId, profileId, onText, disabled = false, label = 'Voice note', uploadOnly = false }: {projectId?:string;profileId:string;onText:(text:string)=>void;disabled?:boolean;label?:string;uploadOnly?:boolean}) {
  const recorder=useRef<MediaRecorder|null>(null);
  const timer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
  const ticker=useRef<ReturnType<typeof setInterval>|undefined>(undefined);
@@ -41,7 +41,7 @@ export function VoiceNote({ profileId, onText, disabled = false, label = 'Voice 
   if(audio.size>(uploadOnly?500:10)*1024*1024){setError(uploadOnly?'Choose a source video up to 500 MB.':'Recording exceeds 10 MB. Upload a shorter clip.');return;}
   setBusy(true);setError('');
   try{
-   const data=await (uploadOnly?analyzeVideo(audio,profileId):scriptAI('transcribe',profileId,undefined,audio));
+   const data=await (uploadOnly?analyzeVideo(audio,profileId):scriptAI('transcribe',profileId,undefined,audio,projectId));
    if(!alive.current)return;
    if(typeof data.text!=='string'||!data.text.trim())throw Error('No speech was detected. Try a clearer recording.');
    callback.current(data.text);setClip(null);setAdded(true);
