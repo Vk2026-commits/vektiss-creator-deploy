@@ -8,7 +8,7 @@ import {
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../src/domain/research";
-import { buildTikTokQueryPack } from "../supabase/functions/_shared/platform-discovery";
+import { automaticTikTokRejectReason, buildTikTokQueryPack } from "../supabase/functions/_shared/platform-discovery";
 
 const source = (id: number, url: string, title = "Evidence") => ({
   providerSourceId: id,
@@ -72,6 +72,13 @@ describe("research contracts", () => {
     expect(pack).toHaveLength(3);
     expect(pack.some((query) => query.includes("parking lot") || query.includes("store"))).toBe(true);
     expect(pack.every((query) => query.length > 10)).toBe(true);
+  });
+
+  it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {
+    expect(automaticTikTokRejectReason("Parking garage camera #HorrorTok #FoundFootage")).toBe("fiction");
+    expect(automaticTikTokRejectReason("CBS News reports a safety incident")).toBe("news");
+    expect(automaticTikTokRejectReason("Safety storytime reenactment")).toBe("format");
+    expect(automaticTikTokRejectReason("Employee walks customer to her car after closing")).toBeNull();
   });
 
   it("removes prior and same-batch duplicate stories while using behavior as a rank signal", () => {

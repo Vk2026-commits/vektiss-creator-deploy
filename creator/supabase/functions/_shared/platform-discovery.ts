@@ -86,6 +86,20 @@ function stringValue(record: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
+/**
+ * Reject only self-declared disqualifiers before the AI screen. This stops an
+ * otherwise plausible caption from turning fiction, news packaging, or a
+ * staged format into a manual-review lead. Ambiguous authentic footage still
+ * goes to the screen and is explicitly marked for human review there.
+ */
+export function automaticTikTokRejectReason(text: string): string | null {
+  const normalized = text.toLowerCase().replace(/[\s#_-]+/g, " ");
+  if (/\b(horrortok|creepypasta|analog horror|found footage|scarytok|scary story|paranormal|supernatural|haunted|fiction(?:al)?|fake)\b/.test(normalized)) return "fiction";
+  if (/\b(abc news|cbs news|fox news|inside edition|good morning america|gma|tmz|breaking news|newsner)\b/.test(normalized)) return "news";
+  if (/\b(storytime|reenactment|re enactment|skit|prank|compilation|shorts)\b/.test(normalized)) return "format";
+  return null;
+}
+
 function dateValue(value: unknown): string | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     const milliseconds = value < 10_000_000_000 ? value * 1000 : value;
@@ -113,6 +127,7 @@ function sourceFromTiktokItem(item: unknown, index: number): ResearchSource | nu
 
   const description = stringValue(record, ["text", "desc", "description"]);
   const subtitles = stringValue(record, ["subtitles", "textExtra"]);
+  if (automaticTikTokRejectReason([description, subtitles, authorName].filter(Boolean).join("\n"))) return null;
   const snippet = [description, subtitles].filter(Boolean).join("\n").slice(0, 5000);
   const title = (description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim().slice(0, 300);
   return researchSourceSchema.parse({
@@ -131,7 +146,7 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
     method: "POST",
     body: JSON.stringify({
       searchQueries: queryPack,
-      searchSection: "Video",
+      searchSection: "/video",
       resultsPerPage: Math.min(12, Math.max(8, input.requestedCount)),
       videoSearchSorting: "MOST_RELEVANT",
       videoSearchDateFilter: "ALL_TIME",

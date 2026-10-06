@@ -1,5 +1,5 @@
 // supabase/functions/research-request/index.ts
-import { createClient } from "npm:@supabase/supabase-js@2.106.0";
+import { createClient } from "@supabase/supabase-js";
 
 // supabase/functions/_shared/app-origins.ts
 function isAllowedAppOrigin(origin, primary, additional = "") {
@@ -7,7 +7,7 @@ function isAllowedAppOrigin(origin, primary, additional = "") {
 }
 
 // src/domain/research.ts
-import { z } from "npm:zod@3.24.2";
+import { z } from "zod";
 var shortText = (max) => z.string().trim().min(1).max(max);
 var sourceDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/);
 var researchStatusSchema = z.enum([
@@ -193,7 +193,7 @@ async function startNativeDiscovery(input) {
     method: "POST",
     body: JSON.stringify({
       searchQueries: queryPack,
-      searchSection: "Video",
+      searchSection: "/video",
       resultsPerPage: Math.min(12, Math.max(8, input.requestedCount)),
       videoSearchSorting: "MOST_RELEVANT",
       videoSearchDateFilter: "ALL_TIME",

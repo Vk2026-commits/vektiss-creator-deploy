@@ -1,5 +1,5 @@
 // supabase/functions/research-sync/index.ts
-import { createClient } from "npm:@supabase/supabase-js@2.106.0";
+import { createClient } from "@supabase/supabase-js";
 
 // supabase/functions/_shared/app-origins.ts
 function isAllowedAppOrigin(origin, primary, additional = "") {
@@ -7,10 +7,10 @@ function isAllowedAppOrigin(origin, primary, additional = "") {
 }
 
 // supabase/functions/_shared/research-provider.ts
-import { z as z2 } from "npm:zod@3.24.2";
+import { z as z2 } from "zod";
 
 // src/domain/research.ts
-import { z } from "npm:zod@3.24.2";
+import { z } from "zod";
 var shortText = (max) => z.string().trim().min(1).max(max);
 var sourceDate = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?$/);
 var researchStatusSchema = z.enum([
@@ -453,6 +453,13 @@ function stringValue(record, keys) {
   for (const key of keys) if (typeof record[key] === "string" && record[key].trim()) return record[key];
   return "";
 }
+function automaticTikTokRejectReason(text) {
+  const normalized = text.toLowerCase().replace(/[\s#_-]+/g, " ");
+  if (/\b(horrortok|creepypasta|analog horror|found footage|scarytok|scary story|paranormal|supernatural|haunted|fiction(?:al)?|fake)\b/.test(normalized)) return "fiction";
+  if (/\b(abc news|cbs news|fox news|inside edition|good morning america|gma|tmz|breaking news|newsner)\b/.test(normalized)) return "news";
+  if (/\b(storytime|reenactment|re enactment|skit|prank|compilation|shorts)\b/.test(normalized)) return "format";
+  return null;
+}
 function dateValue(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
     const milliseconds = value < 1e10 ? value * 1e3 : value;
@@ -478,6 +485,7 @@ function sourceFromTiktokItem(item, index) {
   if (!direct) return null;
   const description = stringValue(record, ["text", "desc", "description"]);
   const subtitles = stringValue(record, ["subtitles", "textExtra"]);
+  if (automaticTikTokRejectReason([description, subtitles, authorName].filter(Boolean).join("\n"))) return null;
   const snippet = [description, subtitles].filter(Boolean).join("\n").slice(0, 5e3);
   const title = (description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim().slice(0, 300);
   return researchSourceSchema.parse({
@@ -511,7 +519,7 @@ async function getNativeDiscoveryRun(runId, requestedCount) {
 }
 
 // supabase/functions/research-sync/index.ts
-import { z as z3 } from "npm:zod@3.24.2";
+import { z as z3 } from "zod";
 var db = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
 var requestSchema = z3.object({ jobId: z3.string().uuid() }).strict();
 function headersFor(origin) {
