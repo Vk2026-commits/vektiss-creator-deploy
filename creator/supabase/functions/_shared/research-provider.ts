@@ -171,15 +171,22 @@ function apiKey(): string {
 }
 
 async function requestPerplexity(path: string, init: RequestInit): Promise<z.infer<typeof agentResponseSchema>> {
-  const response = await fetch(`https://api.perplexity.ai${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bearer ${apiKey()}`,
-      "content-type": "application/json",
-      ...(init.headers ?? {}),
-    },
-    signal: AbortSignal.timeout(45000),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  let response: Response;
+  try {
+    response = await fetch(`https://api.perplexity.ai${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${apiKey()}`,
+        "content-type": "application/json",
+        ...(init.headers ?? {}),
+      },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload && typeof payload === "object" && "error" in payload ? "PROVIDER" : "PROVIDER_UNAVAILABLE";
