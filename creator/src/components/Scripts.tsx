@@ -17,6 +17,7 @@ import {suggestedVideoTitle} from '../domain/video-title';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {mediaFetch} from '../lib/media-fetch';
 import {researchFeedback,type ResearchOpportunity} from '../lib/research-client';
+import {DiscoverySourceRepair} from './DiscoverySourceRepair';
 
 export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
@@ -60,19 +61,11 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     if(!targetProfileId)return;
     appliedResearchIntent.current=researchIntent.id;
     const sources=researchIntent.source_snapshot;
-    const sourceText=[
-      `Source-backed research opportunity: ${researchIntent.title}`,
-      `Facts from the supporting sources: ${researchIntent.factual_summary}`,
-      `Why the audience cares: ${researchIntent.why_audience_cares}`,
-      `Recommended angle: ${researchIntent.recommended_angle}`,
-      ...sources.map(source=>`Source — ${source.title}: ${source.url}`),
-      ...(researchIntent.uncertainty?[`Source note: ${researchIntent.uncertainty}`]:[]),
-    ].join('\n\n');
     const next:ScriptInput={content_profile_id:targetProfileId,title:researchIntent.title,hook:'',body:'',cta:'',brief:{
-      ...emptyBrief(),kind:'article',url:sources[0]?.url??'',source:sourceText,source_summary:researchIntent.factual_summary,
-      notes:researchIntent.recommended_angle,research_opportunity_id:researchIntent.id,research_sources:sources,stage:'perspective',cost_project_id:crypto.randomUUID(),
+      ...emptyBrief(),url:sources[0]?.url??'',
+      notes:researchIntent.recommended_angle,research_opportunity_id:researchIntent.id,research_sources:sources,stage:'source',cost_project_id:crypto.randomUUID(),
     }};
-    setCurrent(null);setPlanning(false);setDraft(next);setDirty(true);setMessage('Your selected opportunity is ready. Add an angle or create your draft.');setError('');
+    setWorkspaceId(crypto.randomUUID());setCurrent(null);setPlanning(false);setDraft(next);setDirty(true);setMessage('Your Discover link is ready. Continue to prepare the actual video, graphic or article before creating your script.');setError('');
     onResearchIntentHandled?.();
   },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
@@ -236,7 +229,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         </fieldset>
         {draft.brief.stage==='review'&&<div className="script-actions"><small>{words} words · about {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()} onClick={()=>void save()}>Approve angle & continue →</button></div>}
         </>}
-        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/><details><summary>Optional short presenter test</summary><PresenterTest key={`${current.id}:${current.updated_at}`} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy}/></details></>}
+        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/><details><summary>Optional short presenter test</summary><PresenterTest key={`${current.id}:${current.updated_at}`} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy}/></details></>)}
       </section>
     </div>
   </div>;

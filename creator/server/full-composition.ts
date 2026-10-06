@@ -13,7 +13,7 @@ import {presenterLayout} from '../src/domain/presenter-layout';
 import {fixedPresenterCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
 import {renderReactionSequence,REACTION_SEQUENCE_VERSION} from './reaction-sequence';
 const exec=promisify(execFile);
-export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional()}).strict().refine(c=>Boolean(c.capture_id)!==Boolean(c.video_id),'Choose one background');
+export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
  const boxes=[...log.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].map(m=>m.slice(1).map(Number));
  if(!boxes.length)throw Error('No transparent presenter detected.');
@@ -67,7 +67,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
   const sourceDuration=Number(info.format.duration);
   if(!info.streams.some((s:{codec_type:string})=>s.codec_type==='video')||!Number.isFinite(sourceDuration)||sourceDuration<=0||sourceDuration>600)throw Error('Unsupported presenter background video.');
   totalDuration=await renderReactionSequence({ffmpeg,background,source,output:temp,filter,w,h,sourceDuration,reactionDuration:duration,hasSourceAudio:info.streams.some((s:{codec_type:string})=>s.codec_type==='audio')});
- }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y','-loop','1','-framerate','25','-i',background,'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0','-t',String(duration),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart','-shortest',temp],{timeout:600000,maxBuffer:1024*1024});
+ }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...(c.presenter_only?['-f','lavfi','-i',`color=c=0xe8edf4:s=${w}x${h}:r=25`]:['-loop','1','-framerate','25','-i',background]),'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0','-t',String(duration),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart','-shortest',temp],{timeout:600000,maxBuffer:1024*1024});
  await rename(temp,output);
  const result={id,script_id:c.script_id,job_id:c.job_id,size:c.size,position:c.position,placement:c.placement,framing:c.framing,crop,format:c.format,created_at:new Date().toISOString(),duration:totalDuration,reaction_duration:duration,sequence:c.video_id?REACTION_SEQUENCE_VERSION:undefined};
  await writeFile(meta,JSON.stringify(result),{mode:0o600});return result;

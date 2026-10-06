@@ -27,10 +27,10 @@ it('shows gesture controls and clearly labels the screenshot preview boundary',(
  expect(html).toContain('Preview a mobile screenshot');
  expect(html).toContain('A source screenshot is optional.');
 });
-it('allows a completed article render to download without a source screenshot',()=>{
+it('assembles an actual MP4 rather than labeling the raw presenter as MP4',()=>{
  const html=renderToStaticMarkup(<FinishedVideo jobId="job" scriptId="script" plan={newVideoPlan()} rawVideoUrl="https://video.example.com/presenter.mp4"/>);
- expect(html).toContain('Presenter-only video');
- expect(html).toContain('https://video.example.com/presenter.mp4');
+ expect(html).not.toContain('https://video.example.com/presenter.mp4');
+ expect(html).toContain('Preparing finished MP4');
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);
