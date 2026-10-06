@@ -72,7 +72,10 @@
 .render-workspace h3{font-size:14px;margin:0}
 .scripts-workspace .render-workspace .layout-caption{font-size:12px;line-height:1.4;margin:8px 0}
 .scripts-workspace .render-workspace small{font-size:12px;line-height:1.5}
-.finished-video>video{display:block;max-width:100%;max-height:45dvh;margin:8px auto}
+.finished-video-player>video{display:block;max-width:100%;max-height:45dvh;margin:8px auto}
+.finished-video-timeline{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;margin:8px 0;font-size:14px}
+.finished-video-timeline input[type=range]{order:3;flex:1 0 100%;width:100%;min-width:0;min-height:44px;margin:0;padding:0;accent-color:#1677ff;cursor:pointer}
+.finished-video-time{margin-left:auto;font-variant-numeric:tabular-nums}
 .render-workspace .render-confirmation{position:sticky;bottom:0;z-index:2;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:#f3f7fd;margin-top:12px}
 .render-workspace .render-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .scripts-workspace .render-workspace .button{min-height:48px;padding:12px 16px}

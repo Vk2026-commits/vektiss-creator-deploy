@@ -1,9 +1,28 @@
 import {mediaFetch} from "../lib/media-fetch";
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {RenderProgress} from './RenderProgress';
 import {supabase} from '../lib/supabase';
 import type {VideoPlan} from '../domain/video-plan';
 import {avatarFraming} from '../domain/avatar-framing';
+export function playbackTime(seconds:number){
+ const whole=Number.isFinite(seconds)?Math.max(0,Math.floor(seconds)):0;
+ return `${Math.floor(whole/60)}:${String(whole%60).padStart(2,'0')}`;
+}
+export function FinishedVideoPlayer({src}:{src:string}){
+ const video=useRef<HTMLVideoElement>(null);
+ const [duration,setDuration]=useState(0);
+ const [time,setTime]=useState(0);
+ const sync=()=>{const media=video.current;if(!media)return;setDuration(Number.isFinite(media.duration)?media.duration:0);setTime(media.currentTime||0);};
+ useEffect(()=>{setDuration(0);setTime(0);},[src]);
+ return <div className="finished-video-player">
+  <video ref={video} src={src} controls playsInline preload="metadata" onLoadedMetadata={sync} onDurationChange={sync} onTimeUpdate={sync} onSeeked={sync} onEnded={sync}/>
+  <label className="finished-video-timeline">
+   <span>Scrub video</span>
+   <input type="range" aria-label="Video playback position" min={0} max={duration||1} step={0.1} value={Math.min(time,duration)} disabled={!duration} aria-valuetext={`${playbackTime(time)} of ${playbackTime(duration)}`} onChange={event=>{const next=Number(event.currentTarget.value);if(video.current&&duration){video.current.currentTime=next;setTime(next);}}}/>
+   <span className="finished-video-time">{playbackTime(time)} / {playbackTime(duration)}</span>
+  </label>
+ </div>;
+}
 export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'|'graphic';rawVideoUrl?:string}){
  const [url,setUrl]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);
  const [progress,setProgress]=useState(85);
@@ -24,5 +43,5 @@ export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:
   }}}
   void assemble();return()=>{live=false;clearTimeout(reconnect);controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,retry]);
- return <section className="finished-video" aria-label="Finished video">{!captureId&&!presenterOnly?<p>Go back to the source step to attach your background. Your existing avatar render is preserved.</p>:error?<><p role="alert">{error}</p><button className="button" onClick={()=>setRetry(n=>n+1)}>Retry export · no new render charge</button></>:!url?<RenderProgress value={progress} label={progress===95?'Loading finished MP4':'Preparing finished MP4'}/>:<><video src={url} controls playsInline/><div className="render-confirmation render-actions"><span role="status">Ready to download</span><a className="button" href={url} download="vektiss-finished-video.mp4">Download MP4 ↓</a></div></>}</section>;
+ return <section className="finished-video" aria-label="Finished video">{!captureId&&!presenterOnly?<p>Go back to the source step to attach your background. Your existing avatar render is preserved.</p>:error?<><p role="alert">{error}</p><button className="button" onClick={()=>setRetry(n=>n+1)}>Retry export · no new render charge</button></>:!url?<RenderProgress value={progress} label={progress===95?'Loading finished MP4':'Preparing finished MP4'}/>:<><FinishedVideoPlayer key={url} src={url}/><div className="render-confirmation render-actions"><span role="status">Ready to download</span><a className="button" href={url} download="vektiss-finished-video.mp4">Download MP4 ↓</a></div></>}</section>;
 }
