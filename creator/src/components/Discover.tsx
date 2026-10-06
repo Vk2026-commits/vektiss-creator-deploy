@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, Clapperboard, ExternalLink, Eye, Lightbulb,
-  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles, X,
+  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
@@ -16,16 +16,6 @@ const rejectReasons = [
   ["dont_like_this_topic", "Don’t like this topic"], ["too_old", "Too old"],
   ["not_my_audience", "Not my audience"], ["wrong_angle", "Wrong angle"], ["other", "Other"],
 ] as const;
-
-function sourceLabel(url: string) {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    if (host.includes("tiktok")) return "Watch on TikTok";
-    if (host.includes("instagram")) return "Watch on Instagram";
-    if (host.includes("youtube")) return "Watch on YouTube";
-    return "Open source";
-  } catch { return "Open source"; }
-}
 
 type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
 
@@ -58,7 +48,6 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [reason, setReason] = useState<string>("not_relevant");
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
-  const [viewer, setViewer] = useState<{ url: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     const next = await loadResearchFeed(profile?.id);
@@ -105,55 +94,55 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>Your ideas will show up here.</h2><p>Pick a number above. We’ll do the searching.</p></div>}
       <div className="opportunity-list">{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
+        const embed = source ? embeddedClip(source.url) : null;
         const needsCheck = Boolean(opportunity.uncertainty);
         return <article className="opportunity-card" key={opportunity.id}>
           <div className="signal-rail" aria-hidden="true" />
-          <div className="opportunity-meta">
-            <span className="signal-category">{opportunity.category}</span>
-            <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> Watch first</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
-            <small>Match {Math.round(opportunity.relevance_score)}%</small>
-          </div>
-          <div className="signal-main">
-            <div>
-              <h2>{opportunity.title}</h2>
-              <p className="opportunity-summary">{opportunity.factual_summary}</p>
+          <div className={`opportunity-layout${embed ? " has-inline-clip" : ""}`}>
+            {embed && <InlineClip embed={embed} title={opportunity.title} sourceUrl={source.url} />}
+            <div className="opportunity-content">
+              <div className="opportunity-meta">
+                <span className="signal-category">{opportunity.category}</span>
+                <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> Watch first</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
+                <small>Match {Math.round(opportunity.relevance_score)}%</small>
+              </div>
+              <div className="signal-main">
+                <div>
+                  <h2>{opportunity.title}</h2>
+                  <p className="opportunity-summary">{opportunity.factual_summary}</p>
+                </div>
+                <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>
+              </div>
+              <div className="signal-take">
+                <span><Sparkles size={15}/> YOUR SIMPLE TAKE</span>
+                <p>{opportunity.recommended_angle}</p>
+              </div>
+              <div className="signal-points">
+                <div><span>WHY IT WORKS</span><p>{opportunity.creator_connection}</p></div>
+                {opportunity.suggested_hook && <div><span>OPEN WITH THIS</span><p>{opportunity.suggested_hook}</p></div>}
+              </div>
+              {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p>{source && <a className="proof-source" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Open source</a>}</details>}
+              <footer>
+                <div className="opportunity-actions">
+                  <button className="icon-action" aria-label="Save idea" title="Save idea" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
+                  <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
+                  <button className="icon-action" aria-label="Change the idea" title="Change the idea" disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={17}/></button>
+                  <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity); })}><Clapperboard size={17}/> Use idea<Check size={15}/></button>
+                </div>
+              </footer>
             </div>
-            <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>
           </div>
-          <div className="signal-take">
-            <span><Sparkles size={15}/> YOUR SIMPLE TAKE</span>
-            <p>{opportunity.recommended_angle}</p>
-          </div>
-          <div className="signal-points">
-            <div><span>WHY IT WORKS</span><p>{opportunity.creator_connection}</p></div>
-            {opportunity.suggested_hook && <div><span>OPEN WITH THIS</span><p>{opportunity.suggested_hook}</p></div>}
-          </div>
-          {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p></details>}
-          <footer>
-            {source && <div className="source-actions"><button className="watch-source" onClick={() => setViewer({ url: source.url, title: opportunity.title })}><Eye size={16}/>Watch clip</button><a className="source-external" href={source.url} target="_blank" rel="noreferrer" aria-label={`${sourceLabel(source.url)} in a new tab`} title={sourceLabel(source.url)}><ExternalLink size={16}/></a></div>}
-            <div className="opportunity-actions">
-              <button className="icon-action" aria-label="Save idea" title="Save idea" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
-              <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
-              <button className="icon-action" aria-label="Change the idea" title="Change the idea" disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={17}/></button>
-              <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity); })}><Clapperboard size={17}/> Use idea<Check size={15}/></button>
-            </div>
-          </footer>
           {refining === opportunity.id && <div className="opportunity-refine"><label>How should we change it?<input value={instruction} maxLength={1000} placeholder="Make it more helpful for my audience" onChange={(event) => setInstruction(event.target.value)}/></label><button className="button primary" disabled={busy || !instruction.trim()} onClick={() => void action(async () => { await refineResearchOpportunity(opportunity.id, instruction); setInstruction(""); setRefining(null); })}>Update</button><button disabled={busy} onClick={() => { setRefining(null); setInstruction(""); }}>Cancel</button></div>}
           {rejecting === opportunity.id && <div className="opportunity-reject"><label>Why are you skipping it?<select value={reason} onChange={(event) => setReason(event.target.value)}>{rejectReasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "rejected", reason); setRejecting(null); })}>Skip it</button><button disabled={busy} onClick={() => setRejecting(null)}>Cancel</button></div>}
         </article>;
       })}</div>
     </>}
-    {viewer && <ClipViewer viewer={viewer} onClose={() => setViewer(null)} />}
   </section>;
 }
 
-function ClipViewer({ viewer, onClose }: { viewer: { url: string; title: string }; onClose: () => void }) {
-  const embed = embeddedClip(viewer.url);
-  return <div className="clip-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="clip-modal" role="dialog" aria-modal="true" aria-labelledby="clip-viewer-title">
-      <header><div><span className="eyebrow">WATCH INSIDE VEKTISS</span><h2 id="clip-viewer-title">{embed ? `${embed.platform} clip` : "Open the clip"}</h2></div><button className="clip-close" onClick={onClose} aria-label="Close video"><X size={20}/></button></header>
-      {embed ? <div className="clip-frame"><iframe src={embed.src} title={viewer.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div> : <div className="clip-unavailable"><Eye size={28}/><strong>This clip needs to open on the original site.</strong><span>The platform did not provide an embeddable video link.</span></div>}
-      <footer><span>{embed ? "You can watch the whole clip here." : "We’ll take you to the original post."}</span><a className="button primary" href={viewer.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>Open original</a></footer>
-    </section>
-  </div>;
+function InlineClip({ embed, title, sourceUrl }: { embed: EmbeddedClip; title: string; sourceUrl: string }) {
+  return <aside className="inline-clip">
+    <div className="inline-clip-header"><span>{embed.platform} clip</span><a href={sourceUrl} target="_blank" rel="noreferrer" aria-label="Open the original post" title="Open original post"><ExternalLink size={14}/></a></div>
+    <iframe src={embed.src} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+  </aside>;
 }
