@@ -1814,14 +1814,11 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
-.mobile-signout {
-  display: none;
-}
-@media (max-width: 600px) {
-  .mobile-signout {
-    display: grid;
-  }
-}
+.workspace-signout { display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:8px 12px;flex-shrink:0;border:1px solid #d8dee7;border-radius:8px;background:#fff;color:#17263c;font:inherit;font-size:14px;cursor:pointer; }
+.workspace-signout:focus-visible { outline:2px solid #1677ff;outline-offset:2px; }
+.workspace-signout:disabled { opacity:.6;cursor:wait; }
+.topbar .foundation-badge { margin-left:auto; }
+@media(max-width:700px) { .topbar { flex-wrap:wrap;gap:8px; } .workspace-signout { margin-left:auto; } .topbar .foundation-badge { display:none; } }
 .avatar-library > .create-panel { margin-bottom: 24px; }
 .avatar-library form { display: grid; gap: 16px; margin: 20px 0; }
 .avatar-library label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }

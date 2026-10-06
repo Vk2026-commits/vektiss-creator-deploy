@@ -559,12 +559,13 @@ function CreatorWorkspace({
             Strategy foundation
           </span>
           <button
-            className="mobile-signout icon-button"
-            aria-label={preview ? "Leave local preview" : "Sign out"}
+            className="workspace-signout"
+            aria-label={preview ? "Leave local preview" : "Log out"}
             disabled={busy}
             onClick={() => void action(onSignOut, "")}
           >
             <LogOut size={17} />
+            <span>{preview ? "Leave preview" : "Log out"}</span>
           </button>
         </header>
         {preview && (
