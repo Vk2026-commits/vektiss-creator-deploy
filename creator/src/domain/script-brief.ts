@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
 import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
+import {researchSourceSchema} from './research.ts';
 export const briefSchema = z.object({
   cost_project_id:z.string().uuid().optional(),
+  research_opportunity_id:z.string().uuid().optional(),
+  research_sources:z.array(researchSourceSchema).max(6).optional(),
   kind: z.enum(['article', 'video','graphic']),
   prepared_source:resolvedSourceSchema.optional(),
   graphic_capture:graphicCaptureSchema.optional(),

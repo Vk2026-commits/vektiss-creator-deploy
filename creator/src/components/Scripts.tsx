@@ -16,8 +16,9 @@ import {videoStep,videoSteps} from '../domain/video-workflow';
 import {suggestedVideoTitle} from '../domain/video-title';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {mediaFetch} from '../lib/media-fetch';
+import {researchFeedback,type ResearchOpportunity} from '../lib/research-client';
 
-export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null }) {
+export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -43,6 +44,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const [planning,setPlanning]=useState(false);
   const latest=useRef(draft);latest.current=draft;
   const appliedAudience=useRef<number|null>(null);
+  const appliedResearchIntent=useRef<string|null>(null);
   useEffect(()=>{
     if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing)return;
     appliedAudience.current=audienceChoice.version;
@@ -50,6 +52,29 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
     setPlanning(false);setDirty(true);setMessage('Audience selected. Your source is still here.');
   },[audienceChoice,loading,busy,sourceProcessing]);
+  useEffect(()=>{
+    if(!researchIntent||appliedResearchIntent.current===researchIntent.id||busy||sourceProcessing)return;
+    const targetProfileId=profiles.some(profile=>profile.id===researchIntent.content_profile_id&&!profile.archived_at)
+      ?researchIntent.content_profile_id
+      :selectedId??profiles.find(profile=>!profile.archived_at)?.id??'';
+    if(!targetProfileId)return;
+    appliedResearchIntent.current=researchIntent.id;
+    const sources=researchIntent.source_snapshot;
+    const sourceText=[
+      `Source-backed research opportunity: ${researchIntent.title}`,
+      `Facts from the supporting sources: ${researchIntent.factual_summary}`,
+      `Why the audience cares: ${researchIntent.why_audience_cares}`,
+      `Recommended angle: ${researchIntent.recommended_angle}`,
+      ...sources.map(source=>`Source — ${source.title}: ${source.url}`),
+      ...(researchIntent.uncertainty?[`Source note: ${researchIntent.uncertainty}`]:[]),
+    ].join('\n\n');
+    const next:ScriptInput={content_profile_id:targetProfileId,title:researchIntent.title,hook:'',body:'',cta:'',brief:{
+      ...emptyBrief(),kind:'article',url:sources[0]?.url??'',source:sourceText,source_summary:researchIntent.factual_summary,
+      notes:researchIntent.recommended_angle,research_opportunity_id:researchIntent.id,research_sources:sources,stage:'perspective',cost_project_id:crypto.randomUUID(),
+    }};
+    setCurrent(null);setPlanning(false);setDraft(next);setDirty(true);setMessage('Your selected opportunity is ready. Add an angle or create your draft.');setError('');
+    onResearchIntentHandled?.();
+  },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
   useEffect(()=>{
     if(!dirty||busy||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
@@ -164,6 +189,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
       } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:undefined,review:result.review,stage:'review'}};
       setDraftProgress({percent:95,label:'Saving your draft…'});setDraft(next);setDirty(true);
       const item=await repo.save(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
+      if(action==='generate'&&next.brief.research_opportunity_id&&!preview)void researchFeedback(next.brief.research_opportunity_id,'script_created').catch(()=>{/* Conversion tracking must not interrupt a completed draft. */});
     }catch(e){setDraftProgress(p=>({...p,percent:p?.percent??0,label:'Could not finish. Please retry.',failed:true}));setError(e instanceof Error?e.message:explainError(e));}finally{generating.current=false;setBusy(false);}
   }
   async function save(production?:Plan) {

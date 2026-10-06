@@ -11,6 +11,8 @@ import { signInError } from './lib/auth-errors';
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import { Scripts } from "./components/Scripts";
 import { ProjectCosts } from './components/ProjectCosts';
+import { Discover } from './components/Discover';
+import type { ResearchOpportunity } from './lib/research-client';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -312,7 +314,7 @@ function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "avatars" | "costs";
+type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs";
 function CreatorWorkspace({
   repo,
   userId,
@@ -330,6 +332,7 @@ function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("create");
+  const [researchIntent, setResearchIntent] = useState<ResearchOpportunity | null>(null);
   const [costAdmin, setCostAdmin] = useState(false);
   useEffect(() => {
     let live = true;
@@ -450,6 +453,7 @@ function CreatorWorkspace({
         <span className="nav-caption">WORKSPACE</span>
         <nav aria-label="Main navigation">
           <button className={page === 'create' ? 'active' : ''} onClick={() => setPage('create')}><Edit3 size={18} /> My videos</button>
+          <button className={page === 'discover' ? 'active' : ''} onClick={() => setPage('discover')}><Compass size={18} /> Discover</button>
           <button
             className={page === "profiles" ? "active" : ""}
             onClick={() => setPage("profiles")}
@@ -513,6 +517,7 @@ function CreatorWorkspace({
                 ? "Content Profiles"
                 : page === "creator"
                   ? "Creator profile"
+                  : page === "discover" ? "Discover"
                   : page === "avatars" ? "Avatar library" : page === 'costs' ? 'Project costs' : "Create video"}
             </strong>
           </div>
@@ -579,6 +584,7 @@ function CreatorWorkspace({
             <>
               {page === "avatars" && <AvatarLibrary preview={preview} />}
               {page === 'costs' && costAdmin && <ProjectCosts/>}
+              {page === "discover" && <Discover profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
                   {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}
@@ -918,7 +924,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create'}><Scripts profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create'}><Scripts profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>
