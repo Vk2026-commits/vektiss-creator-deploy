@@ -36,6 +36,23 @@ const candidate = (overrides: Partial<ProviderResearchCandidate> = {}): Provider
 });
 
 describe("research contracts", () => {
+  const score = (history: ResearchHistorySignal[], duplicates = history) => rankResearchCandidates([candidate({relevanceScore:50,timelinessScore:50})], [source(1,'https://new.example.com/item')], history, 1, duplicates)[0]?.rankScore;
+  const signal = (reason?: ResearchHistorySignal['rejectionReason'], status: ResearchHistorySignal['status'] = 'rejected'): ResearchHistorySignal => ({title:'Old',category:'Home buying',status,sourceSnapshot:[],rejectionReason:reason});
+  it('only penalizes explicit topic or audience rejection reasons',()=>{
+    for(const reason of ['not_relevant','not_my_audience','dont_like_this_topic'] as const) expect(score([signal(reason)])).toBe(score([])!-10);
+    for(const reason of ['already_talked_about_this','too_old','wrong_angle','other',null,undefined] as const) expect(score([signal(reason)])).toBe(score([]));
+  });
+  it('uses current positive status once and caps combined preferences',()=>{
+    for(const status of ['saved','selected','turned_into_content'] as const) expect(score([signal('dont_like_this_topic',status)])).toBe(score([])!+8);
+    expect(score(Array(8).fill(signal('not_relevant')))).toBe(score([])!-20);
+    expect(score(Array(8).fill(signal(undefined,'saved')))).toBe(score([])!+20);
+    expect(score([signal('not_relevant'),signal(undefined,'saved')])).toBe(score([])!-2);
+  });
+  it('keeps account duplicate history separate from audience preferences',()=>{
+    const otherAudience = [signal('dont_like_this_topic')];
+    expect(score([],otherAudience)).toBe(score([]));
+    expect(score([],[{...signal(),sourceSnapshot:[source(5,'https://new.example.com/item')]}])).toBeUndefined();
+  });
   it("canonicalizes only safe HTTPS source URLs", () => {
     expect(canonicalResearchUrl("https://Example.com/story/?utm_source=test&b=2&a=1#section"))
       .toBe("https://example.com/story?a=1&b=2");

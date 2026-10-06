@@ -218,6 +218,7 @@ export type ResearchHistorySignal = {
   category: string;
   status: z.infer<typeof opportunityStatusSchema>;
   sourceSnapshot: ResearchSource[];
+  rejectionReason?: z.infer<typeof feedbackReasonSchema> | null;
 };
 
 export function rankResearchCandidates(
@@ -225,10 +226,11 @@ export function rankResearchCandidates(
   sourcePool: ResearchSource[],
   history: ResearchHistorySignal[],
   maxResults: number,
+  duplicateHistory: ResearchHistorySignal[] = history,
 ): RankedResearchCandidate[] {
   const sourceById = new Map(sourcePool.map((source) => [source.providerSourceId, source]));
   const priorUrls = new Set(
-    history.flatMap((item) => item.sourceSnapshot.map((source) => canonicalResearchUrl(source.url)).filter(Boolean)),
+    duplicateHistory.flatMap((item) => item.sourceSnapshot.map((source) => canonicalResearchUrl(source.url)).filter(Boolean)),
   );
   const accepted: RankedResearchCandidate[] = [];
 
@@ -245,11 +247,11 @@ export function rankResearchCandidates(
     if (accepted.some((item) => headlineSimilarity(item.title, candidate.title) >= 0.72)) continue;
 
     const sameCategory = history.filter((item) => item.category.toLowerCase() === candidate.category.toLowerCase());
-    const preferenceBoost = sameCategory.reduce((score, item) => {
+    const preferenceBoost = Math.max(-20, Math.min(20, sameCategory.reduce((score, item) => {
       if (["saved", "selected", "turned_into_content"].includes(item.status)) return score + 8;
-      if (item.status === "rejected") return score - 10;
+      if (item.status === "rejected" && item.rejectionReason && ["dont_like_this_topic", "not_relevant", "not_my_audience"].includes(item.rejectionReason)) return score - 10;
       return score;
-    }, 0);
+    }, 0)));
     const evidenceBoost = Math.min(sources.length, 3) * 3;
     const rankScore = Math.round(
       Math.max(0, Math.min(100, candidate.relevanceScore * 0.68 + candidate.timelinessScore * 0.22 + evidenceBoost + preferenceBoost)),

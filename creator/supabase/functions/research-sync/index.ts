@@ -170,14 +170,33 @@ Deno.serve(async (request) => {
     }
     job = claimed.data as Record<string, unknown>;
 
-    const { data: historicalRows, error: historyError } = await db.from("creator_research_opportunities")
+    const { data: duplicateRows, error: duplicateError } = await db.from("creator_research_opportunities")
       .select("title,category,status,source_snapshot").eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(250);
+    if (duplicateError) throw new Error("PERSISTENCE");
+    const { data: historicalRows, error: historyError } = await db.from("creator_research_opportunities")
+      .select("id,title,category,status,source_snapshot").eq("user_id", auth.user.id).eq("content_profile_id", job.content_profile_id).order("created_at", { ascending: false }).limit(250);
     if (historyError) throw new Error("PERSISTENCE");
+    // Fetch one latest rejection per idea, not every click. Bounded parallel
+    // batches avoid both PostgREST row limits and an unbounded request fan-out.
+    const reasons = new Map<string, ResearchHistorySignal['rejectionReason']>();
+    const rejected = (historicalRows ?? []).filter(row => row.status === 'rejected');
+    for (let offset = 0; offset < rejected.length; offset += 10) {
+      await Promise.all(rejected.slice(offset, offset + 10).map(async row => {
+        const result = await db.from('creator_research_feedback').select('reason').eq('user_id', auth.user.id)
+          .eq('opportunity_id', row.id).eq('action', 'rejected').order('created_at', { ascending: false }).order('id', { ascending: false }).limit(1).maybeSingle();
+        if (result.error) throw new Error('PERSISTENCE');
+        reasons.set(row.id, result.data?.reason ?? null);
+      }));
+    }
     const history: ResearchHistorySignal[] = (historicalRows ?? []).flatMap((row) => {
+      const sources = z.array(z.object({ providerSourceId: z.number(), title: z.string(), url: z.string(), snippet: z.string(), publishedAt: z.string().nullable(), sourceType: z.string() })).safeParse(row.source_snapshot);
+      return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data, rejectionReason: reasons.get(row.id) }] : [];
+    });
+    const duplicateHistory: ResearchHistorySignal[] = (duplicateRows ?? []).flatMap(row => {
       const sources = z.array(z.object({ providerSourceId: z.number(), title: z.string(), url: z.string(), snippet: z.string(), publishedAt: z.string().nullable(), sourceType: z.string() })).safeParse(row.source_snapshot);
       return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data }] : [];
     });
-    const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count));
+    const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
     if (!ranked.length) throw new Error("NO_NEW_OPPORTUNITIES");
     await db.from("creator_research_jobs").update({ status: "ranking", phase: "Ranking opportunities…", updated_at: new Date().toISOString() }).eq("id", job.id);
 
