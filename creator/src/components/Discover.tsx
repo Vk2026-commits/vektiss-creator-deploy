@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, Clapperboard, ExternalLink, Eye, Lightbulb,
-  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
+  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles, X,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
@@ -27,6 +27,28 @@ function sourceLabel(url: string) {
   } catch { return "Open source"; }
 }
 
+type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
+
+function embeddedClip(url: string): EmbeddedClip | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    if (host.includes("tiktok.com")) {
+      const videoId = parsed.pathname.match(/\/video\/(\d+)/)?.[1];
+      return videoId ? { platform: "TikTok", src: `https://www.tiktok.com/player/v1/${videoId}` } : null;
+    }
+    if (host.includes("instagram.com")) {
+      const shortcode = parsed.pathname.match(/\/(?:reel|reels)\/([^/?#]+)/)?.[1];
+      return shortcode ? { platform: "Instagram", src: `https://www.instagram.com/reel/${shortcode}/embed/captioned/` } : null;
+    }
+    if (host.includes("youtube.com") || host === "youtu.be") {
+      const videoId = host === "youtu.be" ? parsed.pathname.split("/").filter(Boolean)[0] : parsed.pathname.match(/\/(?:shorts|embed)\/([^/?#]+)/)?.[1] ?? parsed.searchParams.get("v");
+      return videoId ? { platform: "YouTube", src: `https://www.youtube-nocookie.com/embed/${videoId}?playsinline=1&rel=0` } : null;
+    }
+  } catch { /* Source remains available as an external fallback. */ }
+  return null;
+}
+
 export function Discover({ profiles, selectedId, onCreate }: { profiles: ContentProfile[]; selectedId: string | null; onCreate: (opportunity: ResearchOpportunity) => void }) {
   const profile = profiles.find((item) => item.id === selectedId && !item.archived_at) ?? profiles.find((item) => !item.archived_at) ?? null;
   const [feed, setFeed] = useState<ResearchFeed | null>(null);
@@ -36,6 +58,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [reason, setReason] = useState<string>("not_relevant");
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
+  const [viewer, setViewer] = useState<{ url: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     const next = await loadResearchFeed(profile?.id);
@@ -107,7 +130,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
           </div>
           {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p></details>}
           <footer>
-            {source && <a className="watch-source" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>{sourceLabel(source.url)}</a>}
+            {source && <div className="source-actions"><button className="watch-source" onClick={() => setViewer({ url: source.url, title: opportunity.title })}><Eye size={16}/>Watch clip</button><a className="source-external" href={source.url} target="_blank" rel="noreferrer" aria-label={`${sourceLabel(source.url)} in a new tab`} title={sourceLabel(source.url)}><ExternalLink size={16}/></a></div>}
             <div className="opportunity-actions">
               <button className="icon-action" aria-label="Save idea" title="Save idea" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
               <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
@@ -120,5 +143,17 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
         </article>;
       })}</div>
     </>}
+    {viewer && <ClipViewer viewer={viewer} onClose={() => setViewer(null)} />}
   </section>;
+}
+
+function ClipViewer({ viewer, onClose }: { viewer: { url: string; title: string }; onClose: () => void }) {
+  const embed = embeddedClip(viewer.url);
+  return <div className="clip-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="clip-modal" role="dialog" aria-modal="true" aria-labelledby="clip-viewer-title">
+      <header><div><span className="eyebrow">WATCH INSIDE VEKTISS</span><h2 id="clip-viewer-title">{embed ? `${embed.platform} clip` : "Open the clip"}</h2></div><button className="clip-close" onClick={onClose} aria-label="Close video"><X size={20}/></button></header>
+      {embed ? <div className="clip-frame"><iframe src={embed.src} title={viewer.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div> : <div className="clip-unavailable"><Eye size={28}/><strong>This clip needs to open on the original site.</strong><span>The platform did not provide an embeddable video link.</span></div>}
+      <footer><span>{embed ? "You can watch the whole clip here." : "We’ll take you to the original post."}</span><a className="button primary" href={viewer.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>Open original</a></footer>
+    </section>
+  </div>;
 }
