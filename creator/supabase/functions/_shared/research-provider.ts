@@ -99,11 +99,11 @@ function providerSources(response: z.infer<typeof agentResponseSchema>, allowedD
     seen.add(canonical);
     sources.push(researchSourceSchema.parse({
       providerSourceId: parsed.data.id,
-      title: parsed.data.title,
+      title: parsed.data.title.slice(0, 300),
       url: canonical,
-      snippet: parsed.data.snippet ?? "",
+      snippet: (parsed.data.snippet ?? "").slice(0, 6000),
       publishedAt: parsed.data.date ?? null,
-      sourceType: parsed.data.source ?? "web",
+      sourceType: (parsed.data.source ?? "web").slice(0, 80),
     }));
   }
   return sources;
