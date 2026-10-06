@@ -201,7 +201,7 @@ export async function startDeepResearch(input: {
   candidateMultiplier: number;
 }): Promise<ProviderRun> {
   const brief = researchBriefSchema.parse(input.brief);
-  const candidateTarget = Math.min(50, Math.max(input.requestedCount + 5, Math.ceil(input.requestedCount * input.candidateMultiplier)));
+  const candidateTarget = input.requestedCount;
   const domains = platformSearchDomains(brief.researchSourcePlatforms);
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
