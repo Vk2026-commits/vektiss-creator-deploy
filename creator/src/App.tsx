@@ -63,6 +63,7 @@ function Brand() {
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authError, setAuthError] = useState(() =>
     new URLSearchParams(window.location.hash.slice(1)).has("error")
@@ -80,6 +81,7 @@ export function App() {
     const { data } = supabase.auth.onAuthStateChange((_event, value) => {
       eventSeen = true;
       if (live) {
+        if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
         setSession(value);
         setLoading(false);
       }
@@ -149,6 +151,7 @@ export function App() {
         onSignOut={signOut}
       />
     );
+  if (session && recovering) return <PasswordSetup onDone={() => setRecovering(false)} />;
   if (session && repo)
     return (
       <CreatorWorkspace
@@ -162,6 +165,22 @@ export function App() {
   return <SignIn onPreview={enterPreview} initialError={authError} />;
 }
 
+export function PasswordSetup({onDone}:{onDone:()=>void}) {
+  const [password,setPassword]=useState('');
+  const [confirmation,setConfirmation]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  async function save(event:FormEvent){
+    event.preventDefault();if(busy||!supabase)return;
+    if(password!==confirmation){setError('Passwords do not match.');return;}
+    setBusy(true);setError('');
+    try{const result=await supabase.auth.updateUser({password});if(result.error)throw result.error;setPassword('');setConfirmation('');onDone();}
+    catch{setError('Could not set your password. Use at least 12 characters, or request a new reset link and try again.');}
+    finally{setBusy(false);}
+  }
+  return <main className="auth-page"><section className="auth-panel"><div className="auth-card"><h2>Set your password</h2><p>Choose a password with at least 12 characters.</p><form onSubmit={save}><label className="field"><span>New password</span><input type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)}/></label><label className="field"><span>Confirm password</span><input type="password" autoComplete="new-password" minLength={12} required value={confirmation} onChange={e=>setConfirmation(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy?'Saving…':'Save password & continue'}</button></form></div></section></main>;
+}
+
 function SignIn({
   onPreview,
   initialError,
@@ -170,6 +189,8 @@ function SignIn({
   initialError: string;
 }) {
   const [email, setEmail] = useState("");
+  const [mode,setMode]=useState<'link'|'password'|'reset'>('link');
+  const [password,setPassword]=useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState(initialError);
@@ -179,6 +200,16 @@ function SignIn({
     setBusy(true);
     setError("");
     try {
+      if(mode==='password'){
+        const result=await supabase.auth.signInWithPassword({email:email.trim(),password});
+        if(result.error)throw result.error;
+        setPassword('');return;
+      }
+      if(mode==='reset'){
+        const result=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:authRedirectUrl(window.location.origin)});
+        if(result.error)throw result.error;
+        setSent(true);return;
+      }
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: { emailRedirectTo: authRedirectUrl(window.location.origin) },
@@ -186,7 +217,7 @@ function SignIn({
       if (error) throw error;
       setSent(true);
     } catch (error) {
-      setError(signInError(error));
+      setError(mode==='password'?'Could not sign in. Check your email and password, or use Set / reset password.':signInError(error));
     } finally {
       setBusy(false);
     }
@@ -232,10 +263,10 @@ function SignIn({
             sent ? (
               <>
                 <p>
-                  We sent a sign-in link to <strong>{email}</strong>. Open it to
+                  {mode==='reset'?<>If an account exists for <strong>{email}</strong>, a password setup link has been requested. Open it to choose your password.</>:<>We sent a sign-in link to <strong>{email}</strong>. Open it to
                   enter your workspace. Open the link on this computer and
                   continue in the browser where it opens. Signing in there
-                  does not sign in this browser automatically.
+                  does not sign in this browser automatically.</>}
                 </p>
                 <button
                   className="button secondary"
@@ -246,7 +277,7 @@ function SignIn({
               </>
             ) : (
               <>
-                <p>Sign in or create an account with a secure email link.</p>
+                <p>{mode==='password'?'Sign in with your email and password.':mode==='reset'?'We’ll email you a secure link to set or reset your password.':'Sign in or create an account with a secure email link.'}</p>
                 <form onSubmit={submit}>
                   <label className="field">
                     <span>Email address</span>
@@ -259,11 +290,13 @@ function SignIn({
                       placeholder="you@company.com"
                     />
                   </label>
+                  {mode==='password'&&<label className="field"><span>Password</span><input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>}
                   <button className="button primary" disabled={busy}>
-                    {busy ? "Sending…" : "Continue with email"}
+                    {busy ? "Please wait…" : mode==='password'?'Sign in':mode==='reset'?'Send password setup link':"Continue with email"}
                     <ArrowRight size={17} />
                   </button>
                 </form>
+                <div className="preview-entry">{(['link','password','reset'] as const).filter(item=>item!==mode).map(item=><button key={item} type="button" className="text-button" disabled={busy} onClick={()=>{setMode(item);setError('');setPassword('');}}>{item==='link'?'Use email link':item==='password'?'Use password':'Set / reset password'}</button>)}</div>
               </>
             )
           ) : (
