@@ -16,6 +16,10 @@ const rejectReasons = [
   ["dont_like_this_topic", "Don’t like this topic"], ["too_old", "Too old"],
   ["not_my_audience", "Not my audience"], ["wrong_angle", "Wrong angle"], ["other", "Other"],
 ] as const;
+const historyFilters = [
+  ["all", "All"], ["saved", "Saved"], ["used", "Used"], ["skipped", "Skipped"],
+] as const;
+type HistoryFilter = (typeof historyFilters)[number][0];
 
 type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
 
@@ -48,6 +52,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [reason, setReason] = useState<string>("not_relevant");
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
 
   const load = useCallback(async () => {
     const next = await loadResearchFeed(profile?.id);
@@ -74,7 +79,21 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     if (!profile) { setError("Create a content profile before researching."); return; }
     await action(async () => { await requestResearch(profile.id, count); });
   }
-  const visible = feed?.opportunities.filter((opportunity) => opportunity.status !== "rejected") ?? [];
+  const opportunities = feed?.opportunities ?? [];
+  const filterCount = (filter: HistoryFilter) => opportunities.filter((opportunity) => {
+    if (filter === "all") return opportunity.status !== "rejected";
+    if (filter === "saved") return opportunity.status === "saved";
+    if (filter === "used") return ["selected", "turned_into_content"].includes(opportunity.status);
+    return opportunity.status === "rejected";
+  }).length;
+  const visible = opportunities.filter((opportunity) => {
+    if (historyFilter === "all") return opportunity.status !== "rejected";
+    if (historyFilter === "saved") return opportunity.status === "saved";
+    if (historyFilter === "used") return ["selected", "turned_into_content"].includes(opportunity.status);
+    return opportunity.status === "rejected";
+  });
+  const emptyTitle: Record<HistoryFilter, string> = { all: "Your ideas will show up here.", saved: "No saved ideas yet.", used: "No used ideas yet.", skipped: "Nothing has been skipped yet." };
+  const emptyText: Record<HistoryFilter, string> = { all: "Pick a number above. We’ll do the searching.", saved: "Tap the bookmark on an idea you want to keep.", used: "Choose Use idea to turn a result into a video.", skipped: "Ideas you skip will stay here, out of your main feed." };
 
   return <section className="discover" aria-labelledby="discover-heading">
     <header className="discover-header">
@@ -90,8 +109,9 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     {error && <p className="error-message" role="alert">{error}</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
       <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-batches">{([10, 20, 30] as const).map((count) => <button key={count} className="button" disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)}><Plus size={16}/> Find {count}</button>)}</div></section>
+      <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => setHistoryFilter(filter)}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
       {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>Finding your clips</strong><span>{job.phase}</span></div></div>)}
-      {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>Your ideas will show up here.</h2><p>Pick a number above. We’ll do the searching.</p></div>}
+      {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
       <div className="opportunity-list">{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
         const embed = source ? embeddedClip(source.url) : null;
@@ -124,7 +144,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
               {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p>{source && <a className="proof-source" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Open source</a>}</details>}
               <footer>
                 <div className="opportunity-actions">
-                  <button className="icon-action" aria-label="Save idea" title="Save idea" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
+                  <button className={`icon-action${opportunity.status === "saved" ? " is-saved" : ""}`} aria-label={opportunity.status === "saved" ? "Idea saved" : "Save idea"} title={opportunity.status === "saved" ? "Saved" : "Save idea"} disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
                   <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
                   <button className="icon-action" aria-label="Change the idea" title="Change the idea" disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={17}/></button>
                   <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity); })}><Clapperboard size={17}/> Use idea<Check size={15}/></button>
