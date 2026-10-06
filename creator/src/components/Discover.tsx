@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
-  LoaderCircle, Play, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
+  LoaderCircle, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
@@ -185,17 +185,21 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   </section>;
 }
 
-function InlineClip({ embed, title, sourceUrl }: { embed: EmbeddedClip; title: string; sourceUrl: string }) {
-  const [playing, setPlaying] = useState(false);
+export function InlineClip({ embed, title, sourceUrl }: { embed: EmbeddedClip; title: string; sourceUrl: string }) {
+  const [playerVersion, setPlayerVersion] = useState(0);
   useEffect(() => {
-    const stopPlaybackWhenHidden = () => { if (document.hidden) setPlaying(false); };
+    const stopPlaybackWhenHidden = () => { if (document.hidden) setPlayerVersion(version => version + 1); };
     document.addEventListener("visibilitychange", stopPlaybackWhenHidden);
     return () => document.removeEventListener("visibilitychange", stopPlaybackWhenHidden);
   }, []);
-  const previewSource = `${embed.src}${embed.src.includes("?") ? "&" : "?"}autoplay=0`;
-  const playerSource = `${embed.src}${embed.src.includes("?") ? "&" : "?"}autoplay=1`;
+  // Let the tap reach the provider's player directly. Reloading an iframe on
+  // our own overlay click loses the user gesture and can require a second tap.
+  const playerSource = new URL(embed.src);
+  playerSource.searchParams.set('autoplay', '0');
+  if (embed.platform === 'YouTube') playerSource.searchParams.set('mute', '0');
+  if (embed.platform === 'TikTok') playerSource.searchParams.set('muted', '0');
   return <aside className="inline-clip">
     <div className="inline-clip-header"><span>{embed.platform} clip</span><a href={sourceUrl} target="_blank" rel="noreferrer" aria-label="Open the original post" title="Open original post"><ExternalLink size={14}/></a></div>
-    <div className="inline-clip-frame"><iframe src={playing ? playerSource : previewSource} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />{!playing && <button className="inline-clip-start" onClick={() => setPlaying(true)} aria-label={`Play ${embed.platform} clip: ${title}`}><span className="inline-clip-play"><Play size={22} fill="currentColor" /></span><strong>Play clip</strong><small>Tap to watch</small></button>}</div>
+    <div className="inline-clip-frame"><iframe key={`${embed.src}-${playerVersion}`} src={playerSource.toString()} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /></div>
   </aside>;
 }
