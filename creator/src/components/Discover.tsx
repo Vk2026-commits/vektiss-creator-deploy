@@ -23,6 +23,17 @@ type HistoryFilter = ResearchFeedFilter;
 const archivePageSize = 8;
 
 type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
+type ResearchProgress = { percent: number; title: string; timing: string };
+
+function progressForResearch(job: { status: string; phase: string }): ResearchProgress {
+  const phase = job.phase.toLowerCase();
+  if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
+  if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "About 1 minute left" };
+  if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "About 30 seconds left" };
+  if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Almost there" };
+  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best clips", timing: "Almost done" };
+  return { percent: 45, title: "Finding your clips", timing: "Usually ready in 1–2 minutes" };
+}
 
 function embeddedClip(url: string): EmbeddedClip | null {
   try {
@@ -109,7 +120,14 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
       <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 clips</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} clips`}>{count}</button>)}</div></div></section>
       <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
-      {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>Finding your clips</strong><span>{job.phase}</span></div></div>)}
+      {activeJobs.map((job) => {
+        const progress = progressForResearch(job);
+        return <section className="research-progress" key={job.id} aria-label={`${progress.title}: ${progress.percent}% complete`}>
+          <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div><b>{progress.percent}%</b></div>
+          <div className="research-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}><i style={{ width: `${progress.percent}%` }} /></div>
+          <p>{job.phase}</p>
+        </section>;
+      })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
       <div className="opportunity-list">{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
