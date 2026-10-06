@@ -19,8 +19,8 @@ const agentResponseSchema = z.object({
   output: z.array(z.unknown()).optional(),
   usage: z.unknown().optional(),
   error: z.unknown().nullable().optional(),
-  created_at: z.number().optional(),
-  completed_at: z.number().optional(),
+  created_at: z.number().nullish(),
+  completed_at: z.number().nullish(),
 }).passthrough();
 
 const rawSourceSchema = z.object({
@@ -36,14 +36,14 @@ export type ProviderRun = {
   id: string;
   status: string;
   model?: string;
-  createdAt?: number;
+  createdAt?: number | null;
 };
 export type CompletedResearchRun = ProviderRun & {
   usage: Record<string, unknown>;
   sources: ResearchSource[];
   candidates: ProviderResearchCandidate[];
   raw: Record<string, unknown>;
-  completedAt?: number;
+  completedAt?: number | null;
 };
 
 function outputText(response: z.infer<typeof agentResponseSchema>): string {
