@@ -3,6 +3,7 @@ import {
   canonicalResearchUrl,
   providerResearchEnvelopeSchema,
   rankResearchCandidates,
+  researchBriefSchema,
   type ProviderResearchCandidate,
   type ResearchHistorySignal,
   type ResearchSource,
@@ -44,6 +45,19 @@ describe("research contracts", () => {
   it("requires source ids instead of model-authored URLs", () => {
     expect(() => providerResearchEnvelopeSchema.parse({ opportunities: [{ ...candidate(), sourceUrls: ["https://invented.example"] }] })).toThrow();
     expect(providerResearchEnvelopeSchema.parse({ opportunities: [candidate()] }).opportunities).toHaveLength(1);
+  });
+
+  it("preserves profile-specific platform and screening constraints", () => {
+    const brief = researchBriefSchema.parse({
+      expertise: "", experience: "", industries: [], communicationStyle: "", creatorTone: [], phrasesToAvoid: [], preferredCtaStyle: "",
+      creatorContext: "", audienceName: "Steve", primaryAudience: "", audienceProblems: [], audienceInterests: [], contentPillars: [],
+      sourceTopics: [], reactionAngles: [], desiredOutcomes: [], profileTone: [], thingsToAvoid: [], profileContext: "",
+      researchSourcePlatforms: ["TikTok", "Instagram", "YouTube"],
+      researchScreeningCriteria: "Only authentic, complete, person-to-person safety incidents.",
+      researchReferenceUrls: ["https://www.tiktok.com/@miss.chievousss/video/7260573341868641582"],
+    });
+    expect(brief.researchSourcePlatforms).toEqual(["TikTok", "Instagram", "YouTube"]);
+    expect(brief.researchScreeningCriteria).toContain("authentic");
   });
 
   it("removes prior and same-batch duplicate stories while using behavior as a rank signal", () => {

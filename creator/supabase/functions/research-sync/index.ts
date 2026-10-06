@@ -4,6 +4,7 @@ import { getDeepResearchRun } from "../_shared/research-provider.ts";
 import {
   canonicalResearchUrl,
   rankResearchCandidates,
+  researchBriefSchema,
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../../../src/domain/research.ts";
@@ -75,7 +76,9 @@ Deno.serve(async (request) => {
       return reply(headers, { code: "PROVIDER_RESPONSE_MISSING" }, 503);
     }
 
-    const providerRun = await getDeepResearchRun(String(job.provider_response_id));
+    const brief = researchBriefSchema.safeParse(job.input_snapshot);
+    if (!brief.success) throw new Error("RESEARCH_INPUT");
+    const providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data);
     if (["queued", "in_progress"].includes(providerRun.status)) {
       const updated = await db.from("creator_research_jobs").update({ status: "researching", phase: "Researching…", updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
       return reply(headers, { job: updated.data ?? job }, 202);

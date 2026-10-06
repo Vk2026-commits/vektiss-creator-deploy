@@ -61,6 +61,9 @@ function buildBrief(creator: Record<string, unknown> | null, profile: Record<str
   const creatorContext = (creator?.context ?? {}) as Record<string, unknown>;
   const strategy = (profile.strategy ?? {}) as Record<string, unknown>;
   const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  const platforms = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is ResearchBrief["researchSourcePlatforms"][number] => item === "TikTok" || item === "Instagram" || item === "YouTube")
+    : [];
   return researchBriefSchema.parse({
     expertise: creatorContext.expertise ?? "", experience: creatorContext.experience ?? "", industries: strings(creatorContext.industries),
     communicationStyle: creatorContext.communication_style ?? "", creatorTone: strings(creatorContext.tone),
@@ -70,6 +73,9 @@ function buildBrief(creator: Record<string, unknown> | null, profile: Record<str
     contentPillars: strings(strategy.content_pillars), sourceTopics: strings(strategy.source_topics), reactionAngles: strings(strategy.reaction_angles),
     desiredOutcomes: strings(strategy.desired_outcomes), profileTone: strings(strategy.tone), thingsToAvoid: strings(strategy.things_to_avoid),
     profileContext: strategy.additional_context ?? "",
+    researchSourcePlatforms: platforms(strategy.research_source_platforms),
+    researchScreeningCriteria: typeof strategy.research_screening_criteria === "string" ? strategy.research_screening_criteria : "",
+    researchReferenceUrls: strings(strategy.research_reference_urls),
   });
 }
 

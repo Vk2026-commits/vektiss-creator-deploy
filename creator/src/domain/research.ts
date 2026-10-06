@@ -100,6 +100,9 @@ export const researchBriefSchema = z
     profileTone: z.array(z.string().trim().max(160)).max(20),
     thingsToAvoid: z.array(z.string().trim().max(160)).max(20),
     profileContext: z.string().trim().max(5000),
+    researchSourcePlatforms: z.array(z.enum(["TikTok", "Instagram", "YouTube"])).max(3).default([]),
+    researchScreeningCriteria: z.string().trim().max(12000).default(""),
+    researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
   })
   .strict();
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
