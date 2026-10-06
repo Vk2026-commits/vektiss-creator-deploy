@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
-  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
+  LoaderCircle, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
@@ -107,7 +107,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
-      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-batches">{([10, 20, 30] as const).map((count) => <button key={count} className="discover-batch-button" disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)}><span><Plus size={14}/> Find</span><strong>{count}</strong></button>)}</div></section>
+      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find my next <strong>10</strong> clips</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} clips`}>{count}</button>)}</div></div></section>
       <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
       {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>Finding your clips</strong><span>{job.phase}</span></div></div>)}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
