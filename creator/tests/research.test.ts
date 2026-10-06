@@ -77,6 +77,7 @@ describe("research contracts", () => {
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {
     expect(automaticTikTokRejectReason("Parking garage camera #HorrorTok #FoundFootage")).toBe("fiction");
     expect(automaticTikTokRejectReason("CBS News reports a safety incident")).toBe("news");
+    expect(automaticTikTokRejectReason("Ultra-realistic AI CCTV footage")).toBe("fiction");
     expect(automaticTikTokRejectReason("Safety storytime reenactment")).toBe("format");
     expect(automaticTikTokRejectReason("Employee walks customer to her car after closing")).toBeNull();
   });
@@ -99,5 +100,16 @@ describe("research contracts", () => {
     expect(ranked).toHaveLength(2);
     expect(ranked[0].category).toBe("Home buying");
     expect(ranked.every((item) => item.sources.length > 0)).toBe(true);
+  });
+
+  it("keeps a new direct clip when its lesson resembles an earlier idea", () => {
+    const ranked = rankResearchCandidates(
+      [candidate({ title: "First-time buyers prepare for mortgage rule changes", sourceIds: [1] })],
+      [source(1, "https://new.example.com/video")],
+      [{ title: "First-time buyers prepare for mortgage rule changes", category: "Home buying", status: "saved", sourceSnapshot: [source(7, "https://old.example.com/video")] }],
+      10,
+    );
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0].sources[0].url).toBe("https://new.example.com/video");
   });
 });

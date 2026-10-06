@@ -39,30 +39,31 @@ async function apify(path: string, init: RequestInit = {}): Promise<Record<strin
   return payload as Record<string, unknown>;
 }
 
-function words(value: string): string[] {
-  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length >= 4);
-}
-
 /**
  * These scenarios are intentionally concrete. Generic safety searches surface news
  * coverage and reaction videos; scenario language surfaces the original footage
  * types Steve can teach from.
  */
-export function buildTikTokQueryPack(brief: ResearchBrief): string[] {
-  const defaults = [
-    "woman followed parking lot security camera",
-    "store employee walks woman to car safety",
-    "woman followed in store staff helps",
-    "doorbell camera stranger approaches driveway woman",
-    "security guard removes aggressive man from store",
-    "woman being followed gets help original video",
+function queryRotation(value: string): number {
+  return [...value].reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 7);
+}
+
+export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] {
+  const scenarios = [
+    "woman followed parking lot gets help original video",
+    "store employee walks woman to car safety original video",
+    "woman followed in store staff helps security camera",
+    "doorbell camera stranger approaches driveway woman safe",
+    "security guard removes aggressive man from store original video",
+    "woman asks for help parking lot gets to safety video",
+    "ring camera child yells stranger off driveway original video",
+    "staff helps harassed woman leave store safety video",
   ];
-  const profileTerms = [...brief.sourceTopics, ...brief.audienceProblems, ...brief.contentPillars]
-    .flatMap(words)
-    .filter((word) => !["women", "woman", "safety", "security", "situational", "awareness"].includes(word));
-  const profileQuery = profileTerms.slice(0, 4).join(" ");
-  const combined = profileQuery ? [`${profileQuery} safety footage`, ...defaults] : defaults;
-  return [...new Set(combined)].slice(0, 3);
+  // Rotate concrete scenarios between searches. Generic "security footage" terms
+  // repeatedly returned AI clips, animals, and news reposts; a seed keeps each
+  // run deterministic while exposing a different three-scenario slice.
+  const start = queryRotation(`${brief.profileContext}:${seed}`) % scenarios.length;
+  return Array.from({ length: 3 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
 }
 
 function nativeTikTokUrl(value: string): string | null {
@@ -94,9 +95,11 @@ function stringValue(record: Record<string, unknown>, keys: string[]): string {
  */
 export function automaticTikTokRejectReason(text: string): string | null {
   const normalized = text.toLowerCase().replace(/[\s#_-]+/g, " ");
-  if (/\b(horrortok|creepypasta|analog horror|found footage|scarytok|scary story|paranormal|supernatural|haunted|fiction(?:al)?|fake)\b/.test(normalized)) return "fiction";
-  if (/\b(abc news|cbs news|fox news|inside edition|good morning america|gma|tmz|breaking news|newsner)\b/.test(normalized)) return "news";
+  if (/\b(horrortok|creepypasta|analog horror|found footage|scarytok|scary story|paranormal|supernatural|haunted|fiction(?:al)?|fake|ultra realistic|ai generated|artificial intelligence|deepfake|animation)\b/.test(normalized)) return "fiction";
+  if (/\b(abc news|cbs news|fox news|nbc|ctv news|inside edition|good morning america|gma|tmz|breaking news|newsner)\b/.test(normalized)) return "news";
   if (/\b(storytime|reenactment|re enactment|skit|prank|compilation|shorts)\b/.test(normalized)) return "format";
+  if (/\b(dog|cat|animal|pet)\b/.test(normalized)) return "off_brief";
+  if (/\b(tiktok pakistan|pakistan|polisi|mexico)\b/.test(normalized)) return "setting";
   return null;
 }
 
@@ -127,7 +130,9 @@ function sourceFromTiktokItem(item: unknown, index: number): ResearchSource | nu
 
   const description = stringValue(record, ["text", "desc", "description"]);
   const subtitles = stringValue(record, ["subtitles", "textExtra"]);
-  if (automaticTikTokRejectReason([description, subtitles, authorName].filter(Boolean).join("\n"))) return null;
+  const sourceText = [description, subtitles, authorName].filter(Boolean).join("\n");
+  if (automaticTikTokRejectReason(sourceText)) return null;
+  if (sourceText.replace(/[^a-z0-9]/gi, "").length < 35 || /^tiktok video from /i.test(description)) return null;
   const snippet = [description, subtitles].filter(Boolean).join("\n").slice(0, 5000);
   const title = (description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim().slice(0, 300);
   return researchSourceSchema.parse({
@@ -140,8 +145,8 @@ function sourceFromTiktokItem(item: unknown, index: number): ResearchSource | nu
   });
 }
 
-export async function startNativeDiscovery(input: { brief: ResearchBrief; requestedCount: number }): Promise<NativeDiscoveryRun> {
-  const queryPack = buildTikTokQueryPack(input.brief);
+export async function startNativeDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string }): Promise<NativeDiscoveryRun> {
+  const queryPack = buildTikTokQueryPack(input.brief, input.seed);
   const payload = await apify(`/acts/${encodeURIComponent(TIKTOK_ACTOR)}/runs`, {
     method: "POST",
     body: JSON.stringify({

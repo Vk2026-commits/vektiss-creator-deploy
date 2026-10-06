@@ -127,7 +127,7 @@ Deno.serve(async (request) => {
       throw new Error("PERSISTENCE");
     }
 
-    const providerRun = await startNativeDiscovery({ brief, requestedCount: input.requestedCount });
+    const providerRun = await startNativeDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId });
     const updated = await db.from("creator_research_jobs").update({
       provider_response_id: providerRun.id, status: "researching", phase: "Finding direct TikTok videos…", started_at: new Date().toISOString(),
       provider_metadata: { stage: "native_discovery", platform: providerRun.platform, apifyStatus: providerRun.status, queryPack: providerRun.queryPack },

@@ -109,6 +109,22 @@ Deno.serve(async (request) => {
         await markFailed(job, "NATIVE_DISCOVERY_EMPTY");
         return reply(headers, { code: "NATIVE_DISCOVERY_EMPTY" }, 503);
       }
+      const discoveredUrls = discovery.sources
+        .map((source) => canonicalResearchUrl(source.url))
+        .filter((url): url is string => Boolean(url));
+      const known = discoveredUrls.length
+        ? await db.from("creator_research_sources").select("canonical_url").eq("user_id", auth.user.id).in("canonical_url", discoveredUrls)
+        : { data: [], error: null };
+      if (known.error) throw new Error("PERSISTENCE");
+      const knownUrls = new Set((known.data ?? []).map((source) => String(source.canonical_url)));
+      const freshSources = discovery.sources.filter((source) => {
+        const canonical = canonicalResearchUrl(source.url);
+        return canonical && !knownUrls.has(canonical);
+      });
+      if (!freshSources.length) {
+        await markFailed(job, "NATIVE_DISCOVERY_NO_NEW_LEADS");
+        return reply(headers, { code: "NATIVE_DISCOVERY_NO_NEW_LEADS" }, 503);
+      }
       const claimed = await db.from("creator_research_jobs").update({
         status: "reviewing_sources", phase: "Checking clip quality…", updated_at: new Date().toISOString(),
       }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
@@ -118,13 +134,14 @@ Deno.serve(async (request) => {
         return reply(headers, { job: current ?? job }, 202);
       }
       job = claimed.data as Record<string, unknown>;
-      const screening = await startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job.requested_count), sources: discovery.sources });
-      const compactSources = discovery.sources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
+      const screening = await startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job.requested_count), sources: freshSources });
+      const compactSources = freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
       const updated = await db.from("creator_research_jobs").update({
         provider_response_id: screening.id, status: "researching", phase: "Ranking direct video leads…",
         provider_metadata: {
           ...providerMetadata, stage: "perplexity_screening", apifyStatus: discovery.status,
-          nativeSources: compactSources, screeningModel: screening.model ?? null, screeningStatus: screening.status,
+          nativeSources: compactSources, discoveredSourceCount: discovery.sources.length, freshSourceCount: freshSources.length,
+          duplicateSourceCount: discovery.sources.length - freshSources.length, screeningModel: screening.model ?? null, screeningStatus: screening.status,
         }, updated_at: new Date().toISOString(),
       }).eq("id", job.id).select("*").maybeSingle();
       if (updated.error || !updated.data) throw new Error("PERSISTENCE");

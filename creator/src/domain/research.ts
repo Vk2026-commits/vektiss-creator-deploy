@@ -238,7 +238,10 @@ export function rankResearchCandidates(
       .filter((source): source is ResearchSource => Boolean(source));
     const urls = sources.map((source) => canonicalResearchUrl(source.url)).filter(Boolean);
     if (!sources.length || !urls.length || urls.every((url) => priorUrls.has(url!))) continue;
-    if (history.some((item) => headlineSimilarity(item.title, candidate.title) >= 0.72)) continue;
+    // A new direct-video URL is the durable duplicate boundary. Similar titles are
+    // common for raw clips (for example, multiple "followed in a parking lot"
+    // videos) and must not hide a genuinely new clip just because the lesson is
+    // related to something surfaced earlier.
     if (accepted.some((item) => headlineSimilarity(item.title, candidate.title) >= 0.72)) continue;
 
     const sameCategory = history.filter((item) => item.category.toLowerCase() === candidate.category.toLowerCase());

@@ -29,10 +29,11 @@ function progressForResearch(job: { status: string; phase: string }): ResearchPr
   const phase = job.phase.toLowerCase();
   if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
   if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "About 1 minute left" };
-  if (phase.includes("screening")) return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
   if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "About 30 seconds left" };
+  if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
   if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Almost there" };
   if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best clips", timing: "Almost done" };
+  if (job.status === "researching") return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
   return { percent: 45, title: "Finding your clips", timing: "Usually ready in 1–2 minutes" };
 }
 
