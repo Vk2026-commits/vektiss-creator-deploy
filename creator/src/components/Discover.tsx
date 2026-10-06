@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
-  LoaderCircle, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
+  LoaderCircle, Play, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
@@ -179,8 +179,15 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
 }
 
 function InlineClip({ embed, title, sourceUrl }: { embed: EmbeddedClip; title: string; sourceUrl: string }) {
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    const stopPlaybackWhenHidden = () => { if (document.hidden) setPlaying(false); };
+    document.addEventListener("visibilitychange", stopPlaybackWhenHidden);
+    return () => document.removeEventListener("visibilitychange", stopPlaybackWhenHidden);
+  }, []);
+  const playerSource = `${embed.src}${embed.src.includes("?") ? "&" : "?"}autoplay=1`;
   return <aside className="inline-clip">
     <div className="inline-clip-header"><span>{embed.platform} clip</span><a href={sourceUrl} target="_blank" rel="noreferrer" aria-label="Open the original post" title="Open original post"><ExternalLink size={14}/></a></div>
-    <iframe src={embed.src} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+    {playing ? <iframe src={playerSource} title={title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" /> : <button className="inline-clip-start" onClick={() => setPlaying(true)} aria-label={`Play ${embed.platform} clip: ${title}`}><span className="inline-clip-play"><Play size={22} fill="currentColor" /></span><strong>Play clip</strong><small>Tap to watch</small></button>}
   </aside>;
 }
