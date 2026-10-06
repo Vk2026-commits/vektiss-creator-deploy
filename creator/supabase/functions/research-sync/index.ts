@@ -1,10 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { getDeepResearchRun } from "../_shared/research-provider.ts";
+import { getDeepResearchRun, startNativeVideoScreening } from "../_shared/research-provider.ts";
+import { getNativeDiscoveryRun } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
   rankResearchCandidates,
   researchBriefSchema,
+  researchSourceSchema,
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../../../src/domain/research.ts";
@@ -54,6 +56,16 @@ async function markFailed(job: Record<string, unknown>, code: string, cancelled 
   });
 }
 
+function metadata(job: Record<string, unknown>): Record<string, unknown> {
+  const value = job.provider_metadata;
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function nativeSources(value: unknown): ResearchSource[] {
+  const parsed = z.array(researchSourceSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   const headers = headersFor(origin);
@@ -78,7 +90,49 @@ Deno.serve(async (request) => {
 
     const brief = researchBriefSchema.safeParse(job.input_snapshot);
     if (!brief.success) throw new Error("RESEARCH_INPUT");
-    const providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data);
+    const providerMetadata = metadata(job);
+    if (providerMetadata.stage === "native_discovery") {
+      if (job.status !== "researching") return reply(headers, { job }, 202);
+      const discovery = await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count));
+      if (discovery.state === "pending") {
+        const updated = await db.from("creator_research_jobs").update({
+          status: "researching", phase: "Finding direct TikTok videos…",
+          provider_metadata: { ...providerMetadata, apifyStatus: discovery.status }, updated_at: new Date().toISOString(),
+        }).eq("id", job.id).select("*").maybeSingle();
+        return reply(headers, { job: updated.data ?? job }, 202);
+      }
+      if (discovery.state === "failed") {
+        await markFailed(job, `APIFY_${discovery.status}`);
+        return reply(headers, { code: `APIFY_${discovery.status}` }, 503);
+      }
+      if (!discovery.sources.length) {
+        await markFailed(job, "NATIVE_DISCOVERY_EMPTY");
+        return reply(headers, { code: "NATIVE_DISCOVERY_EMPTY" }, 503);
+      }
+      const claimed = await db.from("creator_research_jobs").update({
+        status: "reviewing_sources", phase: "Screening direct videos…", updated_at: new Date().toISOString(),
+      }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
+      if (claimed.error) throw new Error("PERSISTENCE");
+      if (!claimed.data) {
+        const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
+        return reply(headers, { job: current ?? job }, 202);
+      }
+      job = claimed.data as Record<string, unknown>;
+      const screening = await startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job.requested_count), sources: discovery.sources });
+      const compactSources = discovery.sources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
+      const updated = await db.from("creator_research_jobs").update({
+        provider_response_id: screening.id, status: "researching", phase: "Ranking direct video leads…",
+        provider_metadata: {
+          ...providerMetadata, stage: "perplexity_screening", apifyStatus: discovery.status,
+          nativeSources: compactSources, screeningModel: screening.model ?? null, screeningStatus: screening.status,
+        }, updated_at: new Date().toISOString(),
+      }).eq("id", job.id).select("*").maybeSingle();
+      if (updated.error || !updated.data) throw new Error("PERSISTENCE");
+      return reply(headers, { job: updated.data }, 202);
+    }
+    const suppliedSources = providerMetadata.stage === "perplexity_screening" ? nativeSources(providerMetadata.nativeSources) : undefined;
+    if (providerMetadata.stage === "perplexity_screening" && !suppliedSources?.length) throw new Error("NATIVE_SOURCES_MISSING");
+    const providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data, suppliedSources);
     if (["queued", "in_progress"].includes(providerRun.status)) {
       const updated = await db.from("creator_research_jobs").update({ status: "researching", phase: "Researching…", updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
       return reply(headers, { job: updated.data ?? job }, 202);

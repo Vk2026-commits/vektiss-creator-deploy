@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { startDeepResearch } from "../_shared/research-provider.ts";
+import { startNativeDiscovery } from "../_shared/platform-discovery.ts";
 import { researchBriefSchema, researchRequestSchema, type ResearchBrief } from "../../../src/domain/research.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
@@ -20,7 +20,7 @@ function headersFor(origin: string | null): Record<string, string> {
 }
 function reply(headers: Record<string, string>, body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers }); }
 function safeCode(error: unknown) {
-  if (error instanceof Error && ["NOT_CONFIGURED", "PROVIDER", "PROVIDER_UNAVAILABLE"].includes(error.message)) return error.message;
+  if (error instanceof Error && ["APIFY_NOT_CONFIGURED", "APIFY_PROVIDER", "PERSISTENCE", "ENTITLEMENT", "QUOTA"].includes(error.message)) return error.message;
   return "UNAVAILABLE";
 }
 
@@ -127,16 +127,16 @@ Deno.serve(async (request) => {
       throw new Error("PERSISTENCE");
     }
 
-    const providerRun = await startDeepResearch({ brief, requestedCount: input.requestedCount, candidateMultiplier: Number(config.candidate_multiplier) || 2 });
+    const providerRun = await startNativeDiscovery({ brief, requestedCount: input.requestedCount });
     const updated = await db.from("creator_research_jobs").update({
-      provider_response_id: providerRun.id, status: "researching", phase: "Researching…", started_at: new Date().toISOString(),
-      provider_metadata: { model: providerRun.model ?? null, providerStatus: providerRun.status, providerCreatedAt: providerRun.createdAt ?? null },
+      provider_response_id: providerRun.id, status: "researching", phase: "Finding direct TikTok videos…", started_at: new Date().toISOString(),
+      provider_metadata: { stage: "native_discovery", platform: providerRun.platform, apifyStatus: providerRun.status, queryPack: providerRun.queryPack },
       updated_at: new Date().toISOString(),
     }).eq("id", jobId).select("*").maybeSingle();
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");
     await db.from("creator_research_usage").insert({
       id: crypto.randomUUID(), job_id: jobId, user_id: userId, operation: "deep_research_start", provider_response_id: providerRun.id,
-      model: providerRun.model ?? null, status: "started", request_metadata: { requestedCount: input.requestedCount, candidateMultiplier: Number(config.candidate_multiplier) || 2 },
+      model: "apify-tiktok-discovery", status: "started", request_metadata: { requestedCount: input.requestedCount, queryPack: providerRun.queryPack },
     });
     reservation = 0;
     return reply(headers, { job: updated.data, reused: false }, 202);

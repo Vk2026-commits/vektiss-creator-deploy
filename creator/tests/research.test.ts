@@ -8,6 +8,7 @@ import {
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../src/domain/research";
+import { buildTikTokQueryPack } from "../supabase/functions/_shared/platform-discovery";
 
 const source = (id: number, url: string, title = "Evidence") => ({
   providerSourceId: id,
@@ -58,6 +59,19 @@ describe("research contracts", () => {
     });
     expect(brief.researchSourcePlatforms).toEqual(["TikTok", "Instagram", "YouTube"]);
     expect(brief.researchScreeningCriteria).toContain("authentic");
+  });
+
+  it("uses concrete native-video scenarios instead of broad safety-topic searches", () => {
+    const brief = researchBriefSchema.parse({
+      expertise: "", experience: "", industries: [], communicationStyle: "", creatorTone: [], phrasesToAvoid: [], preferredCtaStyle: "",
+      creatorContext: "", audienceName: "Steve", primaryAudience: "", audienceProblems: ["personal safety"], audienceInterests: [], contentPillars: [],
+      sourceTopics: ["women safety"], reactionAngles: [], desiredOutcomes: [], profileTone: [], thingsToAvoid: [], profileContext: "",
+      researchSourcePlatforms: ["TikTok"], researchScreeningCriteria: "", researchReferenceUrls: [],
+    });
+    const pack = buildTikTokQueryPack(brief);
+    expect(pack).toHaveLength(3);
+    expect(pack.some((query) => query.includes("parking lot") || query.includes("store"))).toBe(true);
+    expect(pack.every((query) => query.length > 10)).toBe(true);
   });
 
   it("removes prior and same-batch duplicate stories while using behavior as a rank signal", () => {
