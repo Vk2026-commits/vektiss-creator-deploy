@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
   LoaderCircle, Play, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
@@ -66,6 +66,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [instruction, setInstruction] = useState("");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
+  const resultListRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const next = await loadResearchFeed(profile?.id, { filter: historyFilter, offset: pageOffset, limit: archivePageSize });
@@ -104,6 +105,10 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const hasNextPage = pageOffset + archivePageSize < (feed?.opportunityTotal ?? 0);
   const emptyTitle: Record<HistoryFilter, string> = { all: "Your ideas will show up here.", saved: "No saved ideas yet.", used: "No used ideas yet.", skipped: "Nothing has been skipped yet." };
   const emptyText: Record<HistoryFilter, string> = { all: "Pick a number above. We’ll do the searching.", saved: "Tap the bookmark on an idea you want to keep.", used: "Choose Use idea to turn a result into a video.", skipped: "Ideas you skip will stay here, out of your main feed." };
+  function moveArchivePage(nextOffset: number) {
+    setPageOffset(nextOffset);
+    window.requestAnimationFrame(() => resultListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return <section className="discover" aria-labelledby="discover-heading">
     <header className="discover-header">
@@ -129,7 +134,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
         </section>;
       })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
-      <div className="opportunity-list">{visible.map((opportunity) => {
+      <div className="opportunity-list" ref={resultListRef}>{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
         const embed = source ? embeddedClip(source.url) : null;
         const needsCheck = Boolean(opportunity.uncertainty);
@@ -173,7 +178,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
           {rejecting === opportunity.id && <div className="opportunity-reject"><label>Why are you skipping it?<select value={reason} onChange={(event) => setReason(event.target.value)}>{rejectReasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "rejected", reason); setRejecting(null); })}>Skip it</button><button disabled={busy} onClick={() => setRejecting(null)}>Cancel</button></div>}
         </article>;
       })}</div>
-      {feed && feed.opportunityTotal > 0 && <nav className="archive-pagination" aria-label="Idea archive pages"><button disabled={busy || !hasPreviousPage} onClick={() => setPageOffset(Math.max(0, pageOffset - archivePageSize))}><ChevronLeft size={17}/>Previous</button><span aria-live="polite">Page {currentPage} of {totalPages}<small>{feed.opportunityTotal} ideas</small></span><button disabled={busy || !hasNextPage} onClick={() => setPageOffset(pageOffset + archivePageSize)}>Next<ChevronRight size={17}/></button></nav>}
+      {feed && feed.opportunityTotal > 0 && <nav className="archive-pagination" aria-label="Idea archive pages"><button disabled={busy || !hasPreviousPage} onClick={() => moveArchivePage(Math.max(0, pageOffset - archivePageSize))}><ChevronLeft size={17}/>Previous</button><span aria-live="polite">Page {currentPage} of {totalPages}<small>{feed.opportunityTotal} ideas</small></span><button disabled={busy || !hasNextPage} onClick={() => moveArchivePage(pageOffset + archivePageSize)}>Next<ChevronRight size={17}/></button></nav>}
     </>}
   </section>;
 }
