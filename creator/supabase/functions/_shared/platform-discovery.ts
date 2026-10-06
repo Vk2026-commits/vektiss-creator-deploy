@@ -184,7 +184,10 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
     if (!parsed || seen.has(parsed.url)) continue;
     seen.add(parsed.url);
     sources.push(parsed);
-    if (sources.length >= Math.min(30, Math.max(requestedCount * 2, 12))) break;
+    // Keep a larger local pool than the requested delivery count. The screener
+    // needs room for duplicate removal and manual-review leads without turning
+    // a Find 10 request into a three-result search.
+    if (sources.length >= Math.min(60, Math.max(requestedCount * 3, 30))) break;
   }
   return { state: "completed", status, sources };
 }
