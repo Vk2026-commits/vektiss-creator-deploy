@@ -4,7 +4,7 @@ import {RenderProgress} from './RenderProgress';
 import {supabase} from '../lib/supabase';
 import type {VideoPlan} from '../domain/video-plan';
 import {avatarFraming} from '../domain/avatar-framing';
-export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'|'graphic'}){
+export function FinishedVideo({jobId,scriptId,plan,sourceKind='article',rawVideoUrl}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'|'graphic';rawVideoUrl?:string}){
  const [url,setUrl]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);
  const [progress,setProgress]=useState(85);
  const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
@@ -23,5 +23,5 @@ export function FinishedVideo({jobId,scriptId,plan,sourceKind='article'}:{jobId:
   }}}
   void assemble();return()=>{live=false;clearTimeout(reconnect);controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[jobId,scriptId,captureId,sourceKind,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,retry]);
- return <section className="finished-video" aria-label="Finished video">{!captureId?<p>Go back to the source step to attach your background.</p>:error?<><p role="alert">{error}</p><button className="button" onClick={()=>setRetry(n=>n+1)}>Retry export · no new render charge</button></>:!url?<RenderProgress value={progress} label={progress===95?'Loading finished MP4':'Merging video + avatar'}/>:<><video src={url} controls playsInline/><div className="render-confirmation render-actions"><span role="status">Ready to download</span><a className="button" href={url} download="vektiss-finished-video.mp4">Download MP4 ↓</a></div></>}</section>;
+ return <section className="finished-video" aria-label="Finished video">{!captureId&&rawVideoUrl?<><p>Presenter-only video — no source screenshot was added.</p><video src={rawVideoUrl} controls playsInline/><div className="render-confirmation render-actions"><span role="status">Ready to download</span><a className="button" href={rawVideoUrl} target="_blank" rel="noreferrer" download="vektiss-presenter-video.mp4">Download MP4 ↓</a></div></>:!captureId?<p>Go back to the source step to attach your background.</p>:error?<><p role="alert">{error}</p><button className="button" onClick={()=>setRetry(n=>n+1)}>Retry export · no new render charge</button></>:!url?<RenderProgress value={progress} label={progress===95?'Loading finished MP4':'Merging video + avatar'}/>:<><video src={url} controls playsInline/><div className="render-confirmation render-actions"><span role="status">Ready to download</span><a className="button" href={url} download="vektiss-finished-video.mp4">Download MP4 ↓</a></div></>}</section>;
 }

@@ -2,6 +2,7 @@ import { expect,it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { newVideoPlan,planReady,videoPlanSchema } from '../src/domain/video-plan';
 import { VideoPlan } from '../src/components/VideoPlan';
+import { FinishedVideo } from '../src/components/FinishedVideo';
 import { scriptSchema } from '../src/domain/scripts';
 const script=scriptSchema.parse({content_profile_id:'profile',title:'Test',hook:'A hook',body:'A clear message.',cta:'Save this.'});
 const props={script,preview:true,busy:false,onChange:()=>{},onSave:()=>{},onEdit:()=>{}};
@@ -24,6 +25,12 @@ it('shows gesture controls and clearly labels the screenshot preview boundary',(
  for(const position of ['Bottom left','Bottom middle','Bottom right'])expect(html).toContain(position);
  expect(html).toContain('Capture article screenshot');
  expect(html).toContain('Preview a mobile screenshot');
+ expect(html).toContain('A source screenshot is optional.');
+});
+it('allows a completed article render to download without a source screenshot',()=>{
+ const html=renderToStaticMarkup(<FinishedVideo jobId="job" scriptId="script" plan={newVideoPlan()} rawVideoUrl="https://video.example.com/presenter.mp4"/>);
+ expect(html).toContain('Presenter-only video');
+ expect(html).toContain('https://video.example.com/presenter.mp4');
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);
