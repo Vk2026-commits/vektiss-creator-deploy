@@ -66,7 +66,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [instruction, setInstruction] = useState("");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
-  const resultListRef = useRef<HTMLDivElement>(null);
+  const discoverRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
     const next = await loadResearchFeed(profile?.id, { filter: historyFilter, offset: pageOffset, limit: archivePageSize });
@@ -107,10 +107,10 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const emptyText: Record<HistoryFilter, string> = { all: "Pick a number above. We’ll do the searching.", saved: "Tap the bookmark on an idea you want to keep.", used: "Choose Use idea to turn a result into a video.", skipped: "Ideas you skip will stay here, out of your main feed." };
   function moveArchivePage(nextOffset: number) {
     setPageOffset(nextOffset);
-    window.requestAnimationFrame(() => resultListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    window.requestAnimationFrame(() => discoverRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
-  return <section className="discover" aria-labelledby="discover-heading">
+  return <section className="discover" ref={discoverRef} aria-labelledby="discover-heading">
     <header className="discover-header">
       <div>
         <span className="eyebrow">DISCOVER</span>
@@ -134,7 +134,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
         </section>;
       })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
-      <div className="opportunity-list" ref={resultListRef}>{visible.map((opportunity) => {
+      <div className="opportunity-list">{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
         const embed = source ? embeddedClip(source.url) : null;
         const needsCheck = Boolean(opportunity.uncertainty);
