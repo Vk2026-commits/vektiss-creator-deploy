@@ -110,7 +110,7 @@ Deno.serve(async (request) => {
         return reply(headers, { code: "NATIVE_DISCOVERY_EMPTY" }, 503);
       }
       const claimed = await db.from("creator_research_jobs").update({
-        status: "reviewing_sources", phase: "Screening direct videos…", updated_at: new Date().toISOString(),
+        status: "reviewing_sources", phase: "Checking clip quality…", updated_at: new Date().toISOString(),
       }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
       if (claimed.error) throw new Error("PERSISTENCE");
       if (!claimed.data) {
@@ -134,7 +134,8 @@ Deno.serve(async (request) => {
     if (providerMetadata.stage === "perplexity_screening" && !suppliedSources?.length) throw new Error("NATIVE_SOURCES_MISSING");
     const providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data, suppliedSources);
     if (["queued", "in_progress"].includes(providerRun.status)) {
-      const updated = await db.from("creator_research_jobs").update({ status: "researching", phase: "Researching…", updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
+      const phase = providerMetadata.stage === "perplexity_screening" ? "Checking clip quality…" : "Researching…";
+      const updated = await db.from("creator_research_jobs").update({ status: "researching", phase, updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
       return reply(headers, { job: updated.data ?? job }, 202);
     }
     if (["failed", "cancelled", "incomplete"].includes(providerRun.status)) {

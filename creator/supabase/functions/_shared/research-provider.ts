@@ -169,7 +169,7 @@ function nativeScreeningInstructions(brief: ResearchBrief, requestedCount: numbe
     id: source.providerSourceId,
     title: source.title,
     url: source.url,
-    snippet: source.snippet.slice(0, 1200),
+    snippet: source.snippet.slice(0, 650),
     publishedAt: source.publishedAt,
     sourceType: source.sourceType,
   }));
@@ -241,7 +241,7 @@ export async function startNativeVideoScreening(input: {
   const brief = researchBriefSchema.parse(input.brief);
   const sources = input.sources.map((source) => researchSourceSchema.parse(source));
   if (!sources.length) throw new Error("NATIVE_SOURCES_MISSING");
-  const candidateTarget = Math.min(sources.length, Math.min(50, Math.max(input.requestedCount * 2, input.requestedCount + 8)));
+  const candidateTarget = Math.min(sources.length, Math.min(50, input.requestedCount + Math.max(4, Math.ceil(input.requestedCount * 0.4))));
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
     body: JSON.stringify({
@@ -249,7 +249,7 @@ export async function startNativeVideoScreening(input: {
       input: nativeScreeningInstructions(brief, input.requestedCount, candidateTarget, sources),
       background: true,
       temperature: 0.1,
-      max_output_tokens: 10000,
+      max_output_tokens: 7000,
       response_format: {
         type: "json_schema",
         json_schema: { name: "native_video_opportunities", schema: candidateJsonSchema },
