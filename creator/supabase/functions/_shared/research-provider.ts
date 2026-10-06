@@ -210,7 +210,6 @@ export async function startDeepResearch(input: {
       input: researchInstructions(brief, input.requestedCount, candidateTarget),
       tools: [{ type: "web_search", ...(domains.length ? { filters: { search_domain_filter: domains } } : {}) }],
       background: true,
-      store: false,
       temperature: 0.2,
       max_output_tokens: 8000,
       response_format: {
