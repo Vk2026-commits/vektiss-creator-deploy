@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bookmark, Check, ExternalLink, Lightbulb, LoaderCircle, Plus, ThumbsDown, WandSparkles } from "lucide-react";
+import {
+  Bookmark, Check, ChevronDown, Clapperboard, ExternalLink, Eye, Lightbulb,
+  LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
+} from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
   loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch,
@@ -13,6 +16,16 @@ const rejectReasons = [
   ["dont_like_this_topic", "Don’t like this topic"], ["too_old", "Too old"],
   ["not_my_audience", "Not my audience"], ["wrong_angle", "Wrong angle"], ["other", "Other"],
 ] as const;
+
+function sourceLabel(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("tiktok")) return "Watch on TikTok";
+    if (host.includes("instagram")) return "Watch on Instagram";
+    if (host.includes("youtube")) return "Watch on YouTube";
+    return "Open source";
+  } catch { return "Open source"; }
+}
 
 export function Discover({ profiles, selectedId, onCreate }: { profiles: ContentProfile[]; selectedId: string | null; onCreate: (opportunity: ResearchOpportunity) => void }) {
   const profile = profiles.find((item) => item.id === selectedId && !item.archived_at) ?? profiles.find((item) => !item.archived_at) ?? null;
@@ -54,29 +67,58 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   return <section className="discover" aria-labelledby="discover-heading">
     <header className="discover-header">
       <div>
-        <span className="eyebrow">PERSONALIZED CONTENT OPPORTUNITIES</span>
-        <h1 id="discover-heading">Things your audience may want to hear from you about.</h1>
-        <p>{profile ? `Based on ${profile.name}, your audience, and what you’ve responded to before.` : "Choose an audience profile to begin."}</p>
+        <span className="eyebrow">DISCOVER</span>
+        <h1 id="discover-heading">Your next video idea.</h1>
+        <p>{profile ? `Quick picks made for ${profile.name}.` : "Pick a profile to see your ideas."}</p>
       </div>
       <div className="discover-allowance" aria-label="Research allowance">
-        <strong>{feed?.remaining ?? "—"}</strong><span>opportunities remaining</span>
+        <strong>{feed?.remaining ?? "—"}</strong><span>ideas left</span>
       </div>
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
-    {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is coming to your workspace.</h2><p>This personalized research feature is available to selected Pro pilot accounts.</p></div> : <>
-      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Find fresh opportunities</strong><span>Research a whole batch when you’re ready to plan content.</span></div><div className="discover-batches">{([10, 20, 30] as const).map((count) => <button key={count} className="button" disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)}><Plus size={16}/> Find {count}</button>)}</div></section>
-      {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>{job.phase}</strong><span>We’re looking for source-backed opportunities. You can leave and come back—this will keep its place.</span></div></div>)}
-      {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>Your opportunity feed starts here.</h2><p>Choose a batch when you’re ready. Vektiss will look for timely conversations where your perspective can add something useful.</p></div>}
-      <div className="opportunity-list">{visible.map((opportunity) => <article className="opportunity-card" key={opportunity.id}>
-        <div className="opportunity-meta"><span>{opportunity.category}</span>{opportunity.published_at && <time dateTime={opportunity.published_at}>{new Date(opportunity.published_at).toLocaleDateString()}</time>}<small>Relevance {Math.round(opportunity.relevance_score)}%</small></div>
-        <h2>{opportunity.title}</h2><p className="opportunity-summary">{opportunity.factual_summary}</p>
-        <dl><div><dt>Why your audience cares</dt><dd>{opportunity.why_audience_cares}</dd></div><div><dt>Your credible angle</dt><dd>{opportunity.creator_connection}</dd></div><div><dt>Recommended angle</dt><dd>{opportunity.recommended_angle}</dd></div>{opportunity.suggested_hook && <div><dt>Suggested hook</dt><dd>{opportunity.suggested_hook}</dd></div>}</dl>
-        {opportunity.uncertainty && <p className="opportunity-uncertainty"><strong>Source note:</strong> {opportunity.uncertainty}</p>}
-        <div className="opportunity-sources"><strong>Sources</strong>{opportunity.source_snapshot.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.title}<ExternalLink size={13}/></a>)}</div>
-        {refining === opportunity.id && <div className="opportunity-refine"><label>How should Vektiss change the angle?<input value={instruction} maxLength={1000} placeholder="e.g. Make this more relevant to homebuyers" onChange={(event) => setInstruction(event.target.value)}/></label><button disabled={busy || !instruction.trim()} onClick={() => void action(async () => { await refineResearchOpportunity(opportunity.id, instruction); setInstruction(""); setRefining(null); })}>Update angle</button><button disabled={busy} onClick={() => { setRefining(null); setInstruction(""); }}>Cancel</button></div>}
-        {rejecting === opportunity.id && <div className="opportunity-reject"><label>Why isn’t this for you?<select value={reason} onChange={(event) => setReason(event.target.value)}>{rejectReasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "rejected", reason); setRejecting(null); })}>Confirm</button><button disabled={busy} onClick={() => setRejecting(null)}>Cancel</button></div>}
-        <footer><button className="opportunity-save" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={16}/>{opportunity.status === "saved" ? "Saved" : "Save"}</button><button disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={16}/> Not for me</button><button disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={16}/> Change angle</button><button className="button primary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity); })}><Check size={16}/> Create</button></footer>
-      </article>)}</div>
+    {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
+      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-batches">{([10, 20, 30] as const).map((count) => <button key={count} className="button" disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)}><Plus size={16}/> Find {count}</button>)}</div></section>
+      {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>Finding your clips</strong><span>{job.phase}</span></div></div>)}
+      {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>Your ideas will show up here.</h2><p>Pick a number above. We’ll do the searching.</p></div>}
+      <div className="opportunity-list">{visible.map((opportunity) => {
+        const source = opportunity.source_snapshot[0];
+        const needsCheck = Boolean(opportunity.uncertainty);
+        return <article className="opportunity-card" key={opportunity.id}>
+          <div className="signal-rail" aria-hidden="true" />
+          <div className="opportunity-meta">
+            <span className="signal-category">{opportunity.category}</span>
+            <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> Watch first</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
+            <small>Match {Math.round(opportunity.relevance_score)}%</small>
+          </div>
+          <div className="signal-main">
+            <div>
+              <h2>{opportunity.title}</h2>
+              <p className="opportunity-summary">{opportunity.factual_summary}</p>
+            </div>
+            <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>
+          </div>
+          <div className="signal-take">
+            <span><Sparkles size={15}/> YOUR SIMPLE TAKE</span>
+            <p>{opportunity.recommended_angle}</p>
+          </div>
+          <div className="signal-points">
+            <div><span>WHY IT WORKS</span><p>{opportunity.creator_connection}</p></div>
+            {opportunity.suggested_hook && <div><span>OPEN WITH THIS</span><p>{opportunity.suggested_hook}</p></div>}
+          </div>
+          {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p></details>}
+          <footer>
+            {source && <a className="watch-source" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>{sourceLabel(source.url)}</a>}
+            <div className="opportunity-actions">
+              <button className="icon-action" aria-label="Save idea" title="Save idea" disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
+              <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
+              <button className="icon-action" aria-label="Change the idea" title="Change the idea" disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={17}/></button>
+              <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity); })}><Clapperboard size={17}/> Use idea<Check size={15}/></button>
+            </div>
+          </footer>
+          {refining === opportunity.id && <div className="opportunity-refine"><label>How should we change it?<input value={instruction} maxLength={1000} placeholder="Make it more helpful for my audience" onChange={(event) => setInstruction(event.target.value)}/></label><button className="button primary" disabled={busy || !instruction.trim()} onClick={() => void action(async () => { await refineResearchOpportunity(opportunity.id, instruction); setInstruction(""); setRefining(null); })}>Update</button><button disabled={busy} onClick={() => { setRefining(null); setInstruction(""); }}>Cancel</button></div>}
+          {rejecting === opportunity.id && <div className="opportunity-reject"><label>Why are you skipping it?<select value={reason} onChange={(event) => setReason(event.target.value)}>{rejectReasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "rejected", reason); setRejecting(null); })}>Skip it</button><button disabled={busy} onClick={() => setRejecting(null)}>Cancel</button></div>}
+        </article>;
+      })}</div>
     </>}
   </section>;
 }
