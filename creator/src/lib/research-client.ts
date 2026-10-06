@@ -8,7 +8,8 @@ export type ResearchOpportunity = {
   status: "new" | "saved" | "rejected" | "selected" | "turned_into_content"; created_at: string; updated_at: string;
 };
 export type ResearchJob = { id: string; content_profile_id: string; requested_count: number; delivered_count: number; candidate_count: number; status: string; phase: string; error_code: string | null; created_at: string; updated_at: string; completed_at: string | null };
-export type ResearchFeed = { active: boolean; remaining: number; limit: number; periodStart: string | null; jobs: ResearchJob[]; opportunities: ResearchOpportunity[] };
+export type ResearchFeedFilter = "all" | "saved" | "used" | "skipped";
+export type ResearchFeed = { active: boolean; remaining: number; limit: number; periodStart: string | null; jobs: ResearchJob[]; opportunities: ResearchOpportunity[]; opportunityTotal: number; pageOffset: number; pageSize: number; statusCounts: Record<ResearchFeedFilter, number> };
 
 async function invoke<T>(name: string, body: unknown): Promise<T> {
   if (!supabase) throw new Error("Research requires a signed-in account.");
@@ -24,7 +25,7 @@ async function invoke<T>(name: string, body: unknown): Promise<T> {
   throw new Error(messages[code] ?? "Research could not complete. Your existing opportunities are safe—please retry.");
 }
 
-export const loadResearchFeed = (profileId?: string) => invoke<ResearchFeed>("research-feed", profileId ? { profileId } : {});
+export const loadResearchFeed = (profileId: string | undefined, options: { filter: ResearchFeedFilter; offset: number; limit: number }) => invoke<ResearchFeed>("research-feed", { ...(profileId ? { profileId } : {}), ...options });
 export const requestResearch = (profileId: string, requestedCount: 10 | 20 | 30) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount, idempotencyKey: crypto.randomUUID() });
 export const syncResearch = (jobId: string) => invoke<{ job: ResearchJob }>("research-sync", { jobId });
 export const researchFeedback = (opportunityId: string, action: "saved" | "rejected" | "selected" | "script_created", reason?: string) => invoke<{ ok: true }>("research-feedback", { opportunityId, action, ...(reason ? { reason } : {}) });

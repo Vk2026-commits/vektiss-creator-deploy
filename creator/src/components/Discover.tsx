@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Bookmark, Check, ChevronDown, Clapperboard, ExternalLink, Eye, Lightbulb,
+  Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
   LoaderCircle, Plus, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
   loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch,
-  type ResearchFeed, type ResearchOpportunity,
+  type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
 } from "../lib/research-client";
 import "./discover.css";
 
@@ -19,7 +19,8 @@ const rejectReasons = [
 const historyFilters = [
   ["all", "All"], ["saved", "Saved"], ["used", "Used"], ["skipped", "Skipped"],
 ] as const;
-type HistoryFilter = (typeof historyFilters)[number][0];
+type HistoryFilter = ResearchFeedFilter;
+const archivePageSize = 8;
 
 type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
 
@@ -53,12 +54,17 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [pageOffset, setPageOffset] = useState(0);
 
   const load = useCallback(async () => {
-    const next = await loadResearchFeed(profile?.id);
+    const next = await loadResearchFeed(profile?.id, { filter: historyFilter, offset: pageOffset, limit: archivePageSize });
     setFeed(next);
+    if (!next.opportunities.length && next.opportunityTotal > 0 && pageOffset >= next.opportunityTotal) {
+      setPageOffset(Math.max(0, Math.floor((next.opportunityTotal - 1) / archivePageSize) * archivePageSize));
+    }
     return next;
-  }, [profile?.id]);
+  }, [historyFilter, pageOffset, profile?.id]);
+  useEffect(() => { setPageOffset(0); }, [profile?.id]);
   useEffect(() => { void load().catch(() => setError("Discover could not load. Refresh to retry.")); }, [load]);
   const activeJobs = useMemo(() => feed?.jobs.filter((job) => activeStatuses.has(job.status)) ?? [], [feed]);
   useEffect(() => {
@@ -79,19 +85,12 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     if (!profile) { setError("Create a content profile before researching."); return; }
     await action(async () => { await requestResearch(profile.id, count); });
   }
-  const opportunities = feed?.opportunities ?? [];
-  const filterCount = (filter: HistoryFilter) => opportunities.filter((opportunity) => {
-    if (filter === "all") return opportunity.status !== "rejected";
-    if (filter === "saved") return opportunity.status === "saved";
-    if (filter === "used") return ["selected", "turned_into_content"].includes(opportunity.status);
-    return opportunity.status === "rejected";
-  }).length;
-  const visible = opportunities.filter((opportunity) => {
-    if (historyFilter === "all") return opportunity.status !== "rejected";
-    if (historyFilter === "saved") return opportunity.status === "saved";
-    if (historyFilter === "used") return ["selected", "turned_into_content"].includes(opportunity.status);
-    return opportunity.status === "rejected";
-  });
+  const visible = feed?.opportunities ?? [];
+  const filterCount = (filter: HistoryFilter) => feed?.statusCounts?.[filter] ?? 0;
+  const currentPage = Math.floor(pageOffset / archivePageSize) + 1;
+  const totalPages = Math.max(1, Math.ceil((feed?.opportunityTotal ?? 0) / archivePageSize));
+  const hasPreviousPage = pageOffset > 0;
+  const hasNextPage = pageOffset + archivePageSize < (feed?.opportunityTotal ?? 0);
   const emptyTitle: Record<HistoryFilter, string> = { all: "Your ideas will show up here.", saved: "No saved ideas yet.", used: "No used ideas yet.", skipped: "Nothing has been skipped yet." };
   const emptyText: Record<HistoryFilter, string> = { all: "Pick a number above. We’ll do the searching.", saved: "Tap the bookmark on an idea you want to keep.", used: "Choose Use idea to turn a result into a video.", skipped: "Ideas you skip will stay here, out of your main feed." };
 
@@ -109,7 +108,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     {error && <p className="error-message" role="alert">{error}</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
       <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-batches">{([10, 20, 30] as const).map((count) => <button key={count} className="button" disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)}><Plus size={16}/> Find {count}</button>)}</div></section>
-      <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => setHistoryFilter(filter)}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
+      <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
       {activeJobs.map((job) => <div className="research-progress" key={job.id} role="status"><LoaderCircle className="spin" size={19}/><div><strong>Finding your clips</strong><span>{job.phase}</span></div></div>)}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
       <div className="opportunity-list">{visible.map((opportunity) => {
@@ -156,6 +155,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
           {rejecting === opportunity.id && <div className="opportunity-reject"><label>Why are you skipping it?<select value={reason} onChange={(event) => setReason(event.target.value)}>{rejectReasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button primary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "rejected", reason); setRejecting(null); })}>Skip it</button><button disabled={busy} onClick={() => setRejecting(null)}>Cancel</button></div>}
         </article>;
       })}</div>
+      {feed && feed.opportunityTotal > 0 && <nav className="archive-pagination" aria-label="Idea archive pages"><button disabled={busy || !hasPreviousPage} onClick={() => setPageOffset(Math.max(0, pageOffset - archivePageSize))}><ChevronLeft size={17}/>Previous</button><span aria-live="polite">Page {currentPage} of {totalPages}<small>{feed.opportunityTotal} ideas</small></span><button disabled={busy || !hasNextPage} onClick={() => setPageOffset(pageOffset + archivePageSize)}>Next<ChevronRight size={17}/></button></nav>}
     </>}
   </section>;
 }
