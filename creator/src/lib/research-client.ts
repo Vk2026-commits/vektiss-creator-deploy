@@ -27,7 +27,7 @@ async function invoke<T>(name: string, body: unknown): Promise<T> {
   throw new Error(messages[code] ?? "Research could not complete. Your existing opportunities are safe—please retry.");
 }
 
-export const loadResearchFeed = (profileId: string | undefined, options: { filter: ResearchFeedFilter; offset: number; limit: number }) => invoke<ResearchFeed>("research-feed", { ...(profileId ? { profileId } : {}), ...options });
+export const loadResearchFeed = (profileId: string | undefined, options: { filter: ResearchFeedFilter; sourceMode?: 'all'|'videos'|'articles'; offset: number; limit: number }) => invoke<ResearchFeed>("research-feed", { ...(profileId ? { profileId } : {}), ...options });
 export const requestResearch = (profileId: string, requestedCount: 10 | 20 | 30,options:{sourceMode:'videos'|'articles';articleDate?:ArticleDate}={sourceMode:'videos'}) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount,...options, idempotencyKey: crypto.randomUUID() });
 export const syncResearch = (jobId: string) => invoke<{ job: ResearchJob }>("research-sync", { jobId });
 export const researchFeedback = (opportunityId: string, action: "saved" | "rejected" | "selected" | "script_created", reason?: string) => invoke<{ ok: true }>("research-feedback", { opportunityId, action, ...(reason ? { reason } : {}) });
