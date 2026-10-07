@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {ctaSchema,campaignSchema} from './cta.ts';
 
 const text = (max = 2000) => z.string().trim().max(max);
 const items = z.array(z.string().trim().min(1).max(160)).max(20);
@@ -17,6 +18,9 @@ export const creatorContextSchema = z
   .strict();
 export const strategySchema = z
   .object({
+    research_screening_criteria:text(5000).optional(),
+    research_source_platforms:items.optional(),
+    research_reference_urls:z.array(z.string().max(2000)).max(20).optional(),
     secondary_audience: text(500),
     audience_problems: items,
     audience_interests: items,
@@ -39,6 +43,8 @@ export const creatorInputSchema = z
   .strict();
 export const contentInputSchema = z
   .object({
+    cta_default:ctaSchema.nullable().optional(),
+    cta_campaign:campaignSchema.nullable().optional(),
     name: z
       .string()
       .trim()

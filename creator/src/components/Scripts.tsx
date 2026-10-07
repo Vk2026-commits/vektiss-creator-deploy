@@ -18,8 +18,12 @@ import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {mediaFetch} from '../lib/media-fetch';
 import {researchFeedback,type ResearchOpportunity} from '../lib/research-client';
 import {DiscoverySourceRepair} from './DiscoverySourceRepair';
+import {ProfileChat} from './ProfileChat';
+import {applyProfileProposal} from '../domain/profile-edit';
+import {createSupabaseRepository} from '../lib/repository';
+import {supabase} from '../lib/supabase';
 
-export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void }) {
+export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -162,7 +166,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         recoveryWrite(recoveryKey,snapshot.id);recoveryWrite(pendingDraftKey,body);
         await recoverDraft(body);return;
       }
-      let result=await scriptAI(action,draft.content_profile_id,{...input.brief,questions:input.brief.questions.filter(q=>q.answer.trim())});
+      let result=await scriptAI(action,draft.content_profile_id,{...snapshot.brief,questions:snapshot.brief.questions.filter(q=>q.answer.trim())});
       let next:ScriptInput;
       if(action==='summarize') {
         next={...input,title:suggestedVideoTitle(input.title,result.title),brief:{...input.brief,source:result.source,source_summary:result.summary,stage:'source',clarified:false,questions:[],summary:'',production:undefined}};
@@ -216,6 +220,21 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
           {profile && <details><summary>Audience and voice details</summary><div className="script-direction"><p>{profile.primary_audience}</p><small>Tone: {profile.strategy.tone.join(' · ') || 'Your natural voice'}</small>{profile.strategy.things_to_avoid.length > 0 && <p>Avoid: {profile.strategy.things_to_avoid.join(' · ')}</p>}</div></details>}
           <details><summary>{draft.title&&!draft.title.startsWith('Untitled')?'Edit video title':'AI will name your video after reading the source'}</summary><label>Video title (optional)<input maxLength={200} value={draft.title.startsWith('Untitled')?'':draft.title} onChange={e => change('title', e.target.value)} placeholder="Leave blank for an AI title" /></label></details>
           </details>
+          {profile&&!preview&&<details className="script-context"><summary>Edit audience or CTA with chat</summary><ProfileChat key={`${profile.id}:${current?.id??'new'}`} profileId={profile.id} allowVideo onApply={async proposal=>{
+            if(!supabase)throw Error('Please sign in again.');
+            if(proposal.scope==='video'){
+              if(!proposal.cta)throw Error('Add a CTA first.');
+              if(proposal.changes.length)throw Error('Please change the audience separately from this video’s CTA.');
+              const next={...draft,brief:{...draft.brief,cta_override:proposal.cta,cta_selection:undefined,production:undefined,stage:'source' as const}};
+              const item=await repo.save({...next,title:next.title.trim()||'Untitled video'},current);
+              setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);
+              setMessage('CTA saved for this video. Continue with your saved source to regenerate the script before approving.');
+            }else{
+              const updated=await createSupabaseRepository(supabase,userId).saveContent(applyProfileProposal(profile,proposal),profile.creator_profile_id,profile);
+              onProfileUpdated?.(updated);setMessage('Audience updated. Changes apply to newly generated scripts; existing approved scripts are unchanged.');
+            }
+          }}/></details>}
+          {draft.brief.cta_override&&<p>CTA for this video: {draft.brief.cta_override.text}</p>}
           {!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
           {draft.brief.stage==='review' && <>

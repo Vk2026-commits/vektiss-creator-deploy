@@ -62,6 +62,7 @@ export function createSupabaseRepository(
     },
     async saveContent(input, creatorId, existing) {
       const data = contentInputSchema.parse(input);
+      data.strategy = {research_screening_criteria:'',research_source_platforms:[],research_reference_urls:[],...existing?.strategy,...data.strategy};
       const query = existing
         ? client
             .from("content_profiles")

@@ -31,13 +31,15 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
   const session=await supabase?.auth.getSession();
   if(owner&&session?.data.session?.user.id!==owner)throw Error('Your account changed. Reopen your video after signing in.');
   if(session?.data.session)headers.set('Authorization',`Bearer ${session.data.session.access_token}`);
-  return fetch(url,{...options,headers,signal:AbortSignal.any([signal,AbortSignal.timeout(options.method==='POST'?600000:30000)]),cache:'no-store'});
+  const downloading=/^\/api\/local-capture\/(exports|video-background)\/[a-f0-9-]+$/.test(url);
+  return fetch(url,{...options,headers,signal:AbortSignal.any([signal,AbortSignal.timeout(options.method==='POST'||downloading?600000:30000)]),cache:'no-store'});
  }
  async function read(url:string){
   // A disconnected status read is not a failed job. Only retry GETs.
-  for(;;){
+  for(let attempt=0;;attempt++){
    try{const response=await request(url);if(response.status<500)return response;}
    catch(error){if(signal.aborted)throw error;if(!(error instanceof TypeError)&&!(error instanceof DOMException&&error.name==='TimeoutError'))throw error;}
+   if(attempt>=4)throw Error('Connection interrupted. Your saved video is preserved. Reconnect and retry loading it; no new avatar render is needed.');
    await wait();
   }
  }

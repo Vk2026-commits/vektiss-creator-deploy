@@ -1,9 +1,12 @@
 import { z } from 'zod';
+import {ctaSchema,ctaSelectionSchema} from './cta.ts';
 import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
 import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 import {researchSourceSchema} from './research.ts';
 export const briefSchema = z.object({
+  cta_override:ctaSchema.nullable().optional(),
+  cta_selection:ctaSelectionSchema.optional(),
   cost_project_id:z.string().uuid().optional(),
   research_opportunity_id:z.string().uuid().optional(),
   research_sources:z.array(researchSourceSchema).max(6).optional(),

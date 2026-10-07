@@ -36,6 +36,11 @@ it('does not submit work when restoring an unconfirmed source upload',async()=>{
  await expect(mediaFetch('/api/local-capture/source-workflow',{method:'POST'},'missing',true)).rejects.toThrow('upload was interrupted');
  expect(fetcher).not.toHaveBeenCalled();
 });
+it('stops repeated server errors with a recoverable message instead of spinning forever',async()=>{
+ vi.useFakeTimers();const fetcher=vi.fn().mockImplementation(()=>Promise.resolve(new Response('Unavailable',{status:503})));vi.stubGlobal('fetch',fetcher);
+ const result=mediaFetch('/api/local-capture/exports/11111111-1111-4111-8111-111111111111').catch(e=>e);
+ await vi.advanceTimersByTimeAsync(8000);expect((await result).message).toContain('saved video is preserved');expect(fetcher).toHaveBeenCalledTimes(5);
+});
 it('refreshes on wake without overlapping reads, and removes wake listeners on cleanup',async()=>{
  const surface=new EventTarget(),documentSurface=new EventTarget();
  Object.assign(documentSurface,{visibilityState:'visible'});

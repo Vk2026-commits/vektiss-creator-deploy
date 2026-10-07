@@ -29,11 +29,11 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
  return <section className="script-direction render-workspace" aria-label="Full-script presenter">
   <div className="render-settings"><span>{review?`${review.snapshot.avatar_name} · ${review.snapshot.voice_name??'Default voice'} · ${review.estimated_seconds}s reaction`:'Loading saved settings…'}</span><button disabled={busy||active} onClick={onEditLayout}>Edit placement / voice</button></div>
   {disabled?<p>Saving your selection…</p>:busy&&!review?<RenderProgress value={10} label="Checking saved renders"/>:null}
-	  {job?.status==='completed'?<FinishedVideo sourceKind={sourceKind} jobId={job.id} scriptId={scriptId} plan={plan} rawVideoUrl={job.video_url??undefined}/>:sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}
+	  {job?.status==='completed'?<FinishedVideo sourceKind={sourceKind} jobId={job.id} scriptId={scriptId} plan={plan} rawVideoUrl={job.video_url??undefined}/>:review&&sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}
   {job?.status!=='completed'&&sourceKind==='graphic'&&plan.article_capture&&<GraphicPreview plan={plan}/>}
   {review&&<>
 	   {sourceKind==='article'&&!plan.article_capture&&<p>Creating a presenter-only video. Add a source screenshot in Edit layout only if you want it as the background.</p>}
-   {job?job.status!=='completed'&&<RenderProgress value={job.status==='processing'?60:30} label={`Creating avatar · ${job.status}`}/>:<div className="render-confirmation">
+   {job?job.status==='failed'?<p role="alert" className="error-message">{job.message||'HeyGen could not complete this avatar. Your script and source are saved.'}</p>:job.status!=='completed'&&<RenderProgress value={job.status==='processing'?60:30} label={`Creating avatar · ${job.status}`}/>:<div className="render-confirmation">
     {busy&&<RenderProgress value={15} label="Submitting to HeyGen"/>}
     <small>Creates one paid HeyGen render with your approved script.</small><div className="render-actions"><button disabled={busy} onClick={onEditLayout}>← Back</button><button className="button" disabled={disabled||busy||!backgroundReady} onClick={()=>void start()}>{busy?'Submitting…':'Confirm & create with HeyGen'}</button></div>
    </div>}
