@@ -33,9 +33,9 @@ function progressForResearch(job: { status: string; phase: string }): ResearchPr
   if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "About 30 seconds left" };
   if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
   if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Almost there" };
-  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best clips", timing: "Almost done" };
-  if (job.status === "researching") return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
-  return { percent: 45, title: "Finding your clips", timing: "Usually ready in 1–2 minutes" };
+  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best matches", timing: "Almost done" };
+  if (job.status === "researching") return { percent: 65, title: "Researching relevant sources", timing: "Search is still running" };
+  return { percent: 45, title: "Finding relevant sources", timing: "Usually ready in 1–2 minutes" };
 }
 
 function embeddedClip(url: string): EmbeddedClip | null {
@@ -156,7 +156,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
             <div className="opportunity-content">
               <div className="opportunity-meta">
                 <span className="signal-category">{opportunity.category}</span>
-                <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> Watch first</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
+                <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
                 <small>Match {Math.round(opportunity.relevance_score)}%</small>
               </div>
               <div className="signal-main">
