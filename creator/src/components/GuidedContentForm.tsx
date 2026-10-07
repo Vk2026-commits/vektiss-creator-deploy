@@ -40,12 +40,14 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onSave
    {question.key==='cta'&&<><p>For a comment-to-receive invitation, tell us the keyword, offer, and delivery method. Vektiss does not send DMs or fulfill offers.</p>{(['keyword','offer','delivery'] as const).map(key=><label className="field" key={key}><span>{key==='keyword'?'Comment keyword':key==='offer'?'What will they receive?':'How will you deliver it?'}</span><input value={draft.cta_default?.[key]??''} maxLength={key==='keyword'?60:key==='offer'?200:300} onChange={e=>setDraft(old=>({...old,cta_default:{text:old.cta_default?.text??'',keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??'',[key]:e.target.value}}))} /></label>)}</>}
    <div className="profile-actions"><button type="button" className="button secondary" disabled={step===0} onClick={()=>setStep(s=>s-1)}>Back</button><button type="button" className="button primary" disabled={['name','primary_audience'].includes(question.key)&&!value(question.key).trim()} onClick={()=>setStep(s=>s+1)}>{step===questions.length-1?'Review profile':'Next'} →</button></div>
   </>:<>
+   {profileId&&!preview&&<ProfileChat profileId={profileId} onApply={async proposal=>{await onSave(applyProfileProposal(draft,proposal));onClose();}} />}
+   <details open={!profileId}><summary>{profileId?'Review or edit individual answers':'Your answers'}</summary>
    <h3>Review your audience profile</h3>
    {questions.map((q,index)=><div className="profile-answer" key={q.key}><div><strong>{q.title}</strong><p>{value(q.key)||'Not specified'}</p></div><button type="button" className="button secondary" onClick={()=>setStep(index)} aria-label={`Edit: ${q.title}`}>Edit</button></div>)}
    {draft.cta_campaign&&<p>Temporary CTA: “{draft.cta_campaign.cta.text}” · Up to {draft.cta_campaign.limit} approved scripts in this campaign.</p>}
    <details><summary>Additional context and existing preferences</summary>{(['secondary_audience','audience_interests','preferred_ctas','additional_context'] as const).map(key=><label className="field" key={key}><span>{key.replaceAll('_',' ')}</span><textarea value={Array.isArray(draft.strategy[key])?(draft.strategy[key] as string[]).join('\n'):draft.strategy[key] as string} onChange={e=>setDraft(old=>({...old,strategy:{...old.strategy,[key]:Array.isArray(old.strategy[key])?e.target.value.split('\n'):e.target.value}}))} maxLength={key==='additional_context'?5000:key==='secondary_audience'?500:3220} /></label>)}</details>
+   </details>
    <div className="profile-actions"><button type="button" className="button secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Save audience profile'}</button></div>
-   {profileId&&!preview&&<ProfileChat profileId={profileId} onApply={async proposal=>{await onSave(applyProfileProposal(draft,proposal));onClose();}} />}
   </>}
   {error&&<p className="error-message" role="alert">{error}</p>}
  </div>;

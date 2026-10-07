@@ -30,7 +30,7 @@ it('shows gesture controls and clearly labels the screenshot preview boundary',(
 it('assembles an actual MP4 rather than labeling the raw presenter as MP4',()=>{
  const html=renderToStaticMarkup(<FinishedVideo jobId="job" scriptId="script" plan={newVideoPlan()} rawVideoUrl="https://video.example.com/presenter.mp4"/>);
  expect(html).not.toContain('https://video.example.com/presenter.mp4');
- expect(html).toContain('Preparing finished MP4');
+ expect(html).toContain('Opening your saved video');
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);
