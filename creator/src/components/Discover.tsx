@@ -9,6 +9,7 @@ import {
   type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
 } from "../lib/research-client";
 import "./discover.css";
+import {researchSortLabels,type ResearchSort} from '../domain/research-sort';
 import {resolveArticleWindow,localDate,type ArticleDate} from '../domain/research-window';
 
 const activeStatuses = new Set(["queued", "researching", "reviewing_sources", "ranking"]);
@@ -68,19 +69,20 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
   const [sourceMode,setSourceMode]=useState<'all'|'videos'|'articles'>('videos');
+  const [sort,setSort]=useState<ResearchSort>('discovered');
   const [articleDate,setArticleDate]=useState<ArticleDate>({preset:'week',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
   const discoverRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async () => {
-    const next = await loadResearchFeed(profile?.id, { filter: historyFilter, sourceMode, offset: pageOffset, limit: archivePageSize });
+    const next = await loadResearchFeed(profile?.id, { filter: historyFilter, sourceMode, sort, offset: pageOffset, limit: archivePageSize });
     setFeed(next);
     if (!next.opportunities.length && next.opportunityTotal > 0 && pageOffset >= next.opportunityTotal) {
       setPageOffset(Math.max(0, Math.floor((next.opportunityTotal - 1) / archivePageSize) * archivePageSize));
     }
     return next;
-  }, [historyFilter, pageOffset, profile?.id, sourceMode]);
+  }, [historyFilter, pageOffset, profile?.id, sourceMode, sort]);
   useEffect(() => { setPageOffset(0); }, [profile?.id]);
   useEffect(() => { void load().catch(() => setError("Discover could not load. Refresh to retry.")); }, [load]);
   const activeJobs = useMemo(() => feed?.jobs.filter((job) => activeStatuses.has(job.status)) ?? [], [feed]);
@@ -135,7 +137,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
       <div className="discover-source-options"><div role="group" aria-label="Source type">{(['videos','articles','all'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>{setSourceMode(mode);setPageOffset(0);setFeed(null);}}>{mode==='videos'?'Videos':mode==='articles'?'Articles':'All'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}</>}</div>
       {sourceMode==='all'?<p className="discover-library-hint">Select Videos or Articles above to find new ideas.</p>:<><section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'We’ll look for clips you can react to.'}</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} ${sourceMode==='articles'?'articles':'clips'}`}>{count}</button>)}</div></div></section></>}
 
-      <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
+      <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav><label className="discover-sort">Sort by<select value={sort} disabled={busy} onChange={e=>{setSort(e.target.value as ResearchSort);setPageOffset(0);}}>{Object.entries(researchSortLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       {activeJobs.map((job) => {
         const progress = progressForResearch(job);
         return <section className="research-progress" key={job.id} aria-label={`${progress.title}: ${progress.percent}% complete`}>

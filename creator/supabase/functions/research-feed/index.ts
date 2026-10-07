@@ -2,11 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import {filterResearchSource} from '../../../src/domain/research-feed-source.ts';
+import {orderResearch} from '../../../src/domain/research-sort.ts';
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const feedFilterSchema = z.enum(["all", "saved", "used", "skipped"]);
-const inputSchema = z.object({ sourceMode:z.enum(["all","videos","articles"]).default("all"), profileId: z.string().uuid().optional(), filter: feedFilterSchema.default("all"), offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(6).max(30).default(8) }).strict();
+const inputSchema = z.object({ sort:z.enum(['match','newest','oldest','discovered']).default('discovered'), sourceMode:z.enum(["all","videos","articles"]).default("all"), profileId: z.string().uuid().optional(), filter: feedFilterSchema.default("all"), offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(6).max(30).default(8) }).strict();
 type FeedFilter = z.infer<typeof feedFilterSchema>;
 const opportunityFields = "id,content_profile_id,title,factual_summary,why_audience_cares,creator_connection,recommended_angle,suggested_hook,category,published_at,timeliness_score,relevance_score,rank_score,source_snapshot,uncertainty,status,created_at,updated_at";
 function headersFor(origin: string | null): Record<string, string> {
@@ -36,7 +37,7 @@ Deno.serve(async (request) => {
       .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(30);
     let opportunities = db.from("creator_research_opportunities").select(opportunityFields, { count: "exact" }).eq("user_id", auth.user.id);
     if (input.profileId) opportunities = opportunities.eq("content_profile_id", input.profileId);
-    opportunities = applyFilter(filterResearchSource(opportunities,input.sourceMode), input.filter).order("created_at", { ascending: false }).range(input.offset, input.offset + input.limit - 1);
+    opportunities = orderResearch(applyFilter(filterResearchSource(opportunities,input.sourceMode), input.filter),input.sort).range(input.offset, input.offset + input.limit - 1);
     const countFor = async (filter: FeedFilter) => {
       let query = db.from("creator_research_opportunities").select("id", { count: "exact", head: true }).eq("user_id", auth.user.id);
       if (input.profileId) query = query.eq("content_profile_id", input.profileId);
