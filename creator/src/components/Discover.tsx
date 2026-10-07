@@ -9,6 +9,7 @@ import {
   type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
 } from "../lib/research-client";
 import "./discover.css";
+import {resolveArticleWindow,localDate,type ArticleDate} from '../domain/research-window';
 
 const activeStatuses = new Set(["queued", "researching", "reviewing_sources", "ranking"]);
 const rejectReasons = [
@@ -66,6 +67,8 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const [reason, setReason] = useState<string>("not_relevant");
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
+  const [sourceMode,setSourceMode]=useState<'videos'|'articles'>('videos');
+  const [articleDate,setArticleDate]=useState<ArticleDate>({preset:'week',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
   const discoverRef = useRef<HTMLElement>(null);
@@ -97,7 +100,10 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   }
   async function find(count: 10 | 20 | 30) {
     if (!profile) { setError("Create a content profile before researching."); return; }
-    await action(async () => { await requestResearch(profile.id, count); });
+    await action(async () => {
+      if(sourceMode==='articles')try{resolveArticleWindow(articleDate);}catch{throw Error('Choose valid dates within the past year, ending no later than today.');}
+      await requestResearch(profile.id, count,{sourceMode,...(sourceMode==='articles'?{articleDate}:{})});
+    });
   }
   const visible = feed?.opportunities ?? [];
   const filterCount = (filter: HistoryFilter) => feed?.statusCounts?.[filter] ?? 0;
@@ -125,7 +131,9 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>Discover is almost ready.</h2><p>This feature is available to selected Pro pilot accounts.</p></div> : <>
-      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>We’ll look for clips you can react to.</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 clips</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} clips`}>{count}</button>)}</div></div></section>
+      <div className="discover-source-options"><div role="group" aria-label="Search for">{(['videos','articles'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>setSourceMode(mode)}>{mode==='videos'?'Videos':'Articles'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}<small>Publication dates · {articleDate.timezone}. Searches accessible public web articles through Perplexity.</small></>}</div>
+      <section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'We’ll look for clips you can react to.'}</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} ${sourceMode==='articles'?'articles':'clips'}`}>{count}</button>)}</div></div></section>
+      {feed?.jobs[0]?.status==='ready'&&<p role="status">{feed.jobs[0].phase}</p>}
       <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav>
       {activeJobs.map((job) => {
         const progress = progressForResearch(job);
@@ -140,6 +148,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
         const source = opportunity.source_snapshot[0];
         const embed = source ? embeddedClip(source.url) : null;
         const needsCheck = Boolean(opportunity.uncertainty);
+        const isArticle=source?.sourceType==='article';
         return <article className="opportunity-card" key={opportunity.id}>
           <div className="signal-rail" aria-hidden="true" />
           <div className={`opportunity-layout${embed ? " has-inline-clip" : ""}`}>
@@ -153,6 +162,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
               <div className="signal-main">
                 <div>
                   <h2>{opportunity.title}</h2>
+                  {isArticle&&<p><a href={source.url} target="_blank" rel="noreferrer">Read article · {new URL(source.url).hostname.replace(/^www\./,'')}</a> · Published {opportunity.published_at?.slice(0,10)}<br/>{opportunity.why_audience_cares}</p>}
                   <p className="opportunity-summary">{opportunity.factual_summary}</p>
                 </div>
                 <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>

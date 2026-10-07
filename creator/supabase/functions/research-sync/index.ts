@@ -197,6 +197,13 @@ Deno.serve(async (request) => {
       return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data }] : [];
     });
     const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
+    if (!ranked.length && brief.data.sourceMode==='articles') {
+      await releaseReservation(auth.user.id,Number(job.reserved_count),0);
+      const result=await db.from('creator_research_jobs').update({status:'ready',phase:'No new relevant articles with verified dates were found in this window. Try a wider date range.',delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
+      if(result.error)throw Error('PERSISTENCE');
+      await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model,status:'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),accepted_count:0,request_metadata:{sourceMode:'articles',articleWindow:brief.data.articleWindow}});
+      return reply(headers,{job:result.data,deliveredCount:0});
+    }
     if (!ranked.length) throw new Error("NO_NEW_OPPORTUNITIES");
     await db.from("creator_research_jobs").update({ status: "ranking", phase: "Ranking opportunities…", updated_at: new Date().toISOString() }).eq("id", job.id);
 
@@ -249,7 +256,7 @@ Deno.serve(async (request) => {
     await releaseReservation(auth.user.id, Number(job.reserved_count), delivered);
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", phase: "Your opportunities are ready.", delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:"Your opportunities are ready.", delivered_count: delivered, candidate_count: providerRun.candidates.length,
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).select("*").maybeSingle();
     if (finalJob.error || !finalJob.data) throw new Error("PERSISTENCE");
@@ -258,7 +265,7 @@ Deno.serve(async (request) => {
       provider_response_id: providerRun.id, model: providerRun.model ?? null, status: "completed", usage,
       provider_cost_usd: providerCost(usage), candidate_count: providerRun.candidates.length, accepted_count: delivered,
       elapsed_ms: job.started_at ? Date.now() - new Date(String(job.started_at)).getTime() : null,
-      request_metadata: { requestedCount: job.requested_count, sourceCount: providerRun.sources.length },
+      request_metadata: { requestedCount: job.requested_count, sourceCount: providerRun.sources.length,sourceMode:brief.data.sourceMode,articleWindow:brief.data.articleWindow },
     });
     return reply(headers, { job: finalJob.data, deliveredCount: delivered });
   } catch (error) {

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type {ArticleDate} from '../domain/research-window';
 
 export type ResearchSource = { providerSourceId: number; title: string; url: string; snippet: string; publishedAt: string | null; sourceType: string };
 export type ResearchOpportunity = {
@@ -18,6 +19,7 @@ async function invoke<T>(name: string, body: unknown): Promise<T> {
   let code = "UNAVAILABLE";
   try { code = (await error.context.json()).code ?? code; } catch { /* A generic retry message is safer than a raw upstream error. */ }
   const messages: Record<string, string> = {
+    ARTICLE_DATE_RANGE:'Choose valid publication dates within the past year, ending no later than today.',
     FEATURE_DISABLED: "Discover is not available for your account yet.", ENTITLEMENT: "Discover is not available for your account yet.",
     QUOTA: "You have used this period’s available opportunities.", NOT_CONFIGURED: "Research is being connected. Please try again later.",
     PROFILE: "Choose one of your content profiles before researching.",
@@ -26,7 +28,7 @@ async function invoke<T>(name: string, body: unknown): Promise<T> {
 }
 
 export const loadResearchFeed = (profileId: string | undefined, options: { filter: ResearchFeedFilter; offset: number; limit: number }) => invoke<ResearchFeed>("research-feed", { ...(profileId ? { profileId } : {}), ...options });
-export const requestResearch = (profileId: string, requestedCount: 10 | 20 | 30) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount, idempotencyKey: crypto.randomUUID() });
+export const requestResearch = (profileId: string, requestedCount: 10 | 20 | 30,options:{sourceMode:'videos'|'articles';articleDate?:ArticleDate}={sourceMode:'videos'}) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount,...options, idempotencyKey: crypto.randomUUID() });
 export const syncResearch = (jobId: string) => invoke<{ job: ResearchJob }>("research-sync", { jobId });
 export const researchFeedback = (opportunityId: string, action: "saved" | "rejected" | "selected" | "script_created", reason?: string) => invoke<{ ok: true }>("research-feedback", { opportunityId, action, ...(reason ? { reason } : {}) });
 export const refineResearchOpportunity = (opportunityId: string, instruction: string) => invoke<{ opportunity: ResearchOpportunity }>("research-refine", { opportunityId, instruction });

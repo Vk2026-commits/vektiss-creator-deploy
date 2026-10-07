@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {articleDateSchema,articleWindowSchema} from './research-window.ts';
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
 const sourceDate = z
@@ -75,7 +76,7 @@ export type ProviderResearchCandidate = z.infer<
 
 export const providerResearchEnvelopeSchema = z
   .object({
-    opportunities: z.array(providerResearchCandidateSchema).min(1).max(50),
+    opportunities: z.array(providerResearchCandidateSchema).max(50),
   })
   .strict();
 
@@ -103,6 +104,8 @@ export const researchBriefSchema = z
     researchSourcePlatforms: z.array(z.enum(["TikTok", "Instagram", "YouTube"])).max(3).default([]),
     researchScreeningCriteria: z.string().trim().max(12000).default(""),
     researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
+    sourceMode:z.enum(['videos','articles']).default('videos'),
+    articleWindow:articleWindowSchema.optional(),
   })
   .strict();
 export type ResearchBrief = z.infer<typeof researchBriefSchema>;
@@ -112,6 +115,8 @@ export const researchRequestSchema = z
     profileId: z.string().uuid(),
     requestedCount: z.union([z.literal(10), z.literal(20), z.literal(30)]),
     idempotencyKey: z.string().uuid(),
+    sourceMode:z.enum(['videos','articles']).default('videos'),
+    articleDate:articleDateSchema.optional(),
   })
   .strict();
 

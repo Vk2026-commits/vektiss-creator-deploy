@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { startNativeDiscovery } from "../_shared/platform-discovery.ts";
+import {startDeepResearch} from '../_shared/research-provider.ts';
+import {resolveArticleWindow} from '../../../src/domain/research-window.ts';
 import { researchBriefSchema, researchRequestSchema, type ResearchBrief } from "../../../src/domain/research.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
@@ -20,6 +22,7 @@ function headersFor(origin: string | null): Record<string, string> {
 }
 function reply(headers: Record<string, string>, body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers }); }
 function safeCode(error: unknown) {
+  if(error instanceof Error&&error.message==='ARTICLE_DATE_RANGE')return 'ARTICLE_DATE_RANGE';
   if (error instanceof Error && ["APIFY_NOT_CONFIGURED", "APIFY_PROVIDER", "PERSISTENCE", "ENTITLEMENT", "QUOTA"].includes(error.message)) return error.message;
   return "UNAVAILABLE";
 }
@@ -110,6 +113,13 @@ Deno.serve(async (request) => {
     if (profileError || !profile) return reply(headers, { code: "PROFILE" }, 403);
     const { data: creator } = await db.from("creator_profiles").select("context").eq("id", profile.creator_profile_id).eq("user_id", userId).maybeSingle();
     const brief = buildBrief(creator as Record<string, unknown> | null, profile as Record<string, unknown>);
+    brief.sourceMode=input.sourceMode;
+    if(input.sourceMode==='articles'){
+      brief.articleWindow=resolveArticleWindow(input.articleDate??{preset:'week',timezone:'UTC'});
+      brief.researchSourcePlatforms=[];
+      brief.researchScreeningCriteria='';
+      brief.researchReferenceUrls=[];
+    }
 
     await reserve(userId, input.requestedCount);
     reservation = input.requestedCount;
@@ -127,6 +137,13 @@ Deno.serve(async (request) => {
       throw new Error("PERSISTENCE");
     }
 
+    if(input.sourceMode==='articles'){
+      const run=await startDeepResearch({brief,requestedCount:input.requestedCount,candidateMultiplier:1});
+      const updated=await db.from('creator_research_jobs').update({provider_response_id:run.id,status:'researching',phase:'Finding relevant web articles…',started_at:new Date().toISOString(),provider_metadata:{stage:'article_research',sourceMode:'articles'},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();
+      if(updated.error||!updated.data)throw Error('PERSISTENCE');
+      await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{requestedCount:input.requestedCount,sourceMode:'articles',articleWindow:brief.articleWindow}});
+      reservation=0;return reply(headers,{job:updated.data,reused:false},202);
+    }
     const providerRun = await startNativeDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId });
     const updated = await db.from("creator_research_jobs").update({
       provider_response_id: providerRun.id, status: "researching", phase: "Finding direct TikTok videos…", started_at: new Date().toISOString(),
