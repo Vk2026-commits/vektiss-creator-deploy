@@ -29,3 +29,5 @@
 .discover-source-options button,.discover-source-options select,.discover-source-options input{min-height:44px;max-width:100%;padding:8px 12px;border:1px solid #cddbeb;border-radius:8px;background:white;color:#17263c;font:inherit}
 .discover-source-options button[aria-pressed=true]{background:#1677ff;color:white}
 .discover-source-options small{flex-basis:100%}
+.discover .discover-filters{margin:16px 0 20px;flex-wrap:wrap}
+.discover .discover-library-hint{margin:0 0 16px;color:var(--soft-ink);line-height:1.5}
