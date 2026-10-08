@@ -1,6 +1,6 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {PublicError} from './avatar-contract.ts';
-import {providerVideo,testExcerpt,testPayload,fullScript,type TestCommand} from './presenter-test.ts';
+import {providerVideo,testExcerpt,testPayload,fullScript,isCreditError,creditErrorMessage,type TestCommand} from './presenter-test.ts';
 import {credentialVault,type SealedCredential} from './credential-crypto.ts';
 import {HeyGenCatalog} from './heygen.ts';
 import {selectedVoiceForPlan} from './selected-voice.ts';
@@ -53,12 +53,13 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
    if(job.cleaned_path||!job.provider_video_id||job.status==='failed')return displayJob(job);
    const key=await keyFor(user,job.connection_id);
    const data=await providerVideo(key,`/${encodeURIComponent(job.provider_video_id)}`);
-   const status=data.status==='completed'?'completed':data.status==='failed'?'failed':data.status==='processing'?'processing':'pending';
+   const creditFailure=isCreditError(data.error??data.error_message??data.message??'');
+   const status=creditFailure?'failed':data.status==='completed'?'completed':data.status==='failed'?'failed':data.status==='processing'?'processing':'pending';
    let video_url:string|null=null;
    if(typeof data.video_url==='string'){
     try{const url=new URL(data.video_url);if(url.protocol==='https:'&&!url.username&&!url.password)video_url=url.href;}catch{/* no unsafe media links */}
    }
-   const patch={status,video_url,message:status==='failed'?'HeyGen could not complete this test. Review it in your HeyGen dashboard before another attempt.':job.message};
+   const patch={status,video_url,message:creditFailure?creditErrorMessage:status==='failed'?'HeyGen could not complete this render. Review it in your HeyGen dashboard before another attempt.':job.message};
    const saved=await db.from('creator_presenter_tests').update(patch).eq('id',job.id).eq('user_id',user).select('*').single();
    if(saved.error)throw Error('STORAGE');return displayJob(saved.data);
   }

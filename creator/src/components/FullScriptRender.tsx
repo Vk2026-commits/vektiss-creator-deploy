@@ -12,6 +12,10 @@ const jobSchema=z.object({id:z.string(),status:z.string(),video_url:z.string().n
 const reviewSchema=z.object({revision:z.string(),estimated_seconds:z.number(),snapshot:z.object({script:z.string(),avatar_name:z.string(),voice_name:z.string().nullable().optional()}),job:jobSchema.nullable()});
 export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,sourceKind='article',sourceUrl='',onPlanChange}:{scriptId:string;revision:string;disabled:boolean;plan:VideoPlan;onEditLayout:()=>void;sourceKind?:'article'|'video'|'graphic';sourceUrl?:string;onPlanChange:(p:VideoPlan)=>void}){
  const [videoReady,setVideoReady]=useState(false);
+ const [balance,setBalance]=useState<{items:Array<{label:string;value:number;unit:string}>;checked_at:string}|null>(null);
+ const [balanceBusy,setBalanceBusy]=useState(false);const [balanceError,setBalanceError]=useState('');
+ useEffect(()=>{setBalance(null);setBalanceError('');},[plan.avatar_id]);
+ async function checkBalance(){if(!plan.avatar_id||balanceBusy)return;setBalanceBusy(true);setBalanceError('');try{setBalance(z.object({items:z.array(z.object({label:z.string(),value:z.number(),unit:z.string()})),checked_at:z.string()}).parse(await avatarRepository.renderTest({action:'balance',avatar_id:plan.avatar_id})));}catch(e){setBalanceError(e instanceof Error?e.message:'Could not check HeyGen balance.');}finally{setBalanceBusy(false);}}
  const [review,setReview]=useState<z.infer<typeof reviewSchema>|null>(null);
  const [job,setJob]=useState<z.infer<typeof jobSchema>|null>(null);
  const submitting=useRef(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
@@ -28,12 +32,16 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
 	 const backgroundReady=sourceKind==='video'?videoReady:sourceKind==='graphic'?Boolean(plan.article_capture):true;
  return <section className="script-direction render-workspace" aria-label="Full-script presenter">
   <div className="render-settings"><span>{review?`${review.snapshot.avatar_name} · ${review.snapshot.voice_name??'Default voice'} · ${review.estimated_seconds}s reaction`:'Loading saved settings…'}</span><button disabled={busy||active} onClick={onEditLayout}>Edit placement / voice</button></div>
+  <div className="render-more"><button type="button" disabled={balanceBusy||!plan.avatar_id} onClick={()=>void checkBalance()}>{balanceBusy?'Checking HeyGen…':'Check HeyGen balance'}</button>
+   {balance&&<div role="status">{balance.items.length?balance.items.map(item=><p key={item.label}>{item.label}: <strong>{item.unit==='usd'?`$${item.value.toFixed(2)} USD`:`${item.value.toLocaleString()} credits`}</strong></p>):<p>HeyGen did not report a balance for this connection. Check your HeyGen dashboard.</p>}<small>Checked {new Date(balance.checked_at).toLocaleTimeString()}. Balance belongs to the connected HeyGen account; this does not reserve credits.</small></div>}
+   {balanceError&&<p role="alert">{balanceError}</p>}
+  </div>
   {disabled?<p>Saving your selection…</p>:busy&&!review?<RenderProgress value={10} label="Checking saved renders"/>:null}
 	  {job?.status==='completed'?<FinishedVideo sourceKind={sourceKind} jobId={job.id} scriptId={scriptId} plan={plan} rawVideoUrl={job.video_url??undefined}/>:review&&sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}
   {job?.status!=='completed'&&sourceKind==='graphic'&&plan.article_capture&&<GraphicPreview plan={plan}/>}
   {review&&<>
 	   {sourceKind==='article'&&!plan.article_capture&&<p>Creating a presenter-only video. Add a source screenshot in Edit layout only if you want it as the background.</p>}
-   {job?job.status==='failed'?<p role="alert" className="error-message">{job.message||'HeyGen could not complete this avatar. Your script and source are saved.'}</p>:job.status!=='completed'&&<RenderProgress value={job.status==='processing'?60:30} label={`Creating avatar · ${job.status}`}/>:<div className="render-confirmation">
+   {job?job.status==='failed'?<div role="alert" className="error-message"><strong>{/credit|quota|balance/i.test(job.message??'')?'HeyGen credits required — render stopped':'Avatar render failed'}</strong><p>{job.message||'HeyGen could not complete this avatar. Your script and source are saved.'}</p><p>Your script and source are saved. No automatic paid retry will be made.</p></div>:active?<RenderProgress value={job.status==='processing'?60:30} label={`Creating avatar · ${job.status}`}/>:job.status!=='completed'&&<p role="alert">Render status needs checking. Use Refresh status below before starting another paid render.</p>:<div className="render-confirmation">
     {busy&&<RenderProgress value={15} label="Submitting to HeyGen"/>}
     <small>Creates one paid HeyGen render with your approved script.</small><div className="render-actions"><button disabled={busy} onClick={onEditLayout}>← Back</button><button className="button" disabled={disabled||busy||!backgroundReady} onClick={()=>void start()}>{busy?'Submitting…':'Confirm & create with HeyGen'}</button></div>
    </div>}

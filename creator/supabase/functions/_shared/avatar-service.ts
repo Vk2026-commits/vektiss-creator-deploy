@@ -113,6 +113,11 @@ export function createAvatarService(
         );
       if(command.action==='prepare_test'||command.action==='start_test'||command.action==='test_status'||command.action==='download_test')return presenterTestService(db,vault)(userId,command);
       if (command.action === "library") return library(userId);
+      if(command.action==='balance'){
+        const {data:avatar,error}=await db.from('avatar_profiles').select('connection_id').eq('id',command.avatar_id).eq('user_id',userId).single();
+        if(error||!avatar)throw new PublicError('NOT_AVAILABLE','That presenter is not available in your account.',403);
+        return withProvider(userId,avatar.connection_id,p=>{if(!p.balance)throw new PublicError('UNAVAILABLE','Balance lookup is unavailable.',503);return p.balance();});
+      }
       if (command.action === "connect") {
         const existing = (await library(userId)).connections.find(
           (c) => c.provider === command.provider,

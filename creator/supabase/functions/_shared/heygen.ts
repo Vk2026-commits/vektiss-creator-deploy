@@ -26,6 +26,7 @@ const pagination = { has_more: z.boolean(), next_token: optionalText };
 export interface AvatarCatalogProvider {
   readonly id: "heygen";
   verify(): Promise<{ accountLabel: string }>;
+  balance?(): Promise<{items:Array<{label:string;value:number;unit:string}>;checked_at:string}>;
   listAvatars(
     cursor: string | null,
     ownership: "private" | "public",
@@ -159,6 +160,15 @@ export class HeyGenCatalog implements AvatarCatalogProvider {
       .object({ data: z.object({ username: z.string().min(1).max(200) }) })
       .parse(await this.request("/v3/users/me"));
     return { accountLabel: raw.data.username };
+  }
+  async balance() {
+    const raw = z.object({data:z.object({billing_type:z.string().nullable().optional(),wallet:z.object({currency:z.enum(['usd','credits']),remaining_balance:z.number().finite().nullable()}).nullable().optional(),subscription:z.object({credits:z.object({premium_credits:z.object({remaining:z.number().finite().nullable()}).optional(),add_on_credits:z.object({remaining:z.number().finite().nullable()}).optional()})}).nullable().optional(),usage_based:z.object({spending_current_usd:z.number().finite().nullable(),spending_cap_usd:z.number().finite().nullable()}).nullable().optional()})}).parse(await this.request('/v3/users/me'));
+    const d=raw.data;const items:Array<{label:string;value:number;unit:string}>=[];
+    const add=(label:string,value:number|null|undefined,unit:string)=>{if(typeof value==='number')items.push({label,value,unit});};
+    if(d.billing_type==='wallet'&&d.wallet)add('API balance',d.wallet.remaining_balance,d.wallet.currency);
+    if(d.billing_type==='subscription'){add('Premium credits',d.subscription?.credits.premium_credits?.remaining,'credits');add('Add-on credits',d.subscription?.credits.add_on_credits?.remaining,'credits');}
+    if(d.billing_type==='usage_based'){add('Current API spend',d.usage_based?.spending_current_usd,'usd');add('API spending cap',d.usage_based?.spending_cap_usd,'usd');}
+    return {items,checked_at:new Date().toISOString()};
   }
   async listAvatars(cursor: string | null, ownership: "private" | "public") {
     const params = new URLSearchParams({ limit: "50", ownership });
