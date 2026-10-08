@@ -14,6 +14,7 @@ const lookSchema = z.object({
   preview_image_url: optionalText,
   default_voice_id: optionalText,
   status: z.string().optional(),
+  avatar_type:z.string().optional(),
   supported_api_engines: z.array(z.string()).max(20).optional(),
 });
 const voiceSchema = z.object({
@@ -64,6 +65,7 @@ function mapLook(raw: z.infer<typeof lookSchema>): CatalogAvatar {
     thumbnail_url: thumbnail(raw.preview_image_url),
     default_voice_id: raw.default_voice_id ?? null,
     engines: raw.supported_api_engines ?? [],
+    avatar_type:raw.avatar_type,
     status:
       raw.status === "completed" || raw.status === "ready"
         ? "ready"

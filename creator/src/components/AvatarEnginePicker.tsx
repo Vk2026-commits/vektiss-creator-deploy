@@ -1,0 +1,14 @@
+import {useEffect,useState} from 'react';
+import {catalogAvatarSchema} from '../../supabase/functions/_shared/avatar-contract';
+import {avatarRepository} from '../lib/avatar-repository';
+import type {VideoPlan} from '../domain/video-plan';
+const options=[['avatar_iii','Avatar III — Economy',.60],['avatar_iv','Avatar IV — Premium',4.83],['avatar_v','Avatar V — Advanced',7.20]] as const;
+export function AvatarEnginePicker({plan,onChange,disabled,seconds,onValidity}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void;disabled:boolean;seconds:number;onValidity:(valid:boolean)=>void}){
+ const [look,setLook]=useState<ReturnType<typeof catalogAvatarSchema.parse>|null>(null);
+ const [error,setError]=useState('');const [refresh,setRefresh]=useState(0);
+ useEffect(()=>{let live=true;setLook(null);setError('');if(plan.avatar_id)void avatarRepository.renderTest({action:'engine_capabilities',avatar_id:plan.avatar_id}).then(v=>{if(live)setLook(catalogAvatarSchema.parse(v));}).catch(()=>{if(live)setError('Could not verify engines. Refresh to try again.');});return()=>{live=false;};},[plan.avatar_id,refresh]);
+ useEffect(()=>{if(plan.avatar_engine===null&&look?.engines.includes('avatar_iii'))onChange({...plan,avatar_engine:'avatar_iii'});},[look,plan,onChange]);
+ useEffect(()=>{onValidity(plan.avatar_engine===undefined||Boolean(look?.engines.includes(plan.avatar_engine??'')));},[look,plan.avatar_engine,onValidity]);
+ const selected=options.find(o=>o[0]===(plan.avatar_engine??'avatar_iv'));
+ return <section aria-label="Avatar engine"><label>Avatar engine<select disabled={disabled||!look} value={plan.avatar_engine===null?'':plan.avatar_engine??'avatar_iv'} onChange={e=>onChange({...plan,avatar_engine:e.target.value as VideoPlan['avatar_engine']})}><option value="" disabled>Choose an engine</option>{options.map(([id,label])=><option key={id} value={id} disabled={!look?.engines.includes(id)}>{label}{look&&!look.engines.includes(id)?' — unavailable':''}</option>)}</select></label><small>Only engines supported by this avatar are available. Voice engine is separate.</small>{error&&<p role="alert">{error}</p>}{!look&&!error&&<p role="status">Checking engine support…</p>}<button type="button" disabled={disabled} onClick={()=>setRefresh(n=>n+1)}>Refresh engine options</button>{plan.avatar_engine===undefined&&<p>Existing project: Avatar IV (previous default).</p>}{selected&&plan.avatar_engine!==null&&<p>{look?.avatar_type==='digital_twin'?`Estimated HeyGen cost: $${(seconds/60*selected[2]).toFixed(2)} for about ${seconds}s of avatar speech ($${selected[2].toFixed(2)}/min). Pay-as-you-go reference estimate, not a guaranteed charge.`:'Check HeyGen pricing for this avatar and account.'}</p>}</section>;
+}

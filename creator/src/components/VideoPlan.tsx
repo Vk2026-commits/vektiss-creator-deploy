@@ -1,5 +1,6 @@
 import { PresenterPlacement } from './PresenterPlacement';
 import {STEPHEN_AVATAR} from '../domain/avatar-framing';
+import {AvatarEnginePicker} from './AvatarEnginePicker';
 import {VoicePicker} from './VoicePicker';
 import { useEffect, useRef, useState } from 'react';
 import { AvatarPicture } from './AvatarPicture';
@@ -11,6 +12,7 @@ import { planReady, type VideoPlan as Plan } from '../domain/video-plan';
 import { scriptText, type ScriptInput } from '../domain/scripts';
 
 export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void}) {
+ const [engineValid,setEngineValid]=useState(plan.avatar_engine===undefined);
  const [avatars,setAvatars]=useState<Avatar[]>([]);
  const [loading,setLoading]=useState(!preview);
  const [error,setError]=useState('');
@@ -24,10 +26,10 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
  },[]);
  useEffect(()=>{heading.current?.focus();heading.current?.scrollIntoView({block:'start'});},[plan.step]);
  useEffect(()=>{if(preview)return;let active=true;setLoading(true);setError('');avatarRepository.library().then(lib=>{if(active)setAvatars(lib.avatars.filter(a=>usableAvatar(a,lib.connections)));}).catch(()=>{if(active)setError('Could not load your avatar library.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[preview,retry]);
- const update=(patch:Partial<Plan>)=>onChange({...plan,...patch,...(patch.avatar_id&&patch.avatar_id!==plan.avatar_id?{voice_engine:patch.avatar_id===STEPHEN_AVATAR?'fish' as const:'auto' as const}:{})});
+ const update=(patch:Partial<Plan>)=>onChange({...plan,...patch,...(patch.avatar_id&&patch.avatar_id!==plan.avatar_id?{avatar_engine:null,voice_engine:patch.avatar_id===STEPHEN_AVATAR?'fish' as const:'auto' as const}:{})});
  const words=scriptText(script).split(/\s+/).filter(Boolean).length;
 	 const selectedAvatar=avatars.find(a=>a.id===plan.avatar_id);
-	 const presenterReady=plan.presenter==='avatar'&&Boolean(selectedAvatar);
+	 const presenterReady=plan.presenter==='avatar'&&Boolean(selectedAvatar)&&plan.avatar_engine!==null&&engineValid;
 	 const choosing=plan.step==='presenter'||plan.step==='visuals';
 	 const videoSource=script.brief.kind==='video';
 	 const graphicSource=script.brief.kind==='graphic';
@@ -40,6 +42,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
  {choosing&&<><div className="presenter-picker"><h3>Pick your presenter</h3>{plan.presenter!=='avatar'&&<button type="button" className="button" onClick={()=>update({presenter:'avatar'})}>Choose an avatar</button>}
  {plan.presenter==='avatar'&&<>{loading?<p>Loading presenters…</p>:error?<p role="alert">{error} <button onClick={()=>setRetry(r=>r+1)}>Retry</button></p>:avatars.length?<div className="avatar-picture-grid" aria-label="Choose a presenter">{avatars.map(a=><button type="button" key={a.id} disabled={busy} aria-pressed={plan.avatar_id===a.id} onClick={()=>update({avatar_id:a.id,avatar_name:a.name,voice:undefined})}><AvatarPicture url={a.thumbnail_url} name={a.name}/><strong>{a.name}</strong>{a.voice_name&&<small>{a.voice_name}</small>}</button>)}</div>:<p>No connected presenters yet. Connect and import one in Avatar library, then return here. Your choices stay in this workspace.</p>}</>}
  {plan.presenter==='avatar'&&<button type="button" disabled={loading||busy||preview} onClick={()=>setRetry(value=>value+1)}>Refresh presenters</button>}
+ {selectedAvatar&&<AvatarEnginePicker key={selectedAvatar.id} onValidity={setEngineValid} plan={plan} onChange={onChange} disabled={busy||preview} seconds={Math.ceil(words/2.5)}/>}
  {selectedAvatar&&<VoicePicker key={selectedAvatar.id} avatar={selectedAvatar} plan={plan} onChange={onChange} disabled={busy||preview}/>}
  </div></>}
 	 {choosing&&<><details><summary>Video shape · {plan.format}</summary><label>Video shape<select value={plan.format} onChange={e=>update({format:e.target.value as Plan['format']})}><option value="portrait">Tall · phone video</option><option value="landscape">Wide · landscape</option><option value="square">Square</option></select></label></details>{videoSource?<PresenterPlacement plan={plan} onChange={onChange}/>:<ArticleLayout plan={plan} graphic={graphicSource} sourceUrl={script.brief.url} onChange={onChange}/>}<div className="layout-next">{!presenterReady&&<p role="status">Choose a connected presenter to continue.</p>}{graphicSource&&!backgroundReady&&<p role="status">Choose your graphic to continue.</p>}{!videoSource&&!graphicSource&&!backgroundReady&&<p role="status">A source screenshot is optional. Continue to create a presenter-only video.</p>}<button className="button" disabled={busy||loading||!presenterReady||(graphicSource&&!backgroundReady)} onClick={onSave}>{busy?'Saving…':videoSource?'Save plan & review →':'Next: create & download →'}</button><button disabled={busy} onClick={onEdit}>Back to your script</button></div></>}

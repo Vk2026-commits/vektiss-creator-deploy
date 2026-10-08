@@ -1,5 +1,6 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {PublicError} from './avatar-contract.ts';
+import {engineEstimate} from './avatar-engine.ts';
 import {providerVideo,testExcerpt,testPayload,fullScript,isCreditError,creditErrorMessage,type TestCommand} from './presenter-test.ts';
 import {credentialVault,type SealedCredential} from './credential-crypto.ts';
 import {HeyGenCatalog} from './heygen.ts';
@@ -75,7 +76,15 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const snapshot={scope,avatar_id:avatar.provider_avatar_id,voice_id:selectedVoice?.provider_voice_id??avatar.provider_voice_id,avatar_name:avatar.name,voice_name:selectedVoice?.name??avatar.voice_name,script:scope==='full'?fullScript(script):testExcerpt(script),aspect_ratio:plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9'};
   if(script.content_profile_id===steveReactionProfile||plan.avatar_id===STEPHEN_AVATAR)snapshot.script=spokenEmergencyNumber(snapshot.script);
   // Include the engine in the paid-job revision; never reuse audio from another engine.
-  const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string};
+  const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string;avatar_engine?:string};
+  let avatarType:string|undefined;
+  if(plan.avatar_engine!==undefined){
+   if(!['avatar_iii','avatar_iv','avatar_v'].includes(plan.avatar_engine))throw new PublicError('AVATAR_ENGINE','Choose an avatar engine before rendering.',400);
+   const look=await new HeyGenCatalog(await keyFor(user,avatar.connection_id)).getAvatar(avatar.provider_avatar_id);
+   if(!look.engines.includes(plan.avatar_engine))throw new PublicError('AVATAR_ENGINE','This avatar engine is unavailable. Refresh capabilities in Choose the look.',400);
+   engineSnapshot.avatar_engine=plan.avatar_engine;
+   avatarType=look.avatar_type;
+  }
   if(plan.voice_engine==='fish')engineSnapshot.voice_engine='fish';
   if(!snapshot.script.trim())throw new PublicError('SCRIPT','The script is empty.');
   // Size, article and save timestamps do not change the paid presenter asset.
@@ -83,7 +92,8 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const revision=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
   const prior=await db.from('creator_presenter_tests').select('*').eq('script_id',script.id).eq('revision',revision).eq('user_id',user).maybeSingle();
   if(prior.error)throw Error('STORAGE');
-  if(command.action==='prepare_test')return {revision,snapshot,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
+  const estimate=engineEstimate(plan.avatar_engine??'avatar_iv',avatarType,Math.ceil(snapshot.script.split(/\s+/).length/2.5));
+  if(command.action==='prepare_test')return {revision,snapshot,estimate,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
   if(prior.data){
    if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
@@ -97,7 +107,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Read credentials BEFORE reserving, but reserve durably BEFORE any paid call.
   const key=await keyFor(user,avatar.connection_id);
   const id=crypto.randomUUID();
-  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot}).select('*').single();
+  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate}}).select('*').single();
   if(reserved.error)throw new PublicError('EXISTS','A test may already be starting. Refresh its status; do not submit again.',409);
   try{
    const result=await providerVideo(key,'',testPayload(snapshot));

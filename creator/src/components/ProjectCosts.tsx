@@ -4,7 +4,7 @@ import {usageSummary,type ProcessingUsage} from '../domain/project-cost';
 import './project-costs.css';
 type AI={id:string;project_id:string|null;model:string;action:string;status:string;estimated_cost_usd:number|null;pricing_version:string|null};
 type Video={id:string;title:string;brief:{cost_project_id?:string}};
-type Render={id:string;script_id:string;status:string;provider_video_id:string|null;snapshot:{scope?:string;voice_engine?:string}};
+type Render={id:string;script_id:string;status:string;provider_video_id:string|null;snapshot:{scope?:string;voice_engine?:string;avatar_engine?:string;cost_estimate?:{estimated_cost_usd:number|null;basis:string}}};
 type Entry={id:string;project_id:string;kind:'heygen'|'support';render_id:string|null;quantity:number;unit_rate_usd:number;note:string};
 type Data={videos:Video[];ai:AI[];jobs:ProcessingUsage[];renders:Render[];entries:Entry[]};
 const money=(n:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:4}).format(n);
@@ -75,6 +75,7 @@ export function ProjectCosts({preview=false}:{preview?:boolean}){
    <p>Bunny wall time includes waiting for providers, not billed CPU time. Storage is a last-observed retained-file snapshot, not byte-month billing. Transfer, idle hosting, Vercel, Supabase and other shared costs are not included. Missing values are not zero-cost work.</p>
    <details><summary>Attempts and evidence</summary>
     <ul>{ai.map(a=><li key={a.id}>OpenAI · {a.model} · {a.status} · {a.estimated_cost_usd===null?'Cost unknown':money(Number(a.estimated_cost_usd))} · {a.pricing_version??'No rate snapshot'}<small>{a.id}</small></li>)}{jobs.map(j=><li key={j.id}>{j.operation.split('/').at(-1)} · {j.status} · {j.elapsed_ms===null?'Duration unknown':`${j.elapsed_ms/1000}s`}<small>{j.id}</small></li>)}</ul>
+    <ul>{renders.map(r=><li key={r.id}>HeyGen · {r.snapshot.avatar_engine??'Legacy default (engine not recorded)'} · {r.status} · {r.snapshot.cost_estimate?.estimated_cost_usd!=null?`Reference estimate ${money(r.snapshot.cost_estimate.estimated_cost_usd)}`:'Estimate unavailable'}<small>{r.snapshot.cost_estimate?.basis}</small></li>)}</ul>
     <p>HTTP request bytes received: {totals.uploadBytes.toLocaleString()}. This is not total network transfer. Repeated operations, including deliberate revisions: {totals.repeatAttempts}.</p>
    </details>
    <details><summary>Log HeyGen credits or support time</summary>

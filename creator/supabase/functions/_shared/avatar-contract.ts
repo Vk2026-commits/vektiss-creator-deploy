@@ -38,6 +38,7 @@ export const catalogAvatarSchema = z.object({
   default_voice_id: z.string().nullable(),
   status: avatarStatus,
   engines: z.array(z.string()),
+  avatar_type:z.string().optional(),
 });
 export const voiceSchema = z.object({
   provider_voice_id: opaqueId,
@@ -60,6 +61,7 @@ const connection = { connection_id: z.string().uuid() };
 const cursor = z.string().max(2048).nullable().optional();
 const managementCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("library") }).strict(),
+  z.object({ action: z.literal("engine_capabilities"), avatar_id:z.string().uuid() }).strict(),
   z.object({ action: z.literal("balance"), avatar_id:z.string().uuid() }).strict(),
   z
     .object({

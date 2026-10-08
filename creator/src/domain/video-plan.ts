@@ -11,6 +11,7 @@ export const videoPlanSchema=z.object({
  avatar_name:z.string().max(200),
  voice:z.object({id:z.string().trim().min(1).max(300),name:z.string().max(300)}).optional(),
  voice_engine:z.enum(['auto','fish']).optional(),
+ avatar_engine:z.enum(['avatar_iii','avatar_iv','avatar_v']).nullable().optional(),
  format:z.enum(['portrait','landscape','square']),
  style:z.enum(['presenter','source-cutaways','captions']),
  captions:z.boolean(),
@@ -22,5 +23,5 @@ export const videoPlanSchema=z.object({
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });
 export type VideoPlan=z.infer<typeof videoPlanSchema>;
-export const newVideoPlan=():VideoPlan=>({step:'approve',approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:70,presenter_placement:{x:.5,y:1,width:70}});
+export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:70,presenter_placement:{x:.5,y:1,width:70}});
 export const planReady=(p:VideoPlan)=>Boolean(p.approved_at&&(p.presenter==='self'||p.avatar_id));

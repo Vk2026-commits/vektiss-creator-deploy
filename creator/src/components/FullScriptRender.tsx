@@ -10,7 +10,7 @@ import {PresenterTest} from './PresenterTest';
 import type {VideoPlan} from '../domain/video-plan';
 import {onResume} from '../lib/resume-events';
 const jobSchema=z.object({id:z.string(),status:z.string(),video_url:z.string().nullable(),message:z.string().nullable()});
-const reviewSchema=z.object({revision:z.string(),estimated_seconds:z.number(),snapshot:z.object({script:z.string(),avatar_name:z.string(),voice_name:z.string().nullable().optional()}),job:jobSchema.nullable()});
+const reviewSchema=z.object({revision:z.string(),estimated_seconds:z.number(),estimate:z.object({engine:z.string(),estimated_cost_usd:z.number().nullable(),basis:z.string()}).optional(),snapshot:z.object({script:z.string(),avatar_name:z.string(),voice_name:z.string().nullable().optional()}),job:jobSchema.nullable()});
 export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,sourceKind='article',sourceUrl='',onPlanChange}:{scriptId:string;revision:string;disabled:boolean;plan:VideoPlan;onEditLayout:()=>void;sourceKind?:'article'|'video'|'graphic';sourceUrl?:string;onPlanChange:(p:VideoPlan)=>void}){
  const [videoReady,setVideoReady]=useState(false);
  const [balance,setBalance]=useState<{items:Array<{label:string;value:number;unit:string}>;checked_at:string}|null>(null);
@@ -37,6 +37,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
    {balance&&<div role="status">{balance.items.length?balance.items.map(item=><p key={item.label}>{item.label}: <strong>{item.unit==='usd'?`$${item.value.toFixed(2)} USD`:`${item.value.toLocaleString()} credits`}</strong></p>):<p>HeyGen did not report a balance for this connection. Check your HeyGen dashboard.</p>}<small>Checked {new Date(balance.checked_at).toLocaleTimeString()}. Balance belongs to the connected HeyGen account; this does not reserve credits.</small></div>}
    {balanceError&&<p role="alert">{balanceError}</p>}
   </div>
+  {review?.estimate&&<p>{review.estimate.engine.replace('avatar_','Avatar ').toUpperCase()} · {review.estimate.estimated_cost_usd===null?'Check HeyGen pricing':`Estimated avatar cost: ${review.estimate.estimated_cost_usd.toFixed(2)} USD`}<small> · Pay-as-you-go reference estimate, not a guaranteed charge.</small></p>}
   <PresenterTest compact key={`${scriptId}:${revision}`} scriptId={scriptId} revision={revision} disabled={disabled||busy||active}/>
   {disabled?<p>Saving your selection…</p>:busy&&!review?<RenderProgress value={10} label="Checking saved renders"/>:null}
 	  {job?.status==='completed'?<FinishedVideo sourceKind={sourceKind} jobId={job.id} scriptId={scriptId} plan={plan} rawVideoUrl={job.video_url??undefined}/>:review&&sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}

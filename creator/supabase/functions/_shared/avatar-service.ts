@@ -113,6 +113,11 @@ export function createAvatarService(
         );
       if(command.action==='prepare_test'||command.action==='start_test'||command.action==='test_status'||command.action==='download_test')return presenterTestService(db,vault)(userId,command);
       if (command.action === "library") return library(userId);
+      if(command.action==='engine_capabilities'){
+        const {data:avatar,error}=await db.from('avatar_profiles').select('connection_id,provider_avatar_id').eq('id',command.avatar_id).eq('user_id',userId).single();
+        if(error||!avatar)throw new PublicError('NOT_AVAILABLE','Avatar unavailable.',403);
+        return withProvider(userId,avatar.connection_id,p=>p.getAvatar(avatar.provider_avatar_id));
+      }
       if(command.action==='balance'){
         const {data:avatar,error}=await db.from('avatar_profiles').select('connection_id').eq('id',command.avatar_id).eq('user_id',userId).single();
         if(error||!avatar)throw new PublicError('NOT_AVAILABLE','That presenter is not available in your account.',403);
