@@ -27,6 +27,11 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
  const [file,setFile]=useState<File|null>(null),[error,setError]=useState(''),[working,setWorking]=useState('');
  const [resolved,setResolved]=useState<ResolvedSource|null>(brief.prepared_source??(brief.graphic_capture?{kind:'graphic',capture:brief.graphic_capture}:null)),[conflict,setConflict]=useState(false);
  const input=useRef<HTMLInputElement>(null),active=useRef<AbortController|null>(null);
+ const reviewHeading=useRef<HTMLHeadingElement>(null),wasWorking=useRef(false);
+ useEffect(()=>{
+  if(wasWorking.current&&!working&&resolved){reviewHeading.current?.focus({preventScroll:true});reviewHeading.current?.scrollIntoView({block:'start',behavior:'instant'});}
+  wasWorking.current=!!working;
+ },[working,resolved]);
  const callbacks=useRef({onSource,onProcessing,onProgress});callbacks.current={onSource,onProcessing,onProgress};
  const locked=busy||disabled||!!working;
  function selectFiles(files:File[]){
@@ -68,16 +73,16 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
   setConflict(false);recoveryWrite(key,JSON.stringify(checkpoint));void run(checkpoint,upload);
  }
  return <section aria-label="Add your reaction source" aria-busy={!!working} className="reaction-source-picker">
-  {!working&&<h2>What would you like to react to?</h2>}
+  {!working&&<h2 ref={reviewHeading} tabIndex={-1} className="source-review-heading">{resolved?'Review your source':'What would you like to react to?'}</h2>}
   {working?null:!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
    {file&&<div className="source-attachment"><MediaPreview file={file}/><span>{file.name}</span><button type="button" aria-label="Remove attachment" disabled={locked} onClick={()=>{setFile(null);setConflict(false);}}>×</button></div>}
    <textarea aria-label="Source link and optional direction" placeholder="Paste a link or add a video or screenshot…" rows={3} maxLength={12000} value={text} disabled={locked} onChange={e=>{setText(e.target.value);setConflict(false);}} onPaste={e=>{const files=Array.from(e.clipboardData.files);if(files.length){e.preventDefault();selectFiles(files);}}}/>
    <input ref={input} type="file" aria-label="Attach video or screenshot" hidden accept=".mp4,.MP4,.webm,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
    <div className="source-composer-footer"><button className="attach-source" type="button" aria-label="Add video or screenshot" title="Add video or screenshot" disabled={locked} onClick={()=>input.current?.click()}>＋</button><button className="button" type="button" disabled={locked||!profileId||(!file&&!text.trim())} onClick={()=>start()}>Continue →</button></div>
   </div><p className="source-composer-help">Instagram, TikTok, YouTube or an article link. You can also drop a file here and add direction for your reaction.</p><p className="source-composer-help">Videos: MP4 / WebM, 3 minutes, 500 MB. Screenshots: PNG / JPEG / WebP, 10 MB.</p></>:<>
-   <p role="status">{resolved.kind==='video'?'Video':resolved.kind==='article'?'Article':'Graphic post'} ready{resolved.firstOnly?' · First item from this post':''}.</p>
-   <button type="button" disabled={locked} onClick={()=>{setResolved(null);recoveryWrite(key,null);onSource({prepared_source:undefined,graphic_capture:undefined,source_cut:undefined});}}>Change source</button>
-   {resolved.kind==='video'?<><MediaPreview id={resolved.original_id}/><HostedSourceVideo costProjectId={brief.cost_project_id} originalId={resolved.original_id} scope={`${key}:${resolved.original_id}`} mode="link" url={brief.url} hideInput {...{profileId,disabled,onProcessing,onProgress}} onUrl={url=>onSource({url})} onComplete={onVideo}/></>:<GraphicSource costProjectId={brief.cost_project_id} mode="link" capture={brief.graphic_capture??resolved.capture} url={brief.url} {...{profileId,disabled,onProcessing,onCapture}} onComplete={onGraphic}/>}
+   <div className="source-ready-toolbar"><span role="status">✓ {resolved.kind==='video'?'Video':resolved.kind==='article'?'Article':'Graphic post'} ready{resolved.firstOnly?' · First image':''}</span>
+   <button type="button" disabled={locked} onClick={()=>{setResolved(null);recoveryWrite(key,null);onSource({prepared_source:undefined,graphic_capture:undefined,source_cut:undefined});}}>Change source</button></div>
+   {resolved.kind==='video'?<div className="source-video-review"><div className="source-ready-preview"><MediaPreview id={resolved.original_id}/></div><HostedSourceVideo costProjectId={brief.cost_project_id} originalId={resolved.original_id} scope={`${key}:${resolved.original_id}`} mode="link" url={brief.url} hideInput {...{profileId,disabled,onProcessing,onProgress}} onUrl={url=>onSource({url})} onComplete={onVideo}/></div>:<GraphicSource costProjectId={brief.cost_project_id} mode="link" capture={brief.graphic_capture??resolved.capture} url={brief.url} {...{profileId,disabled,onProcessing,onCapture}} onComplete={onGraphic}/>}
   </>}
   {conflict&&<div role="group" aria-label="Choose one source"><p>You added a file and a link. Which should we use?</p><button type="button" disabled={locked} onClick={()=>start('file')}>Use attached file</button><button type="button" disabled={locked} onClick={()=>start('link')}>Use link</button></div>}
   {working&&<ScriptProgress progress={{percent:0,label:working,indeterminate:true}}/>}

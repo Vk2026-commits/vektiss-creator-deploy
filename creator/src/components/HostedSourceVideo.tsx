@@ -57,8 +57,8 @@ export function HostedSourceVideo(props:Props){
  }
  return <section aria-busy={busy}>
   {waiting&&blob?<><p>{waiting.reason}</p><SourceCutControls blob={blob} end={end} onEnd={setEnd} disabled={busy||props.disabled} onDuration={()=>{}}/></>:props.hideInput?null:props.mode==='link'?<label>Paste a video link<input type="url" value={props.url} disabled={busy||props.disabled} onChange={e=>props.onUrl(e.target.value)}/></label>:<label>Choose your video<input type="file" accept="video/mp4,video/webm" disabled={busy||props.disabled} onChange={e=>{const value=e.target.files?.[0];if(value&&value.size<=500*1024*1024){setFile(value);setError('');}else{setFile(null);setError('Choose a video up to 500 MB.');}}}/></label>}
-  <p><small>Up to 3 minutes · 500 MB. Keep this page open while uploading. Once accepted, analysis continues on the server.</small></p>
-  <button className="button" type="button" disabled={busy||props.disabled||!props.profileId||(!waiting&&!props.originalId&&(props.mode==='upload'?!file:!props.url.trim()))} onClick={start}>{busy?'Processing saved source…':waiting?'Use this cut & create script →':'Create my script →'}</button>
+  {!props.originalId&&<p><small>Up to 3 minutes · 500 MB.</small></p>}
+  <div className="workflow-action-bar"><button className="button" type="button" disabled={busy||props.disabled||!props.profileId||(!waiting&&!props.originalId&&(props.mode==='upload'?!file:!props.url.trim()))} onClick={start}>{busy?'Processing saved source…':waiting?'Use this cut & create script →':'Create my script →'}</button></div>
   {error&&<p role="alert">{error}</p>}
  </section>;
 }
