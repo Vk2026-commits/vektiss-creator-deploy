@@ -9,6 +9,11 @@ describe('finished video timeline',()=>{
   expect(html).toContain('Scrub video');
   expect(html).toContain('disabled=""');
   expect(html).toContain('controls=""');
+  expect(html).toContain('src="blob:finished"');
+  expect(html).not.toContain('#t=');
+ });
+ it('uses a separately loaded JPEG poster without decoding a second video',()=>{
+  expect(renderToStaticMarkup(<FinishedVideoPlayer src="blob:finished" poster="blob:poster"/>)).toContain('poster="blob:poster"');
  });
  it('formats timestamps and unknown durations safely',()=>{
   expect(playbackTime(65.9)).toBe('1:05');
