@@ -2,7 +2,7 @@ import {useEffect,useState} from 'react';
 import {catalogAvatarSchema} from '../../supabase/functions/_shared/avatar-contract';
 import {avatarRepository} from '../lib/avatar-repository';
 import type {VideoPlan} from '../domain/video-plan';
-const options=[['avatar_iii','Avatar III — Makes your avatar speak',.60],['avatar_iv','Avatar IV — Animates photos and video avatars',4.83],['avatar_v','Avatar V — More natural movement and lip-sync',7.20]] as const;
+const options=[['avatar_iii','Avatar III — Makes your avatar speak',.60],['avatar_iv','Avatar IV — Expressive face and natural gestures',4.83],['avatar_v','Avatar V — More lifelike movement as it speaks',7.20]] as const;
 export function AvatarEnginePicker({plan,onChange,disabled,seconds,onValidity}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void;disabled:boolean;seconds:number;onValidity:(valid:boolean)=>void}){
  const [look,setLook]=useState<ReturnType<typeof catalogAvatarSchema.parse>|null>(null);
  const [error,setError]=useState('');const [refresh,setRefresh]=useState(0);
