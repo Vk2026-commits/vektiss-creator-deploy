@@ -3,6 +3,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ScriptIntake } from '../src/components/ScriptIntake';
 import { emptyBrief } from '../src/domain/script-brief';
 const props={onChange:()=>{},profileId:'p',busy:false,preview:false,onAI:async()=>{}};
+it('keeps summary and source controls secondary to the saved script',()=>{
+ const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),stage:'review',source_summary:'Saved summary',source:'Original source'}}/>);
+ expect(html).toContain('<details class="source-details"><summary>Source details</summary>');
+ expect(html).toContain('Saved summary');expect(html).not.toContain('Get video summary');expect(html).not.toContain('Review source and notes');
+});
+it('offers summary-only generation when a reviewed draft has no summary',()=>{
+ const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),stage:'review'}}/>);
+ expect(html).toContain('Get video summary');expect(html).not.toContain('Retry / create draft');
+});
 it('defaults to a clear link path and offers a unified file upload',()=>{
  const html=renderToStaticMarkup(<ScriptIntake {...props} brief={{...emptyBrief(),kind:'video'}}/>);
  

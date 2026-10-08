@@ -7,7 +7,12 @@ import {movePlacement} from '../domain/presenter-gesture';
 type Placement=NonNullable<VideoPlan['presenter_placement']>;
 type Point={x:number;y:number};
 const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(max,n));
-export function FreePresenter({plan,onChange,children}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void;children?:ReactNode}){
+export function PlacementShortcuts({plan,onChange}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void}){
+ const l=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,previewAspect(plan));
+ const change=(p:Placement)=>onChange({...plan,presenter_placement:p});
+ return <><div className="article-layout-positions">{(['left','center','right'] as const).map(side=><button type="button" key={side} onClick={()=>change({x:side==='left'?l.width/l.w/2:side==='right'?1-l.width/l.w/2:.5,y:1,width:placementFromLayout(plan).width})}>Bottom {side==='center'?'middle':side}</button>)}<button type="button" onClick={()=>change({x:.5,y:1,width:70})}>Large & centered</button></div><small>Keyboard: arrow keys move; + / − resize.</small></>;
+}
+export function FreePresenter({plan,onChange,children,hideShortcuts=false}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void;children?:ReactNode;hideShortcuts?:boolean}){
  const [draft,setDraft]=useState<Placement>();
  const current=useRef(plan);current.current=plan;
  const active=useRef<Placement|undefined>(undefined);
@@ -40,13 +45,13 @@ export function FreePresenter({plan,onChange,children}:{plan:VideoPlan;onChange:
   active.current=undefined;start.current=undefined;setDraft(undefined);
  }
  const change=(p:Placement)=>onChange({...plan,presenter_placement:p});
- return <div className="free-presenter-editor"><p className="gesture-hint">Drag past any edge to crop · Pinch to resize</p>
+ return <div className="free-presenter-editor"><p className="gesture-hint">Drag to move · Pinch to resize</p>
   <div ref={stage} className="article-layout-stage free-presenter-stage" style={{aspectRatio:`${l.w}/${l.h}`}} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}>
    {children}<SelectedAvatarOverlay plan={shown}/>
    <div data-avatar-touch="true" className="avatar-touch-target" role="group" tabIndex={0} aria-label="Move avatar with arrow keys; plus or minus to resize" style={{left:`${l.x/l.w*100}%`,top:`${l.y/l.h*100}%`,width:`${l.width/l.w*100}%`,height:`${l.height/l.h*100}%`}} onKeyDown={e=>{const p=placementFromLayout(plan);const d=e.shiftKey?.05:.01;const keys:Record<string,()=>void>={ArrowLeft:()=>change({...p,x:clamp(p.x-d,-2,3)}),ArrowRight:()=>change({...p,x:clamp(p.x+d,-2,3)}),ArrowUp:()=>change({...p,y:clamp(p.y-d,-2,3)}),ArrowDown:()=>change({...p,y:clamp(p.y+d,-2,3)}),'+':()=>change({...p,width:clamp(p.width+2,5,100)}),'-':()=>change({...p,width:clamp(p.width-2,5,100)})};if(keys[e.key]){e.preventDefault();keys[e.key]();}}}>
     <span data-resize="true" className="avatar-resize-handle" aria-hidden="true">↔</span>
    </div>
   </div>
-  <details><summary>Placement shortcuts</summary><div className="article-layout-positions">{(['left','center','right'] as const).map(side=><button type="button" key={side} onClick={()=>change({x:side==='left'?l.width/l.w/2:side==='right'?1-l.width/l.w/2:.5,y:1,width:placementFromLayout(plan).width})}>Bottom {side==='center'?'middle':side}</button>)}<button type="button" onClick={()=>change({x:.5,y:1,width:70})}>Large & centered</button></div><small>Keyboard: arrow keys move; + / − resize. Preview animation may differ.</small></details>
+  {!hideShortcuts&&<details><summary>Placement shortcuts</summary><PlacementShortcuts plan={plan} onChange={onChange}/></details>}
  </div>;
 }

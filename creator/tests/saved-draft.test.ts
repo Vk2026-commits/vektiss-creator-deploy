@@ -6,6 +6,12 @@ const id='11111111-1111-4111-8111-111111111111';
 const config={supabaseUrl:'https://example.supabase.co',publicKey:'public'};
 const initial={id,updated_at:'2026-10-02T00:00:00Z',content_profile_id:id,title:'Untitled video',hook:'',body:'',cta:'',brief:{...emptyBrief(),source:'Saved source text'}};
 afterEach(()=>vi.restoreAllMocks());
+it('summary failure leaves all saved fields untouched',async()=>{
+ const before={...initial,body:'Keep script',brief:{...initial.brief,production:newVideoPlan()}};
+ const fetcher=vi.spyOn(globalThis,'fetch').mockImplementation(async url=>String(url).includes('/functions/')?Response.json({error:'Unavailable'},{status:503}):Response.json([before]));
+ await expect(createSavedDraft({script_id:id,revision:initial.updated_at,action:'summary_only'},'Bearer user',config)).rejects.toThrow();
+ expect(fetcher.mock.calls.some(([,init])=>init?.method==='PATCH')).toBe(false);
+});
 it.each(['review','source'] as const)('summary only preserves script and saved plan at %s',async stage=>{
  const before={...initial,hook:'Keep hook',body:'Keep body',cta:'Keep CTA',brief:{...initial.brief,stage,production:{...newVideoPlan(),approved_at:'2026-10-07T00:00:00Z',step:'saved' as const}}};
  let row=before;let aiCalls=0;

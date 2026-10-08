@@ -25,12 +25,13 @@ it('shows gesture controls and clearly labels the screenshot preview boundary',(
  for(const position of ['Bottom left','Bottom middle','Bottom right'])expect(html).toContain(position);
  expect(html).toContain('Capture article screenshot');
  expect(html).toContain('Preview a mobile screenshot');
- expect(html).toContain('A source screenshot is optional.');
+ expect(html).toContain('No background selected. This will be an avatar-only video.');
 });
 it('assembles an actual MP4 rather than labeling the raw presenter as MP4',()=>{
  const html=renderToStaticMarkup(<FinishedVideo jobId="job" scriptId="script" plan={newVideoPlan()} rawVideoUrl="https://video.example.com/presenter.mp4"/>);
  expect(html).not.toContain('https://video.example.com/presenter.mp4');
- expect(html).toContain('Opening your saved video');
+ expect(html).toContain('Opening your video…');
+ expect(html).not.toContain('85%');
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);
