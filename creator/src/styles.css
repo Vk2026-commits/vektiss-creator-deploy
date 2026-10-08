@@ -1818,6 +1818,19 @@ dialog::backdrop {
 .workspace-signout:focus-visible { outline:2px solid #1677ff;outline-offset:2px; }
 .workspace-signout:disabled { opacity:.6;cursor:wait; }
 .topbar .foundation-badge { margin-left:auto; }
+.topbar { position:sticky; top:0; z-index:30; }
+.heygen-balance-badge { margin-left:auto; display:flex; align-items:center; gap:10px; min-height:50px; padding:9px 15px; border:1px solid #a7dfc2; border-radius:14px; background:linear-gradient(135deg,#ecfdf5,#d8f5e6); color:#12603d; box-shadow:0 3px 12px #123d2410,inset 0 1px 0 #ffffff; text-align:left; cursor:pointer; flex-shrink:0; }
+.heygen-balance-badge > span { display:grid; gap:3px; }
+.heygen-balance-label { font-size:9px; font-weight:800; letter-spacing:1.2px; }
+.topbar .heygen-balance-badge strong { color:inherit; font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; }
+.heygen-balance-badge.is-low { color:#a51c2b; border-color:#f3a7ae; background:linear-gradient(135deg,#fff1f2,#ffe0e4); box-shadow:0 3px 14px #b91c1c14,inset 0 1px 0 #fff; }
+.heygen-balance-badge.is-unknown { color:#58677a; background:#f2f5f9; border-color:#d8e0e9; }
+.heygen-balance-badge:disabled { opacity:1; cursor:wait; }
+.heygen-balance-badge:focus-visible { outline:3px solid #1686ff; outline-offset:3px; }
+.balance-spinning { animation:balance-spin 1s linear infinite; }
+@keyframes balance-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .balance-spinning { animation:none; } }
+@media(max-width:700px) { .topbar { height:auto; min-height:66px; padding:8px 12px; } .topbar > div:first-child { display:none; } .heygen-balance-badge { min-height:46px; padding:7px 10px; margin-left:auto; gap:7px; } .topbar .heygen-balance-badge strong { font-size:15px; } .topbar .workspace-signout { margin-left:0; } }
 @media(max-width:700px) { .topbar { flex-wrap:wrap;gap:8px; } .workspace-signout { margin-left:auto; } .topbar .foundation-badge { display:none; } }
 .avatar-library > .create-panel { margin-bottom: 24px; }
 .avatar-library form { display: grid; gap: 16px; margin: 20px 0; }

@@ -9,6 +9,7 @@ import type { Session } from "@supabase/supabase-js";
 import { authRedirectUrl } from './lib/auth-redirect';
 import { signInError } from './lib/auth-errors';
 import { AvatarLibrary } from "./components/AvatarLibrary";
+import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
 import { ProjectCosts } from './components/ProjectCosts';
 import { Discover } from './components/Discover';
@@ -554,10 +555,7 @@ function CreatorWorkspace({
                   : page === "avatars" ? "Avatar library" : page === 'costs' ? 'Project costs' : "Create video"}
             </strong>
           </div>
-          <span className="foundation-badge">
-            <span />
-            Strategy foundation
-          </span>
+          <HeyGenBalanceBadge preview={preview}/>
           <button
             className="workspace-signout"
             aria-label={preview ? "Leave local preview" : "Log out"}
