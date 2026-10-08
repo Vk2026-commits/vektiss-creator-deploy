@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {z} from 'zod';
 import type {ScriptBrief} from '../domain/script-brief';
 import type {SourceCut} from '../domain/source-cut';
-import type {DraftProgress} from './ScriptProgress';
+import {ScriptProgress,type DraftProgress} from './ScriptProgress';
 import {HostedSourceVideo} from './HostedSourceVideo';
 import {GraphicSource} from './GraphicSource';
 import {mediaFetch} from '../lib/media-fetch';
@@ -68,8 +68,8 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
   setConflict(false);recoveryWrite(key,JSON.stringify(checkpoint));void run(checkpoint,upload);
  }
  return <section aria-label="Add your reaction source" aria-busy={!!working} className="reaction-source-picker">
-  <h2>What would you like to react to?</h2>
-  {!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
+  {!working&&<h2>What would you like to react to?</h2>}
+  {working?null:!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
    {file&&<div className="source-attachment"><MediaPreview file={file}/><span>{file.name}</span><button type="button" aria-label="Remove attachment" disabled={locked} onClick={()=>{setFile(null);setConflict(false);}}>×</button></div>}
    <textarea aria-label="Source link and optional direction" placeholder="Paste a link or add a video or screenshot…" rows={3} maxLength={12000} value={text} disabled={locked} onChange={e=>{setText(e.target.value);setConflict(false);}} onPaste={e=>{const files=Array.from(e.clipboardData.files);if(files.length){e.preventDefault();selectFiles(files);}}}/>
    <input ref={input} type="file" aria-label="Attach video or screenshot" hidden accept=".mp4,.MP4,.webm,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
@@ -80,7 +80,7 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
    {resolved.kind==='video'?<><MediaPreview id={resolved.original_id}/><HostedSourceVideo costProjectId={brief.cost_project_id} originalId={resolved.original_id} scope={`${key}:${resolved.original_id}`} mode="link" url={brief.url} hideInput {...{profileId,disabled,onProcessing,onProgress}} onUrl={url=>onSource({url})} onComplete={onVideo}/></>:<GraphicSource costProjectId={brief.cost_project_id} mode="link" capture={brief.graphic_capture??resolved.capture} url={brief.url} {...{profileId,disabled,onProcessing,onCapture}} onComplete={onGraphic}/>}
   </>}
   {conflict&&<div role="group" aria-label="Choose one source"><p>You added a file and a link. Which should we use?</p><button type="button" disabled={locked} onClick={()=>start('file')}>Use attached file</button><button type="button" disabled={locked} onClick={()=>start('link')}>Use link</button></div>}
-  {working&&<div role="status"><p>{working}</p><progress aria-label="Preparing source"/></div>}
+  {working&&<ScriptProgress progress={{percent:0,label:working,indeterminate:true}}/>}
   {error&&<p role="alert">{error}</p>}
  </section>;
 }
