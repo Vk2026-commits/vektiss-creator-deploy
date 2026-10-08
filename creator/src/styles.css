@@ -1879,3 +1879,11 @@ dialog::backdrop {
 .avatar-cost-table td small { display: block; margin-top: 4px; color: #52677f; }
 .avatar-cost-table .cost-milestone { background: #f3f8ff; }
 @media (max-width: 480px) { .avatar-cost-table th, .avatar-cost-table td { padding: 10px 5px; font-size: 12px; } }
+.source-progress-overlay { position:fixed; inset:0; z-index:1200; display:grid; place-items:center; padding:20px; background:rgba(5,20,44,.52); backdrop-filter:blur(8px); }
+.source-progress-card { width:min(100%,460px); max-height:85dvh; overflow:auto; padding:28px; border:1px solid #77b7ff; border-radius:24px; background:linear-gradient(145deg,#086dea,#123f9b); box-shadow:0 24px 80px #001b5270; color:white; }
+.source-progress-kicker { font-size:11px; letter-spacing:.16em; font-weight:700; color:#cce5ff; }
+.source-progress-card h2 { color:white; font-size:24px; margin:12px 0 20px; }
+.source-progress-card .draft-progress { background:rgba(255,255,255,.12); border-color:#ffffff40; color:white; }
+.source-progress-card .draft-progress strong,.source-progress-card .draft-progress span,.source-progress-card .draft-progress small { color:white; }
+.source-progress-card > button { margin-top:16px; color:white; background:transparent; border:1px solid #ffffff66; border-radius:10px; padding:10px 16px; }
+.source-progress-pill { position:fixed; z-index:1200; bottom:24px; left:50%; transform:translateX(-50%); width:max-content; max-width:90vw; padding:14px 20px; border:1px solid #72b8ff; border-radius:16px; background:#086dea; color:white; box-shadow:0 8px 32px #0044aa55; }
