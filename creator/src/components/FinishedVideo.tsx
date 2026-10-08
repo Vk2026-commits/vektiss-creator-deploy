@@ -5,6 +5,7 @@ import {supabase} from '../lib/supabase';
 import type {VideoPlan} from '../domain/video-plan';
 import {avatarFraming} from '../domain/avatar-framing';
 import {downloadMP4} from '../lib/download-mp4';
+import {createVideoPoster} from '../lib/video-poster';
 export function playbackTime(seconds:number){
  const whole=Number.isFinite(seconds)?Math.max(0,Math.floor(seconds)):0;
  return `${Math.floor(whole/60)}:${String(whole%60).padStart(2,'0')}`;
@@ -13,10 +14,12 @@ export function FinishedVideoPlayer({src}:{src:string}){
  const video=useRef<HTMLVideoElement>(null);
  const [duration,setDuration]=useState(0);
  const [time,setTime]=useState(0);
+ const [poster,setPoster]=useState('');
  const sync=()=>{const media=video.current;if(!media)return;setDuration(Number.isFinite(media.duration)?media.duration:0);setTime(media.currentTime||0);};
  useEffect(()=>{setDuration(0);setTime(0);},[src]);
+ useEffect(()=>{setPoster('');return createVideoPoster(src,setPoster);},[src]);
  return <div className="finished-video-player">
-  <video ref={video} src={src} controls playsInline preload="metadata" onLoadedMetadata={sync} onDurationChange={sync} onTimeUpdate={sync} onSeeked={sync} onEnded={sync}/>
+  <video ref={video} src={`${src}#t=0.001`} poster={poster||undefined} controls playsInline preload="auto" onLoadedMetadata={sync} onDurationChange={sync} onTimeUpdate={sync} onSeeked={sync} onEnded={sync}/>
   <label className="finished-video-timeline">
    <span>Scrub video</span>
    <input type="range" aria-label="Video playback position" min={0} max={duration||1} step={0.1} value={Math.min(time,duration)} disabled={!duration} aria-valuetext={`${playbackTime(time)} of ${playbackTime(duration)}`} onChange={event=>{const next=Number(event.currentTarget.value);if(video.current&&duration){video.current.currentTime=next;setTime(next);}}}/>
