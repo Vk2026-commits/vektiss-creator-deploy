@@ -46,7 +46,7 @@ export function FreePresenter({plan,onChange,children,hideShortcuts=false}:{plan
  }
  const change=(p:Placement)=>onChange({...plan,presenter_placement:p});
  return <div className="free-presenter-editor"><p className="gesture-hint">Drag to move · Pinch to resize</p>
-  <div ref={stage} className="article-layout-stage free-presenter-stage" style={{aspectRatio:`${l.w}/${l.h}`}} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}>
+  <div ref={stage} className="article-layout-stage free-presenter-stage" style={{aspectRatio:`${l.w}/${l.h}`,maxWidth:`min(320px, ${42*l.w/l.h}dvh)`}} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}>
    {children}<SelectedAvatarOverlay plan={shown}/>
    <div data-avatar-touch="true" className="avatar-touch-target" role="group" tabIndex={0} aria-label="Move avatar with arrow keys; plus or minus to resize" style={{left:`${l.x/l.w*100}%`,top:`${l.y/l.h*100}%`,width:`${l.width/l.w*100}%`,height:`${l.height/l.h*100}%`}} onKeyDown={e=>{const p=placementFromLayout(plan);const d=e.shiftKey?.05:.01;const keys:Record<string,()=>void>={ArrowLeft:()=>change({...p,x:clamp(p.x-d,-2,3)}),ArrowRight:()=>change({...p,x:clamp(p.x+d,-2,3)}),ArrowUp:()=>change({...p,y:clamp(p.y-d,-2,3)}),ArrowDown:()=>change({...p,y:clamp(p.y+d,-2,3)}),'+':()=>change({...p,width:clamp(p.width+2,5,100)}),'-':()=>change({...p,width:clamp(p.width-2,5,100)})};if(keys[e.key]){e.preventDefault();keys[e.key]();}}}>
     <span data-resize="true" className="avatar-resize-handle" aria-hidden="true">↔</span>

@@ -1,8 +1,15 @@
-.scripts-workspace .script-editor { scroll-margin-top: 96px; }
+.scripts-workspace .script-editor { scroll-margin-top: 96px; min-height:calc(100dvh - 96px); overflow-anchor:none; }
+.scripts-workspace .script-editor:focus { outline:none; }
+.scripts-workspace .video-plan .gesture-hint { font-size:13px; line-height:1.4; margin:8px 0; }
+.scripts-workspace .saved-choice > summary::after { display:none; }
+.scripts-workspace .saved-choice > summary > span:first-child { flex:1; min-width:0; }
+.scripts-workspace .video-plan .saved-choice { margin:10px 0; }
+.scripts-workspace .video-plan .engine-price-inline { font-size:13px; line-height:1.5; margin:6px 0; }
 .scripts-workspace .save-status { background:transparent; padding:0; font-size:12px; margin:8px 0 16px; color:#64748b; }
 .scripts-workspace .review-script-first .ai-script-preview { margin:0; padding:18px; max-height:none; overflow:visible; }
 .review-secondary { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 16px; }
 .review-secondary button { padding:8px 10px; font-size:14px; color:#1264c7; }
+.scripts-workspace .script-editor .review-secondary button { font-size:14px; }
 .scripts-workspace .audience-options,.scripts-workspace .source-details { margin:12px 0; border-top:1px solid #e6edf5; }
 .scripts-workspace details > summary { padding:14px 0; font-size:14px; }
 .saved-choice { border:1px solid #dbe6f4; padding:0 14px; border-radius:14px; margin:12px 0; }
@@ -23,9 +30,9 @@
 .workflow-action-bar > .button { flex:1; min-height:48px; }
 .workflow-action-bar > small { flex-basis:100%; font-size:12px; }
 @media(max-width:600px) {
- .scripts-workspace .script-editor { padding:16px 12px; scroll-margin-top:88px; }
- .scripts-workspace .video-progress li { font-size:12px; min-width:0; }
- .scripts-workspace .video-progress li > button { font-size:12px; padding:8px 0; gap:4px; }
+ .scripts-workspace .script-editor { padding:16px 12px; scroll-margin-top:88px; min-height:calc(100dvh - 88px); }
+ .scripts-workspace .video-progress li { font-size:12px; min-width:0; min-height:44px; align-items:center; }
+ .scripts-workspace .video-progress li > button { font-size:12px; padding:0; gap:4px; min-height:44px; width:100%; }
  .scripts-workspace .video-progress li > button > span { display:none; }
  .scripts-workspace .video-step-heading { margin-bottom:12px; }
  .scripts-workspace .video-step-heading h2 { font-size:22px; }
