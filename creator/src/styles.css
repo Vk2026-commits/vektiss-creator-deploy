@@ -1868,3 +1868,14 @@ dialog::backdrop {
 .video-progress li > button:hover { color:#0675ed; text-decoration:underline; text-underline-offset:4px; }
 .video-progress li > button:focus-visible { outline:2px solid #1686ff; outline-offset:4px; border-radius:4px; }
 .video-progress li > button:disabled { opacity:.5; cursor:wait; }
+.avatar-cost-help { max-width: 900px; margin: 0 auto; }
+.avatar-cost-help > p { line-height: 1.65; }
+.avatar-cost-help .engine-price-guide p { display: block; }
+.avatar-cost-table { overflow-x: auto; margin: 24px 0; border: 1px solid #d7e3f3; border-radius: 16px; background: #fff; }
+.avatar-cost-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.avatar-cost-table caption { padding: 16px; text-align: left; color: #52677f; font-size: 13px; }
+.avatar-cost-table th, .avatar-cost-table td { padding: 12px 10px; text-align: center; border-top: 1px solid #e6edf5; }
+.avatar-cost-table thead { background: #edf5ff; }
+.avatar-cost-table td small { display: block; margin-top: 4px; color: #52677f; }
+.avatar-cost-table .cost-milestone { background: #f3f8ff; }
+@media (max-width: 480px) { .avatar-cost-table th, .avatar-cost-table td { padding: 10px 5px; font-size: 12px; } }

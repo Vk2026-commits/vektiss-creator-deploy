@@ -12,6 +12,7 @@ import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
 import { ProjectCosts } from './components/ProjectCosts';
+import { AvatarCostHelp } from './components/AvatarCostHelp';
 import { Discover } from './components/Discover';
 import type { ResearchOpportunity } from './lib/research-client';
 import {
@@ -348,7 +349,7 @@ function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs";
+type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs";
 function CreatorWorkspace({
   repo,
   userId,
@@ -509,6 +510,7 @@ function CreatorWorkspace({
             <UsersRound size={19} />
             Avatar library
           </button>
+          <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
         </nav>
         {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Project costs</button></nav></>}
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
@@ -552,7 +554,7 @@ function CreatorWorkspace({
                 : page === "creator"
                   ? "Creator profile"
                   : page === "discover" ? "Discover"
-                  : page === "avatars" ? "Avatar library" : page === 'costs' ? 'Project costs' : "Create video"}
+                  : page === "avatars" ? "Avatar library" : page === 'avatar-costs' ? 'Avatar costs' : page === 'costs' ? 'Project costs' : "Create video"}
             </strong>
           </div>
           <HeyGenBalanceBadge preview={preview}/>
@@ -615,6 +617,7 @@ function CreatorWorkspace({
           ) : (
             <>
               {page === "avatars" && <AvatarLibrary preview={preview} />}
+              {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <ProjectCosts/>}
               {page === "discover" && <Discover profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
