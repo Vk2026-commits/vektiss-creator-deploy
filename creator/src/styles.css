@@ -1856,6 +1856,10 @@ dialog::backdrop {
 .render-failure-card p { margin:10px 0; line-height:1.5; }
 .render-failure-card small { display:block; font-size:12px; color:#7d6557; }
 .render-failure-card .render-actions { margin:18px 0 10px; }
+.short-test-action { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; margin:12px 0 20px; }
+.short-test-action small { color:var(--muted, #52657d); }
+.short-test-action .button { min-height:44px; }
+.short-test-panel { margin:16px 0; padding:18px; border:1px solid #d7e3f3; border-radius:16px; background:#fff; }
 .video-progress li > button { display:flex; align-items:center; gap:10px; color:inherit; font:inherit; background:transparent; border:0; padding:4px 0; text-align:left; cursor:pointer; }
 .video-progress li > button:hover { color:#0675ed; text-decoration:underline; text-underline-offset:4px; }
 .video-progress li > button:focus-visible { outline:2px solid #1686ff; outline-offset:4px; border-radius:4px; }

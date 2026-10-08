@@ -6,6 +6,7 @@ import {z} from 'zod';
 import {avatarRepository} from '../lib/avatar-repository';
 import {watchRender} from '../lib/watch-render';
 import {FinishedVideo} from './FinishedVideo';
+import {PresenterTest} from './PresenterTest';
 import type {VideoPlan} from '../domain/video-plan';
 import {onResume} from '../lib/resume-events';
 const jobSchema=z.object({id:z.string(),status:z.string(),video_url:z.string().nullable(),message:z.string().nullable()});
@@ -36,6 +37,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
    {balance&&<div role="status">{balance.items.length?balance.items.map(item=><p key={item.label}>{item.label}: <strong>{item.unit==='usd'?`$${item.value.toFixed(2)} USD`:`${item.value.toLocaleString()} credits`}</strong></p>):<p>HeyGen did not report a balance for this connection. Check your HeyGen dashboard.</p>}<small>Checked {new Date(balance.checked_at).toLocaleTimeString()}. Balance belongs to the connected HeyGen account; this does not reserve credits.</small></div>}
    {balanceError&&<p role="alert">{balanceError}</p>}
   </div>
+  <PresenterTest compact key={`${scriptId}:${revision}`} scriptId={scriptId} revision={revision} disabled={disabled||busy||active}/>
   {disabled?<p>Saving your selection…</p>:busy&&!review?<RenderProgress value={10} label="Checking saved renders"/>:null}
 	  {job?.status==='completed'?<FinishedVideo sourceKind={sourceKind} jobId={job.id} scriptId={scriptId} plan={plan} rawVideoUrl={job.video_url??undefined}/>:review&&sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}
   {job?.status!=='completed'&&sourceKind==='graphic'&&plan.article_capture&&<GraphicPreview plan={plan}/>}
