@@ -10,6 +10,7 @@ import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {loadSourceVideo} from '../lib/source-cut';
 import {composerInput,resolvedSourceSchema,type ResolvedSource} from '../domain/resolved-source';
 import './source-composer.css';
+import {sourceUploadType} from '../domain/upload-type';
 
 const checkpointSchema=z.object({operation:z.string().uuid(),text:z.string().max(12000),url:z.string(),notes:z.string(),result:resolvedSourceSchema.optional()});
 function MediaPreview({file,id}:{file?:File;id?:string}){
@@ -31,8 +32,9 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
  function selectFiles(files:File[]){
   if(locked)return;
   if(files.length!==1){setError('Add one video or screenshot at a time.');return;}
-  const next=files[0],video=['video/mp4','video/webm'].includes(next.type);
-  if(!video&&!['image/png','image/jpeg','image/webp'].includes(next.type)){setError('Choose an MP4 or WebM video, or a PNG, JPEG or WebP screenshot.');return;}
+  const original=files[0],type=sourceUploadType(original);
+  if(!type){setError('Choose an MP4 or WebM video, or a PNG, JPEG or WebP screenshot.');return;}
+  const next=original.type===type?original:new File([original],original.name,{type,lastModified:original.lastModified}),video=type.startsWith('video/');
   if(next.size>(video?500:10)*1024*1024){setError(video?'Choose a video under 500 MB.':'Choose a screenshot under 10 MB.');return;}
   setError('');setFile(next);setConflict(false);setResolved(null);recoveryWrite(key,null);
  }
@@ -70,7 +72,7 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
   {!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
    {file&&<div className="source-attachment"><MediaPreview file={file}/><span>{file.name}</span><button type="button" aria-label="Remove attachment" disabled={locked} onClick={()=>{setFile(null);setConflict(false);}}>×</button></div>}
    <textarea aria-label="Source link and optional direction" placeholder="Paste a link or add a video or screenshot…" rows={3} maxLength={12000} value={text} disabled={locked} onChange={e=>{setText(e.target.value);setConflict(false);}} onPaste={e=>{const files=Array.from(e.clipboardData.files);if(files.length){e.preventDefault();selectFiles(files);}}}/>
-   <input ref={input} type="file" aria-label="Attach video or screenshot" hidden accept="video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
+   <input ref={input} type="file" aria-label="Attach video or screenshot" hidden accept=".mp4,.MP4,.webm,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
    <div className="source-composer-footer"><button className="attach-source" type="button" aria-label="Add video or screenshot" title="Add video or screenshot" disabled={locked} onClick={()=>input.current?.click()}>＋</button><button className="button" type="button" disabled={locked||!profileId||(!file&&!text.trim())} onClick={()=>start()}>Continue →</button></div>
   </div><p className="source-composer-help">Instagram, TikTok, YouTube or an article link. You can also drop a file here and add direction for your reaction.</p><p className="source-composer-help">Videos: MP4 / WebM, 3 minutes, 500 MB. Screenshots: PNG / JPEG / WebP, 10 MB.</p></>:<>
    <p role="status">{resolved.kind==='video'?'Video':resolved.kind==='article'?'Article':'Graphic post'} ready{resolved.firstOnly?' · First item from this post':''}.</p>
