@@ -24,6 +24,18 @@ it('fails closed without an explicit pilot account or HTTPS origin',()=>{
  expect(()=>validateHostingConfig({origin:'http://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[owner]})).toThrow();
  expect(()=>validateHostingConfig({origin:'https://creator.example',data:'/data',dist:'/app/dist',supabaseUrl:'https://project.supabase.co',publicKey:'public',users:[]})).toThrow();
 });
+it('serves cached JPEG posters from the authenticated owner’s finished MP4 only',async()=>{
+ const {url,headers,config}=await setup();const id='a'.repeat(64);
+ const folder=join(config.data,owner,'edit/compositions');await mkdir(folder,{recursive:true});
+ await promisify(execFile)(mediaBinary('ffmpeg'),['-v','error','-f','lavfi','-i','color=blue:s=32x64:r=25:d=1','-c:v','libx264',join(folder,id+'.mp4')]);
+ const route=url+'/api/local-capture/export-poster/'+id;
+ expect((await realFetch(route)).status).toBe(403);
+ const first=await realFetch(route,{headers});expect(first.status).toBe(200);expect(first.headers.get('content-type')).toBe('image/jpeg');
+ const jpeg=Buffer.from(await first.arrayBuffer());expect(jpeg[0]).toBe(255);expect(jpeg[1]).toBe(216);
+ expect(Buffer.from(await (await realFetch(route,{headers})).arrayBuffer())).toEqual(jpeg);
+ vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({id:other}),{status:200}));
+ expect((await realFetch(route,{headers})).status).toBe(403);
+},15000);
 it.each(['graphic-source','source-resolve'])('saves screenshots through durable %s and serves only the owner’s graphic',async operation=>{
  const {url,headers}=await setup();const path=join(dir,'graphic.png');
  await promisify(execFile)(mediaBinary('ffmpeg'),['-v','error','-f','lavfi','-i','color=blue:s=64x64','-frames:v','1',path]);

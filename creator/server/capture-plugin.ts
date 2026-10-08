@@ -8,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {captureArticle} from './article-capture';
 import {composeVideo} from './compose-video';
 import {fullComposition} from './full-composition';
+import {exportPoster} from './export-poster';
 import {importVideo,importMessages} from './social-video';
 import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 import {extractVideoFrames,frameTimesHeader} from './video-frames';
@@ -22,6 +23,8 @@ export function capturePlugin():Plugin{
    const host=req.headers.host;const origin=req.headers.origin;
    if(host!=='127.0.0.1:5178'||(origin&&origin!=='http://127.0.0.1:5178')||req.headers['x-creator-capture']!=='1'||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'')){res.statusCode=403;res.end();return;}
    try{
+    const posterMatch=path.match(/^\/api\/local-capture\/export-poster\/([a-f0-9-]{36}|[a-f0-9]{64})$/);
+    if(req.method==='GET'&&posterMatch){res.setHeader('Content-Type','image/jpeg');res.end(await exportPoster(server.config.root,posterMatch[1]));return;}
     if(req.method==='GET'&&/^\/api\/local-capture\/graphic\/[a-f0-9-]{36}$/.test(path)){res.setHeader('Content-Type','image/png');res.end(await readFile(resolve(directory,`${path.split('/').pop()}.png`)));return;}
     if(req.method==='POST'&&['/api/local-capture/graphic-source','/api/local-capture/source-resolve','/api/local-capture/source-workflow'].includes(path)){
      if(active){res.statusCode=429;res.end(JSON.stringify({error:'Media is already processing. Please wait.'}));return;}

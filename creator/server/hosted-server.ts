@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {prepareMedia,SOURCE_MAX_BYTES,cutEndHeader} from './prepare-media';
 import {importVideo,importMessages} from './social-video';
 import {fullComposition} from './full-composition';
+import {exportPoster} from './export-poster';
 import {extractVideoFrames,frameTimesHeader} from './video-frames';
 import {createSavedDraft,DraftError} from './script-draft';
 import {sourceWorkflow} from './source-workflow';
@@ -74,6 +75,8 @@ export function hostedHandler(c:HostingConfig){
     if(job.file){res.setHeader('Content-Type',job.type??'video/mp4');const stream=createReadStream(resolve(jobs,`${id}.mp4`));stream.on('error',()=>res.destroy());stream.pipe(res);return;}
     return json(res,200,job.result);
    }
+   const posterMatch=path.match(/^\/api\/local-capture\/export-poster\/([a-f0-9-]{36}|[a-f0-9]{64})$/);
+   if(req.method==='GET'&&posterMatch){const body=await exportPoster(root,posterMatch[1]);res.setHeader('Content-Type','image/jpeg');return res.end(body);}
    const graphicMatch=path.match(/^\/api\/local-capture\/graphic\/([a-f0-9-]{36})$/);
    if(req.method==='GET'&&graphicMatch&&uuid.test(graphicMatch[1])){res.setHeader('Content-Type','image/png');return res.end(await readFile(resolve(media,`${graphicMatch[1]}.png`)));}
    const mediaMatch=path.match(/^\/api\/local-capture\/(video-background|exports)\/([a-f0-9-]{36}|[a-f0-9]{64})$/);
