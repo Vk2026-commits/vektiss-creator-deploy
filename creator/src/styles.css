@@ -1851,3 +1851,8 @@ dialog::backdrop {
 .profile-change-preview p {white-space:pre-line;}
 .guided-profile .profile-actions {margin-top:20px;}
 @media(max-width:600px){.guided-profile h3{font-size:22px;}.profile-answer{gap:8px;}.profile-actions>.button{flex:1;}.profile-examples button{width:100%;}.profile-change-preview{padding:12px;}}
+.render-failure-card { padding:24px; margin:20px 0 8px; border:1px solid #f0c9bb; border-left:4px solid #d77848; border-radius:18px; background:linear-gradient(135deg,#fffaf5,#fff1e9); box-shadow:0 5px 20px #5e2b0c08; color:#653820; }
+.render-failure-card > strong { display:block; font-size:20px; letter-spacing:-.4px; color:#42291d; }
+.render-failure-card p { margin:10px 0; line-height:1.5; }
+.render-failure-card small { display:block; font-size:12px; color:#7d6557; }
+.render-failure-card .render-actions { margin:18px 0 10px; }

@@ -85,7 +85,15 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   if(prior.error)throw Error('STORAGE');
   if(command.action==='prepare_test')return {revision,snapshot,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
-  if(prior.data)return displayJob(prior.data);
+  if(prior.data){
+   if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
+   // Retain the failed attempt for audit; atomically free the revision for one new reservation.
+   const archived=await db.from('creator_presenter_tests').update({revision:`failed:${prior.data.id}`}).eq('id',prior.data.id).eq('user_id',user).eq('status','failed').eq('revision',revision).select('id').maybeSingle();
+   if(archived.error||!archived.data)throw new PublicError('EXISTS','A retry may already be starting. Refresh status before trying again.',409);
+  }else if(command.retry_of){
+   const old=await db.from('creator_presenter_tests').select('id').eq('id',command.retry_of).eq('user_id',user).eq('script_id',script.id).eq('status','failed').maybeSingle();
+   if(old.error||!old.data)throw new PublicError('NOT_AVAILABLE','Only a confirmed failed render can be retried.',409);
+  }
   // Read credentials BEFORE reserving, but reserve durably BEFORE any paid call.
   const key=await keyFor(user,avatar.connection_id);
   const id=crypto.randomUUID();

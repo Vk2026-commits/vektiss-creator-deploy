@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {PublicError} from './avatar-contract.ts';
 export const testCommand=z.discriminatedUnion('action',[
  z.object({action:z.literal('prepare_test'),script_id:z.string().uuid(),scope:z.enum(['test','full']).optional()}).strict(),
- z.object({action:z.literal('start_test'),script_id:z.string().uuid(),revision:z.string().min(1).max(100),paid_consent:z.literal(true),scope:z.enum(['test','full']).optional()}).strict(),
+ z.object({action:z.literal('start_test'),script_id:z.string().uuid(),revision:z.string().min(1).max(100),paid_consent:z.literal(true),scope:z.enum(['test','full']).optional(),retry_of:z.string().uuid().optional()}).strict(),
  z.object({action:z.literal('test_status'),test_id:z.string().uuid()}).strict(),
  z.object({action:z.literal('download_test'),test_id:z.string().uuid()}).strict(),
 ]);
