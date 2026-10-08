@@ -1,4 +1,5 @@
 import {ScriptProgress,type DraftProgress} from './ScriptProgress';
+import {VideoLibraryPicker} from './VideoLibraryPicker';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { scriptSchema,scriptText, type Script, type ScriptInput } from '../domain/scripts';
 import { emptyBrief, briefSchema, type ScriptBrief } from '../domain/script-brief';
@@ -215,7 +216,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   }
   return <div className="scripts-workspace">
     <div className="page-heading"><h1>Create video</h1></div>
-    <label className="mobile-project-picker">My videos<select disabled={busy||loading} value={current?.id??''} onChange={e=>open(saved.find(item=>item.id===e.target.value)??null)}><option value="">+ New video</option>{saved.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+    <VideoLibraryPicker items={saved} current={current} disabled={busy||loading||sourceProcessing} onSelect={open}/>
     <div className="scripts-grid">
       <aside className="scripts-list"><button className="button" disabled={busy} onClick={() => open(null)}>+ New video</button><h2>My videos</h2>
         {loading ? <p>Loading videos…</p> : saved.length === 0 ? <p>Your videos will appear here.</p> : saved.map(item => <button disabled={busy} className={current?.id === item.id ? 'script-selected' : ''} key={item.id} onClick={() => open(item)}><strong>{item.title}</strong><small>Step {videoStep(item.brief,Boolean(item.brief.production))} of 4 · {new Date(item.updated_at).toLocaleDateString()}</small></button>)}
