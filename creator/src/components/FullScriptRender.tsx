@@ -31,7 +31,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
  async function refresh(){if(!jobId||busy)return;setBusy(true);try{setJob(jobSchema.parse(await avatarRepository.renderTest({action:'test_status',test_id:jobId})));setError('');}catch(e){setError(String(e));}finally{setBusy(false);}}
 	 const backgroundReady=sourceKind==='video'?videoReady:sourceKind==='graphic'?Boolean(plan.article_capture):true;
  return <section className="script-direction render-workspace" aria-label="Full-script presenter">
-  <div className="render-settings"><span>{review?`${review.snapshot.avatar_name} · ${review.snapshot.voice_name??'Default voice'} · ${review.estimated_seconds}s reaction`:'Loading saved settings…'}</span><button disabled={busy||active} onClick={onEditLayout}>Edit placement / voice</button></div>
+  <div className="render-settings"><span>{review?`${review.snapshot.avatar_name} · ${review.snapshot.voice_name??'Default voice'} · ${review.estimated_seconds}s reaction`:'Loading saved settings…'}</span></div>
   <div className="render-more"><button type="button" disabled={balanceBusy||!plan.avatar_id} onClick={()=>void checkBalance()}>{balanceBusy?'Checking HeyGen…':'Check HeyGen balance'}</button>
    {balance&&<div role="status">{balance.items.length?balance.items.map(item=><p key={item.label}>{item.label}: <strong>{item.unit==='usd'?`$${item.value.toFixed(2)} USD`:`${item.value.toLocaleString()} credits`}</strong></p>):<p>HeyGen did not report a balance for this connection. Check your HeyGen dashboard.</p>}<small>Checked {new Date(balance.checked_at).toLocaleTimeString()}. Balance belongs to the connected HeyGen account; this does not reserve credits.</small></div>}
    {balanceError&&<p role="alert">{balanceError}</p>}
@@ -45,7 +45,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
     {busy&&<RenderProgress value={15} label="Submitting to HeyGen"/>}
     <small>Creates one paid HeyGen render with your approved script.</small><div className="render-actions"><button disabled={busy} onClick={onEditLayout}>← Back</button><button className="button" disabled={disabled||busy||!backgroundReady} onClick={()=>void start()}>{busy?'Submitting…':'Confirm & create with HeyGen'}</button></div>
    </div>}
-   <details className="render-more"><summary>Script & render details</summary><p style={{whiteSpace:'pre-wrap'}}>{review.snapshot.script}</p>{job?.message&&<p>{job.message}</p>}{job&&<>{job.video_url&&<a href={job.video_url} target="_blank" rel="noreferrer">Open raw presenter clip</a>}<button disabled={busy} onClick={()=>void refresh()}>Refresh status</button></>}</details>
+   <details className="render-more"><summary>Render details</summary>{job?.message&&<p>{job.message}</p>}{job&&<>{job.video_url&&<a href={job.video_url} target="_blank" rel="noreferrer">Open raw presenter clip</a>}<button disabled={busy} onClick={()=>void refresh()}>Refresh status</button></>}</details>
   </>}{error&&<p role="alert">{error}</p>}
  </section>;
 }
