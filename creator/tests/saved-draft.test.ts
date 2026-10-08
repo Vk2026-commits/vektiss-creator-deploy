@@ -1,10 +1,31 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {createSavedDraft} from '../server/script-draft';
 import {emptyBrief} from '../src/domain/script-brief';
+import {newVideoPlan} from '../src/domain/video-plan';
 const id='11111111-1111-4111-8111-111111111111';
 const config={supabaseUrl:'https://example.supabase.co',publicKey:'public'};
 const initial={id,updated_at:'2026-10-02T00:00:00Z',content_profile_id:id,title:'Untitled video',hook:'',body:'',cta:'',brief:{...emptyBrief(),source:'Saved source text'}};
 afterEach(()=>vi.restoreAllMocks());
+it.each(['review','source'] as const)('summary only preserves script and saved plan at %s',async stage=>{
+ const before={...initial,hook:'Keep hook',body:'Keep body',cta:'Keep CTA',brief:{...initial.brief,stage,production:{...newVideoPlan(),approved_at:'2026-10-07T00:00:00Z',step:'saved' as const}}};
+ let row=before;let aiCalls=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{
+  if(String(url).includes('/functions/')){aiCalls++;expect(JSON.parse(init!.body as string).action).toBe('summarize');return Response.json({summary:'Read-only summary'});}
+  if(init?.method==='PATCH')row={...row,...JSON.parse(init.body as string)};
+  return Response.json([row]);
+ });
+ const result=await createSavedDraft({script_id:id,revision:initial.updated_at,action:'summary_only'},'Bearer user',config);
+ expect(aiCalls).toBe(1);expect(result).toMatchObject({...before,brief:{...before.brief,source_summary:'Read-only summary'}});
+});
+it('failed rewriting never checkpoints over an existing script or plan',async()=>{
+ const before={...initial,body:'Original script',brief:{...initial.brief,production:newVideoPlan()}};let calls=0;let saves=0;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{
+  if(String(url).includes('/functions/'))return ++calls===1?Response.json({source:'New evidence',summary:'New summary'}):Response.json({code:'RATE_LIMIT'},{status:429});
+  if(init?.method==='PATCH')saves++;
+  return Response.json([before]);
+ });
+ await expect(createSavedDraft({script_id:id,revision:initial.updated_at,action:'summarize'},'Bearer user',config)).rejects.toThrow();expect(saves).toBe(0);
+});
 it('saves the summary checkpoint and final script on the server without a phone connection',async()=>{
  let row=initial,aiCalls=0,saves=0;
  const fetcher=vi.spyOn(globalThis,'fetch').mockImplementation(async(url,init)=>{

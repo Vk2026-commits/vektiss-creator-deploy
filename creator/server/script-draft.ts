@@ -4,7 +4,7 @@ import {suggestedVideoTitle} from '../src/domain/video-title';
 import type {ScriptBrief} from '../src/domain/script-brief';
 
 export class DraftError extends Error {}
-const command=z.object({script_id:z.string().uuid(),revision:z.string(),action:z.enum(['summarize','clarify','generate'])});
+const command=z.object({script_id:z.string().uuid(),revision:z.string(),action:z.enum(['summarize','summary_only','clarify','generate'])});
 // The user's own bearer token/RLS authorize every read and write. No service-role key.
 export async function createSavedDraft(input:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string}){
  const request=command.parse(input);
@@ -30,15 +30,19 @@ export async function createSavedDraft(input:unknown,authorization:string,config
  }
  let action:string=request.action;
  const brief={...next.brief,questions:next.brief.questions.filter(q=>q.answer.trim())};
- let result=await ai(action,brief);
+ let result=await ai(action==='summary_only'?'summarize':action,brief);
+ if(action==='summary_only'){
+  next={...next,brief:{...next.brief,source_summary:z.string().parse(result.summary)}};
+  await save();return snapshot;
+ }
  if(action==='summarize'){
   next={...next,title:suggestedVideoTitle(next.title,result.title),brief:{...brief,source:result.source,source_summary:result.summary,stage:'source',clarified:false,questions:[],summary:'',production:undefined}};
-  await save();action='generate';result=await ai(action,next.brief);
+  if(!snapshot.body.trim())await save();action='generate';result=await ai(action,next.brief);
  }else if(action==='clarify'){
   const questions=z.array(z.string().max(1000)).parse(result.questions);
   next={...next,brief:{...brief,summary:result.summary,questions:[...brief.questions.slice(-4),...questions.slice(0,1).map(question=>({question,answer:''}))],clarified:true,stage:'clarify'}};
   if(questions.length){await save();return snapshot;}
-  await save();action='generate';result=await ai(action,next.brief);
+  if(!snapshot.body.trim())await save();action='generate';result=await ai(action,next.brief);
  }
  next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,production:undefined,review:result.review,stage:'review'}};
  await save();return snapshot;
