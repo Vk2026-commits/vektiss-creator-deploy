@@ -6,7 +6,7 @@ export const profileProposalSchema=z.object({
  summary:z.string().max(1000),question:z.string().max(500),
  changes:z.array(z.object({field:z.enum(editFields),value:z.string().max(5000)}).strict()).max(13),
  scope:z.enum(['none','default','next','video','cancel']),count:z.number().int().min(1).max(100).nullable(),cta:ctaSchema.nullable(),
-}).strict();
+}).strict().transform(proposal=>({...proposal,changes:['next','video','cancel'].includes(proposal.scope)?proposal.changes.filter(change=>change.field!=='preferred_ctas'):proposal.changes}));
 export type ProfileProposal=z.infer<typeof profileProposalSchema>;
 export function applyProfileProposal(initial:ContentInput,p:ProfileProposal):ContentInput {
  if(p.question)throw Error('Answer the clarification before saving.');
