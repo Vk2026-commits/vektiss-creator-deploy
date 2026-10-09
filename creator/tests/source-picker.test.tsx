@@ -7,7 +7,8 @@ vi.mock('../src/components/GraphicSource',()=>({GraphicSource:()=> <div>Graphic 
 const props={profileId:'profile',disabled:false,onSource:vi.fn(),onCapture:vi.fn(),onVideo:async()=>{},onGraphic:async()=>{},onProcessing:vi.fn()};
 it('shows one composer and attachment action without source-type switches',()=>{
  const html=renderToStaticMarkup(<SourcePicker {...props} brief={emptyBrief()}/>);
- for(const label of ['Paste a link or add a video or screenshot','Add video or screenshot','Instagram, TikTok, YouTube','Continue'])expect(html).toContain(label);
+ for(const label of ['Paste a link or add a video or screenshot','Add video or screenshot','Instagram','TikTok','YouTube','Website article','Supported files &amp; limits','Continue'])expect(html).toContain(label);
+ expect(html).toContain('aria-label="Supported link sources"');
  for(const label of ['What should we use','Post or article','Upload a file','Graphic workflow'])expect(html).not.toContain(label);
  expect(html).not.toContain('Source type');
  expect(html).not.toContain('Find content');
