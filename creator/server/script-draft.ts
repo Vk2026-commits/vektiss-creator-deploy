@@ -44,6 +44,6 @@ export async function createSavedDraft(input:unknown,authorization:string,config
   if(questions.length){await save();return snapshot;}
   if(!snapshot.body.trim())await save();action='generate';result=await ai(action,next.brief);
  }
- next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,production:undefined,review:result.review,stage:'review'}};
+ next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,...(result.screenshot_story?{screenshot_story:result.screenshot_story}:{}),production:undefined,review:result.review,stage:'review'}};
  await save();return snapshot;
 }

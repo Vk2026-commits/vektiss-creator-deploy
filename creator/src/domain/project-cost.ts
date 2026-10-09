@@ -4,6 +4,8 @@ type Usage=Record<string,any>;
 export function openAICost(model:string,usage:unknown):number|null {
  if(!usage||typeof usage!=='object')return null;
  const u=usage as Usage;
+ // Whisper reference rate, not an invoice. Duration is returned by the provider.
+ if(model==='whisper-1')return typeof u.duration_seconds==='number'&&Number.isFinite(u.duration_seconds)&&u.duration_seconds>=0?u.duration_seconds/60*.006:null;
  if(u.initial||u.rewrite){const a=openAICost(model,u.initial),b=u.rewrite?openAICost(model,u.rewrite):0;return a===null||b===null?null:a+b;}
  const rates=model==='gpt-4o-mini'?[.15,.075,.6]:['gpt-4.1','gpt-4.1-2025-04-14'].includes(model)?[2,.5,8]:model==='gpt-4o-mini-transcribe'?[1.25,1.25,5]:null;
  const input=u.prompt_tokens??u.input_tokens,output=u.completion_tokens??u.output_tokens;

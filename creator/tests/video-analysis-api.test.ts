@@ -5,10 +5,22 @@ vi.mock('@supabase/supabase-js',()=>({createClient:()=>({
  from:(table:string)=>table==='content_profiles'?{select:()=>({eq:()=>({eq:()=>({single:async()=>({data:{name:'test'}})})})})}:{insert:async()=>({}),update:(value:unknown)=>{mocks.update(value);return {eq:async()=>({})};}}
 })}));
 let handler:(request:Request)=>Promise<Response>;
+it('requests word timestamps for story alignment and records duration-based estimated cost',async()=>{
+ mocks.fetch.mockClear();mocks.update.mockClear();
+ const words=[{word:'Hello',start:0,end:.5}];
+ mocks.fetch.mockResolvedValueOnce(Response.json({text:'Hello',duration:60,words}));
+ const body=new FormData();body.set('action','story-alignment');body.set('profileId','11111111-1111-4111-8111-111111111111');body.set('file',new File(['audio'],'narration.mp3',{type:'audio/mpeg'}));
+ const response=await handler(new Request('https://test',{method:'POST',headers:{authorization:'Bearer test'},body}));
+ expect(response.status).toBe(200);expect((await response.json()).words).toEqual(words);
+ const outbound=mocks.fetch.mock.calls[0][1].body as FormData;
+ expect(outbound.get('model')).toBe('whisper-1');expect(outbound.get('timestamp_granularities[]')).toBe('word');expect(outbound.get('response_format')).toBe('verbose_json');
+ expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({status:'complete',usage:{duration_seconds:60},estimated_cost_usd:.006}));
+});
 beforeAll(async()=>{vi.stubGlobal('Deno',{env:{get:()=> 'test'},serve:(h:typeof handler)=>handler=h});vi.stubGlobal('fetch',mocks.fetch);await import('../supabase/functions/script-assistant/index');});
 afterAll(()=>vi.unstubAllGlobals());
 function request(frames:string[],action='video-analysis'){const body=new FormData();body.set('action',action);body.set('profileId','11111111-1111-4111-8111-111111111111');body.set('frames',JSON.stringify(frames));body.set('transcript',"It ain't a phone.");return new Request('https://test',{method:'POST',headers:{authorization:'Bearer test'},body});}
 it('analyzes frames even when speech is shorter than forty characters and persists the report',async()=>{
+ mocks.fetch.mockClear();
  const text='Visible actions: a person holds an object. Uncertainty: the sampled frames do not establish its purpose.';
  mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({text})}}],usage:{total_tokens:123}}));
  const result=await handler(request(['data:image/jpeg;base64,/9j/']));expect(result.status).toBe(200);expect((await result.json()).text).toBe(text);
