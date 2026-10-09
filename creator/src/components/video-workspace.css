@@ -73,6 +73,9 @@
 .scripts-workspace .render-workspace .layout-caption{font-size:12px;line-height:1.4;margin:8px 0}
 .scripts-workspace .render-workspace small{font-size:12px;line-height:1.5}
 .finished-video-player>video{display:block;max-width:100%;max-height:45dvh;margin:8px auto}
+.finished-video-poster{position:relative;display:grid;place-items:center;width:fit-content;max-width:100%;margin:8px auto;overflow:hidden;border-radius:14px;background:#e8f0fb;box-shadow:0 6px 24px #17345512}
+.finished-video-poster>img{display:block;width:auto;height:auto;max-width:100%;max-height:45dvh;object-fit:contain}
+.finished-video-placeholder{display:grid;place-items:center;width:220px;max-width:100%;min-height:240px;padding:24px;color:#526780}
 .finished-video-timeline{display:flex;flex-wrap:wrap;align-items:center;gap:0 12px;margin:8px 0;font-size:14px}
 .finished-video-timeline input[type=range]{order:3;flex:1 0 100%;width:100%;min-width:0;min-height:44px;margin:0;padding:0;accent-color:#1677ff;cursor:pointer}
 .finished-video-time{margin-left:auto;font-variant-numeric:tabular-nums}

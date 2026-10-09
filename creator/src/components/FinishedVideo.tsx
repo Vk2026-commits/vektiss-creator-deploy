@@ -78,8 +78,8 @@ function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
   {!captureId&&!presenterOnly?<p>Go back to the source step to attach your background. Your existing avatar render is preserved.</p>:<>
    {!ready&&!error?<RenderProgress value={0} indeterminate label="Opening your video…"/>:ready&&<>
     {playing&&url?<FinishedVideoPlayer src={url} poster={poster} playOnLoad/>:
-     <div style={{position:'relative',display:'grid',placeItems:'center',minHeight:220,background:'#e8f0fb',borderRadius:16,overflow:'hidden'}}>
-      {poster?<img src={poster} alt="Finished video thumbnail" onError={()=>setPoster('')} style={{display:'block',maxWidth:'100%',maxHeight:'55dvh'}}/>:<span style={{padding:32,color:'#526780'}}>Your finished video</span>}
+     <div className="finished-video-poster">
+      {poster?<img src={poster} alt="Finished video thumbnail" onError={()=>setPoster('')}/>:<span className="finished-video-placeholder">Your finished video</span>}
       <button type="button" className="button" aria-label="Play finished video" disabled={loading} onClick={()=>void activate('play')} style={{position:'absolute'}}>▶ Play</button>
      </div>}
     {loading&&<div role="status" aria-live="polite"><p>Loading your video…{download?.total?' '+Math.min(100,Math.round(download.received/download.total*100))+'%':''}</p><progress aria-label="Loading saved MP4" max={download?.total??undefined} value={download?.total?download.received:undefined}/></div>}
