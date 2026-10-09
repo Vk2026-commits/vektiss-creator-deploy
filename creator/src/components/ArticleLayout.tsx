@@ -30,7 +30,7 @@ export function ArticleLayout({plan,sourceUrl='',graphic=false,onChange}:{plan:V
   catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Capture failed.');else setError('Capture stopped or timed out. You can retry or upload a screenshot.');}
   finally{clearTimeout(timer);setCapturing(false);controller.current=null;}
  }
- if(graphic)return <section className="article-layout"><h3>Position your avatar over the graphic</h3>{plan.article_capture?<FreePresenter plan={plan} onChange={onChange}><GraphicImage id={plan.article_capture.id}/></FreePresenter>:<p>Return to the source and choose a graphic first.</p>}<p><small>The saved graphic stays on screen while your avatar speaks. To replace it, go back to the source.</small></p></section>;
+if(graphic)return <section className="article-layout"><h3>{plan.screenshot_story?'Position your avatar for the story':'Position your avatar over the graphic'}</h3>{plan.article_capture?<FreePresenter plan={plan} onChange={onChange}><GraphicImage id={plan.article_capture.id}/></FreePresenter>:<p>Return to the source and choose a graphic first.</p>}<p><small>{plan.screenshot_story?'Previewing the first screenshot. This avatar position is used for every image; screenshots change with the narration.':'The saved graphic stays on screen while your avatar speaks. To replace it, go back to the source.'}</small></p></section>;
 	 return <section className="article-layout" aria-label="Article and presenter layout">
 	  <h3>Add a source screenshot <small>(optional)</small></h3>
 	  <p>Add the article in a mobile view if you want it behind your presenter. You can continue without one for a presenter-only video.</p>
