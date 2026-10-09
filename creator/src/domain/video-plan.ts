@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {screenshotStorySchema} from './screenshot-story.ts';
+import {backgroundFramingSchema} from './background-framing.ts';
 export const presenterPositions=['bottom-left','bottom-center','bottom-right','middle-left','middle-right'] as const;
 export const graphicCaptureSchema=z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().max(2000),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()});
 // Anchors may extend outside the frame; the canvas/export crops the overflow.
@@ -22,6 +23,7 @@ export const videoPlanSchema=z.object({
  presenter_size:z.number().min(15).max(90).default(28),
  presenter_placement:freePlacementSchema.optional(),
  article_capture:graphicCaptureSchema.optional(),
+ background_framing:backgroundFramingSchema.optional(),
  screenshot_story:screenshotStorySchema.optional(),
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });

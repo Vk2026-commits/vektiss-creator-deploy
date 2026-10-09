@@ -15,6 +15,7 @@ import {renderReactionSequence,REACTION_SEQUENCE_VERSION} from './reaction-seque
 import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type ScreenshotStory} from '../src/domain/screenshot-story';
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
+import {backgroundFilter} from '../src/domain/background-framing';
 const exec=promisify(execFile);
 export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
@@ -29,6 +30,7 @@ export function alphaBounds(log:string,w:number,h:number,padding=8){
 }
 export async function fullComposition(root:string,input:unknown,authorization:string,env:Record<string,string>){
  const c=fullCompositionSchema.parse(input);
+ if(c.background_framing&&(c.video_id||c.story||c.presenter_only))throw Error('Background framing is available for a single screenshot only.');
  let story:ScreenshotStory|undefined,profileId='';
  if(!authorization.startsWith('Bearer '))throw Error('Sign in before creating a video.');
  const response=await fetch(`${env.VITE_SUPABASE_URL}/functions/v1/avatar-manager`,{method:'POST',headers:{Authorization:authorization,apikey:env.VITE_SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({action:'test_status',test_id:c.job_id}),signal:AbortSignal.timeout(45000)});
@@ -72,7 +74,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const crop=fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected;
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
- const filter=`[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:0:color=0xe8edf4,setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
+ const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
  const temp=resolve(folder,`${id}.partial.mp4`);
  let background=resolve(root,'.local-captures',c.video_id?`${c.video_id}.video`:`${c.capture_id}.png`);
  let totalDuration=duration;

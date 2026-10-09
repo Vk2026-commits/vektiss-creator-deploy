@@ -7,8 +7,9 @@ import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {presenterPositions,freePlacementSchema,type VideoPlan} from '../src/domain/video-plan';
 import {presenterLayout} from '../src/domain/presenter-layout';
+import {backgroundFramingSchema} from '../src/domain/background-framing';
 const exec=promisify(execFile);
-export const composeSchema=z.object({capture_id:z.string().uuid(),position:z.enum(presenterPositions),format:z.enum(['portrait','landscape','square']),size:z.number().min(15).max(90).default(28),placement:freePlacementSchema.optional()}).strict();
+export const composeSchema=z.object({capture_id:z.string().uuid(),position:z.enum(presenterPositions),format:z.enum(['portrait','landscape','square']),size:z.number().min(15).max(90).default(28),placement:freePlacementSchema.optional(),background_framing:backgroundFramingSchema.optional()}).strict();
 export function compositionFilter(position:typeof presenterPositions[number],format:'portrait'|'landscape'|'square',size=28,placement?:VideoPlan['presenter_placement']){
  const {w,h,width,height,x,y}=presenterLayout(format,position,size,placement);
  // Only removes transparent padding around this verified test presenter, not speech.
