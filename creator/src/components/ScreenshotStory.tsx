@@ -47,7 +47,8 @@ export function ScreenshotStory({files,initial,notes,profileId,projectId,scope,o
      const result=await response.json();if(!response.ok||typeof result.text!=='string')throw Error(result.error??'Could not read this screenshot. Add context and retry.');
      next=next.map((image,index)=>index===i?{...image,analysis:result.text.slice(0,6500)}:image);save(next);
     }
-    setWorking('Writing your story…');
+    // The parent owns script-generation progress; avoid two overlapping dialogs.
+    setWorking('');
     await complete.current({version:1,images:next,sections:[]},next.map((image,i)=>`Screenshot ${i+1} (${image.id}):\n${image.analysis}`).join('\n\n'));
    }
   }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Could not prepare the story. Retry using the saved screenshots.');}
