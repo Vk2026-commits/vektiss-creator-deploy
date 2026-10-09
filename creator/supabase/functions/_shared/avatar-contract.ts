@@ -26,6 +26,7 @@ export const avatarSchema = z.object({
   thumbnail_url: z.string().nullable(),
   status: avatarStatus,
   is_default: z.boolean(),
+  verified_previews:z.array(z.object({test_id:z.string().uuid(),engine:z.string(),aspect_ratio:z.string(),crop:z.object({x:z.number(),y:z.number(),width:z.number(),height:z.number()})})).optional(),
   capabilities: z.object({
     engines: z.array(z.string()),
     transparency: z.enum(["unknown", "supported", "unsupported"]),
@@ -61,6 +62,7 @@ const connection = { connection_id: z.string().uuid() };
 const cursor = z.string().max(2048).nullable().optional();
 const managementCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("library") }).strict(),
+  z.object({action:z.literal('verify_avatar_test'),test_id:z.string().uuid()}).strict(),
   z.object({ action: z.literal("engine_capabilities"), avatar_id:z.string().uuid() }).strict(),
   z.object({ action: z.literal("balance"), avatar_id:z.string().uuid() }).strict(),
   z

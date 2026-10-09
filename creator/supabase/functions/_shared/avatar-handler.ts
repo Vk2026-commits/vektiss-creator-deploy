@@ -81,7 +81,7 @@ export function createAvatarHandler(options: {
           401,
         );
       const command = avatarCommandSchema.parse(await readBody(request));
-      const result = await options.service.execute(userId, command);
+      const result = await options.service.execute(userId, command, auth);
       if(result instanceof Response){
         const downloadHeaders=new Headers(headers);
         result.headers.forEach((value,key)=>downloadHeaders.set(key,value));

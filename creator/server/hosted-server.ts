@@ -13,6 +13,7 @@ import {sourceWorkflow} from './source-workflow';
 import {graphicSource} from './graphic-source';
 import {resolveSource} from './source-resolve';
 import {reportProcessing,mediaInventory} from './project-usage';
+import {verifyAvatarMedia} from './avatar-verification';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -56,6 +57,13 @@ export function hostedHandler(c:HostingConfig){
    // Every filename is resolved beneath the verified user's directory, never a client-supplied owner.
    const root=resolve(c.data,user.id),media=resolve(root,'.local-captures'),jobs=resolve(root,'jobs');
    await mkdir(jobs,{recursive:true,mode:0o700});await mkdir(media,{recursive:true,mode:0o700});
+   const avatarCheck=path.match(/^\/api\/local-capture\/avatar-verification\/([a-f0-9-]{36})$/);
+   if(req.method==='GET'&&avatarCheck&&uuid.test(avatarCheck[1])){
+    try{return json(res,200,await verifyAvatarMedia(root,avatarCheck[1],user.id,authorization,c));}
+    catch(e){const message=e instanceof Error?e.message:'';return json(res,422,{error:/^(Complete a short|Could not load your saved test|This avatar video|The short test|Unsupported test video|Could not inspect the avatar|The background could not|Another background check|Unsupported avatar media|The test video could not)/.test(message)?message:'Background check failed. Retry verification; no paid render was started.'});}
+   }
+   const avatarPoster=path.match(/^\/api\/local-capture\/avatar-preview\/([a-f0-9-]{36})$/);
+   if(req.method==='GET'&&avatarPoster&&uuid.test(avatarPoster[1])){res.setHeader('Content-Type','image/png');return res.end(await readFile(resolve(root,'avatar-previews',`${avatarPoster[1]}.png`)));}
    const jobMatch=path.match(/^\/api\/local-capture\/jobs\/([a-f0-9-]{36})$/);
    if(req.method==='GET'&&jobMatch){
     const id=jobMatch[1];if(!uuid.test(id))return json(res,404,{error:'Not found'});

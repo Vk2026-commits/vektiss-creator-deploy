@@ -8,6 +8,7 @@ import {selectedVoiceForPlan} from './selected-voice.ts';
 import {spokenEmergencyNumber,steveReactionProfile} from '../../../src/domain/reaction-script.ts';
 import {STEPHEN_AVATAR} from '../../../src/domain/avatar-framing.ts';
 import {validateStoryScript} from '../../../src/domain/screenshot-story.ts';
+import {avatarVerification} from './avatar-verification.ts';
 
 export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof credentialVault>){
  async function displayJob(job:Record<string,unknown>){
@@ -88,6 +89,9 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
    avatarType=look.avatar_type;
   }
   if(plan.voice_engine==='fish')engineSnapshot.voice_engine='fish';
+  // A new test revision is needed to certify the current look. Full-render
+  // revisions remain unchanged so existing paid outputs are still recoverable.
+  if(scope==='test')Object.assign(snapshot,{verification_version:1,look_thumbnail_url:avatar.thumbnail_url});
   if(!snapshot.script.trim())throw new PublicError('SCRIPT','The script is empty.');
   // Size, article and save timestamps do not change the paid presenter asset.
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({connection_id:avatar.connection_id,snapshot})));
@@ -95,8 +99,10 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const prior=await db.from('creator_presenter_tests').select('*').eq('script_id',script.id).eq('revision',revision).eq('user_id',user).maybeSingle();
   if(prior.error)throw Error('STORAGE');
   const estimate=engineEstimate(plan.avatar_engine??'avatar_iv',avatarType,Math.ceil(snapshot.script.split(/\s+/).length/2.5));
-  if(command.action==='prepare_test')return {revision,snapshot,estimate,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
+  const verification=await avatarVerification(db,user,avatar,plan.avatar_engine??'avatar_iv',snapshot.aspect_ratio);
+  if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
+  if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Complete and verify a short avatar test before creating the full video. This check is saved for this avatar, engine and video shape.',409);
   if(prior.data){
    if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
    // Retain the failed attempt for audit; atomically free the revision for one new reservation.
@@ -109,7 +115,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Read credentials BEFORE reserving, but reserve durably BEFORE any paid call.
   const key=await keyFor(user,avatar.connection_id);
   const id=crypto.randomUUID();
-  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate}}).select('*').single();
+  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate,...(scope==='full'&&verification?{verified_frame:verification}: {})}}).select('*').single();
   if(reserved.error)throw new PublicError('EXISTS','A test may already be starting. Refresh its status; do not submit again.',409);
   try{
    const result=await providerVideo(key,'',testPayload(snapshot));

@@ -8,15 +8,17 @@ import {
 import { credentialVault, type SealedCredential } from "./credential-crypto.ts";
 import { HeyGenCatalog, type AvatarCatalogProvider } from "./heygen.ts";
 import { presenterTestService } from './presenter-test-service.ts';
+import {verifySavedAvatar} from './avatar-verification.ts';
 
 export interface AvatarService {
-  execute(userId: string, command: AvatarCommand): Promise<unknown>;
+  execute(userId: string, command: AvatarCommand, authorization?:string): Promise<unknown>;
 }
 export function createAvatarService(
   db: SupabaseClient,
   vault: ReturnType<typeof credentialVault>,
   providerFactory: (key: string) => AvatarCatalogProvider = (key) =>
     new HeyGenCatalog(key),
+  verificationOrigin?:string,
 ): AvatarService {
   async function rpc(name: string, params: Record<string, unknown>) {
     const { data, error } = await db.rpc(name, params);
@@ -61,9 +63,11 @@ export function createAvatarService(
         "Your avatar library could not load. Try again.",
         503,
       );
+    const verified=await db.from('creator_avatar_verifications').select('avatar_id,connection_id,thumbnail_url,test_id,engine,aspect_ratio,crop').eq('user_id',userId).eq('verification_version',1);
+    if(verified.error)throw new PublicError('STORAGE','Could not load avatar checks. Please retry.',503);
     return librarySchema.parse({
       connections: connections.data,
-      avatars: avatars.data,
+      avatars: avatars.data.map(a=>({...a,verified_previews:(verified.data??[]).filter(v=>v.avatar_id===a.id&&v.connection_id===a.connection_id&&v.thumbnail_url===a.thumbnail_url)})),
     });
   }
   async function withProvider<T>(
@@ -100,7 +104,7 @@ export function createAvatarService(
     }
   }
   return {
-    async execute(userId, command) {
+    async execute(userId, command,authorization) {
       const allowed = await rpc("creator_avatar_rate_limit", {
         p_user_id: userId,
         p_operation: command.action === "connect" ? "connect" : "other",
@@ -111,6 +115,10 @@ export function createAvatarService(
           "Too many requests. Please wait a minute and try again.",
           429,
         );
+      if(command.action==='verify_avatar_test'){
+        if(!verificationOrigin||!authorization)throw new PublicError('VERIFICATION','Background verification is not available yet. No paid render was started.',503);
+        return verifySavedAvatar(db,userId,command.test_id,authorization,verificationOrigin);
+      }
       if(command.action==='prepare_test'||command.action==='start_test'||command.action==='test_status'||command.action==='download_test')return presenterTestService(db,vault)(userId,command);
       if (command.action === "library") return library(userId);
       if(command.action==='engine_capabilities'){

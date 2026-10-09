@@ -67,7 +67,9 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const duration=Number(probe.format.duration);if(!Number.isFinite(duration)||duration<=0||duration>1200)throw Error('Unsupported presenter duration.');
  const bounds=await exec(ffmpeg,['-hide_banner','-c:v','libvpx-vp9','-i',source,'-an','-vf',`${c.placement?cleanup:''}format=rgba,alphaextract,bbox=min_val=16`,'-f','null','-'],{timeout:240000,maxBuffer:32*1024*1024});
  const detected=alphaBounds(bounds.stderr,stream.width,stream.height,c.placement?0:8);
- const crop=fixedPresenterCrop(c.framing,stream.width,stream.height)??detected;
+ const verified=job.snapshot?.verified_frame;
+ if(verified&&(verified.source_width!==stream.width||verified.source_height!==stream.height))throw Error('The avatar framing changed. Your paid render is saved; contact support before retrying assembly.');
+ const crop=fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected;
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
  const filter=`[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:0:color=0xe8edf4,setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
