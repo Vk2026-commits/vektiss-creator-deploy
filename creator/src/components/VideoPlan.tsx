@@ -30,6 +30,14 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
 	 const selectedAvatar=avatars.find(a=>a.id===plan.avatar_id);
 	 const presenterReady=plan.presenter==='avatar'&&Boolean(selectedAvatar)&&plan.avatar_engine!==null&&engineValid;
 	 const choosing=plan.step==='presenter'||plan.step==='visuals';
+ useEffect(()=>{
+  if(!choosing||busy||!selectedAvatar)return;
+  const aspect=plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9';
+  const verified=selectedAvatar.verified_previews?.find(v=>v.engine===(plan.avatar_engine??'avatar_iv')&&v.aspect_ratio===aspect);
+  if(!verified)return;
+  const avatar_preview={avatar_id:selectedAvatar.id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:verified.crop.width/verified.crop.height};
+  if(JSON.stringify(plan.avatar_preview)!==JSON.stringify(avatar_preview))onChange({...plan,avatar_preview});
+ },[choosing,busy,selectedAvatar,plan,onChange]);
 	 const videoSource=script.brief.kind==='video';
 	 const graphicSource=script.brief.kind==='graphic';
 	 const backgroundReady=Boolean(plan.article_capture&&plan.article_capture.source_url===script.brief.url);

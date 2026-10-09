@@ -14,7 +14,7 @@ async function request(command: AvatarCommand) {
     throw new Error("Connect a Supabase project to enable the avatar library.");
   const { data, error } = await withDeadline(signal=>supabase!.functions.invoke("avatar-manager", {
     body: avatarCommandSchema.parse(command),signal,
-  }),45000,'The avatar request timed out. Refresh status before attempting another paid render.');
+  }),command.action==='verify_avatar_test'?115000:45000,'The avatar request timed out. Refresh status before attempting another paid render.');
   if (error) {
     let message = "The avatar service is unavailable. Please try again.";
     if (error.context instanceof Response) {
