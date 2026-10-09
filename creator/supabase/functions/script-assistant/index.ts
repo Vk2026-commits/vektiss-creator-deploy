@@ -9,7 +9,7 @@ import {scriptResponseFormat} from '../../../src/domain/script-response-format.t
 import {boundarySchema,boundaryFormat,boundaryPrompt} from '../../../src/domain/source-cut.ts';
 import {openAICost,PRICING_VERSION} from '../../../src/domain/project-cost.ts';
 import {normalizeGraphicText} from '../../../src/domain/graphic-text.ts';
-import {ctaInstruction,ctaSelectionSchema} from '../../../src/domain/cta.ts';
+import {ctaInstruction,ctaSelectionSchema,containsCtaKeyword} from '../../../src/domain/cta.ts';
 import {storySectionsFromStarts} from '../../../src/domain/screenshot-story.ts';
 import {creatorContextSchema} from '../../../src/domain/strategy.ts';
 declare const Deno: {env:{get(k:string):string|undefined};serve(h:(r:Request)=>Promise<Response>):void};
@@ -165,7 +165,7 @@ Deno.serve(async request=>{
   const output=clarify?questions.parse(parsed):script.parse(profileId===steveReactionProfile?normalizeReactionDraft(script.parse(parsed)):parsed);
   if(!clarify&&selectedCTA&&'cta' in output){
    if(!conversationalCTA)output.cta=profileId===steveReactionProfile?selectedCTA.cta.text.replace(/\b911\b/g,'9-1-1'):selectedCTA.cta.text;
-   else if(selectedCTA.cta.keyword && !output.cta.includes(selectedCTA.cta.keyword))throw Error('SCRIPT_STYLE');
+   else if(!containsCtaKeyword(output.cta,selectedCTA.cta.keyword))throw Error('SCRIPT_STYLE');
   }
   let screenshot_story=input?.brief.screenshot_story;
   let totalUsage:unknown=rewriteUsage?{initial:data.usage,rewrite:rewriteUsage}:data.usage;

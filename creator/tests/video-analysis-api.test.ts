@@ -12,7 +12,7 @@ it('loads current owner voice and preserves a concise default CTA instead of ove
  mocks.creator.mockResolvedValue({data:{context:{...emptyCreator.context,communication_style:'Start with a viewer callout. No greetings.',preferred_cta_style:'Short comment-keyword invitation.'}}});
  const draft={hook:'Buying a house? Check this first.',body:'Ask which scoring model the lender uses.',cta:'Comment CLASS for information about my credit community.',review:'Source-based commentary.'};
  mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
- const brief={...emptyBrief(),source:'A substantive source discusses how lenders use different credit scoring models.',cta_selection:{scope:'default',campaign_id:null,cta:{text:'Join my $37/month community with Tuesday calls. Comment CLASS and I will send information.',keyword:'CLASS',offer:'Credit community',delivery:'Send information'}}};
+ const brief={...emptyBrief(),source:'A substantive source discusses how lenders use different credit scoring models.',cta_selection:{scope:'default',campaign_id:null,cta:{text:'Join my $37/month community with Tuesday calls. Comment CLASS and I will send information.',keyword:'class',offer:'Credit community',delivery:'Send information'}}};
  const result=await handler(new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief})}));
  expect(result.status).toBe(200);expect((await result.json()).cta).toBe(draft.cta);
  const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);
