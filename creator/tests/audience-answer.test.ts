@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {contentInputSchema,emptyContent,explainError,audienceAnswerLimit} from '../src/domain/strategy';
+import {researchBriefSchema} from '../src/domain/research';
 
 describe('guided audience answers',()=>{
  const profile={...emptyContent,name:'Credit education',primary_audience:'First-time buyers'};
@@ -21,5 +22,16 @@ describe('guided audience answers',()=>{
  });
  it('does not expose backend error messages',()=>{
   expect(explainError(new Error('internal database details'))).not.toContain('database');
+ });
+ it('Discover accepts the same full saved answers for videos and articles',()=>{
+  const fields=['audienceProblems','audienceInterests','contentPillars','sourceTopics','reactionAngles','desiredOutcomes','profileTone','thingsToAvoid'] as const;
+  for(const field of fields){
+   const schema=researchBriefSchema.shape[field];
+   const answer=['Credit education and practical next steps. '.repeat(60).trim()];
+   expect(schema.parse(answer)).toEqual(answer);
+   expect(schema.safeParse(['x'.repeat(audienceAnswerLimit)]).success).toBe(true);
+   expect(schema.safeParse(['x'.repeat(audienceAnswerLimit+1)]).success).toBe(false);
+  }
+  expect(researchBriefSchema.shape.creatorTone.safeParse(['x'.repeat(161)]).success).toBe(false);
  });
 });

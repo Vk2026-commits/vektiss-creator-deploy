@@ -6,7 +6,7 @@ const items = z.array(z.string().trim().min(1).max(160)).max(20);
 // Guided answers accept prose as well as newline-separated examples. Never
 // truncate a paragraph to the old short-tag limit.
 export const audienceAnswerLimit = 3220;
-const audienceItems = z.array(z.string().trim().min(1).max(audienceAnswerLimit)).max(20)
+export const audienceItems = z.array(z.string().trim().min(1).max(audienceAnswerLimit)).max(20)
   .refine(values => values.join('\n').length <= audienceAnswerLimit,
     `Keep this answer within ${audienceAnswerLimit} characters.`);
 export const creatorContextSchema = z

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { audienceItems } from './strategy.ts';
 import {articleDateSchema,articleWindowSchema} from './research-window.ts';
 
 const shortText = (max: number) => z.string().trim().min(1).max(max);
@@ -92,14 +93,14 @@ export const researchBriefSchema = z
     creatorContext: z.string().trim().max(5000),
     audienceName: z.string().trim().max(100),
     primaryAudience: z.string().trim().max(1000),
-    audienceProblems: z.array(z.string().trim().max(160)).max(20),
-    audienceInterests: z.array(z.string().trim().max(160)).max(20),
-    contentPillars: z.array(z.string().trim().max(160)).max(20),
-    sourceTopics: z.array(z.string().trim().max(160)).max(20),
-    reactionAngles: z.array(z.string().trim().max(160)).max(20),
-    desiredOutcomes: z.array(z.string().trim().max(160)).max(20),
-    profileTone: z.array(z.string().trim().max(160)).max(20),
-    thingsToAvoid: z.array(z.string().trim().max(160)).max(20),
+    audienceProblems: audienceItems,
+    audienceInterests: audienceItems,
+    contentPillars: audienceItems,
+    sourceTopics: audienceItems,
+    reactionAngles: audienceItems,
+    desiredOutcomes: audienceItems,
+    profileTone: audienceItems,
+    thingsToAvoid: audienceItems,
     profileContext: z.string().trim().max(5000),
     researchSourcePlatforms: z.array(z.enum(["TikTok", "Instagram", "YouTube"])).max(3).default([]),
     researchScreeningCriteria: z.string().trim().max(12000).default(""),
