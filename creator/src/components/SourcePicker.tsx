@@ -11,6 +11,8 @@ import {loadSourceVideo} from '../lib/source-cut';
 import {composerInput,resolvedSourceSchema,type ResolvedSource} from '../domain/resolved-source';
 import './source-composer.css';
 import {sourceUploadType} from '../domain/upload-type';
+import {ScreenshotStory} from './ScreenshotStory';
+import type {ScreenshotStory as Story} from '../domain/screenshot-story';
 
 const checkpointSchema=z.object({operation:z.string().uuid(),text:z.string().max(12000),url:z.string(),notes:z.string(),result:resolvedSourceSchema.optional()});
 function MediaPreview({file,id}:{file?:File;id?:string}){
@@ -21,10 +23,11 @@ function MediaPreview({file,id}:{file?:File;id?:string}){
  },[file,id]);
  return error?<span role="alert">{error}</span>:!src?<span role="status">Loading preview…</span>:file?.type.startsWith('image/')?<img src={src} alt="Attached screenshot"/>:<video className="resolved-video" src={src} controls playsInline preload="metadata"/>;
 }
-export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource,onCapture,onVideo,onGraphic,onProcessing,onProgress}:{brief:ScriptBrief;profileId:string;disabled:boolean;busy?:boolean;scope?:string;onSource:(patch:Partial<ScriptBrief>)=>void;onCapture:(capture:NonNullable<ScriptBrief['graphic_capture']>)=>void;onVideo:(text:string,cut:SourceCut)=>Promise<void>;onGraphic:(text:string)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void}){
+export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource,onCapture,onVideo,onGraphic,onStory,onProcessing,onProgress}:{brief:ScriptBrief;profileId:string;disabled:boolean;busy?:boolean;scope?:string;onSource:(patch:Partial<ScriptBrief>)=>void;onCapture:(capture:NonNullable<ScriptBrief['graphic_capture']>)=>void;onVideo:(text:string,cut:SourceCut)=>Promise<void>;onGraphic:(text:string)=>Promise<void>;onStory?:(story:Story,source:string)=>Promise<void>;onProcessing:(busy:boolean)=>void;onProgress?:(p:DraftProgress)=>void}){
  const key=`vektiss:source-composer:v1:${scope??'local'}:${profileId}`;
  const [text,setText]=useState([brief.url,brief.notes].filter(Boolean).join('\n\n'));
  const [file,setFile]=useState<File|null>(null),[error,setError]=useState(''),[working,setWorking]=useState('');
+ const [storyFiles,setStoryFiles]=useState<File[]>([]);
  const [resolved,setResolved]=useState<ResolvedSource|null>(brief.prepared_source??(brief.graphic_capture?{kind:'graphic',capture:brief.graphic_capture}:null)),[conflict,setConflict]=useState(false);
  const input=useRef<HTMLInputElement>(null),active=useRef<AbortController|null>(null);
  const reviewHeading=useRef<HTMLHeadingElement>(null),wasWorking=useRef(false);
@@ -36,7 +39,12 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
  const locked=busy||disabled||!!working;
  function selectFiles(files:File[]){
   if(locked)return;
-  if(files.length!==1){setError('Add one video or screenshot at a time.');return;}
+  if(file&&file.type.startsWith('image/')&&files.every(f=>sourceUploadType(f)?.startsWith('image/')))files=[file,...files];
+  if(files.length>1){
+   if(files.length>5||files.some(f=>!sourceUploadType(f)?.startsWith('image/')||f.size>10*1024*1024)){setError('Choose up to five screenshots, each under 10 MB. Do not mix videos and screenshots.');return;}
+   if(composerInput(text).links.length){setError('Remove the link before adding a screenshot story.');return;}
+   setStoryFiles(files.map(f=>new File([f],f.name,{type:sourceUploadType(f)!,lastModified:f.lastModified})));setFile(null);setResolved(null);setError('');return;
+  }
   const original=files[0],type=sourceUploadType(original);
   if(!type){setError('Choose an MP4 or WebM video, or a PNG, JPEG or WebP screenshot.');return;}
   const next=original.type===type?original:new File([original],original.name,{type,lastModified:original.lastModified}),video=type.startsWith('video/');
@@ -72,12 +80,13 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
   const checkpoint={operation:crypto.randomUUID(),text,url,notes:parsed.notes};
   setConflict(false);recoveryWrite(key,JSON.stringify(checkpoint));void run(checkpoint,upload);
  }
+if((storyFiles.length||brief.screenshot_story||recoveryRead(`${key}:story-pending`))&&onStory)return <ScreenshotStory files={storyFiles} initial={brief.screenshot_story} notes={text} profileId={profileId} projectId={brief.cost_project_id} scope={key} onProcessing={onProcessing} onSave={screenshot_story=>onSource({kind:'graphic',screenshot_story,notes:text,url:'',prepared_source:undefined,graphic_capture:undefined})} onComplete={onStory} onCancel={()=>{setStoryFiles([]);recoveryWrite(`${key}:story-pending`,null);onSource({screenshot_story:undefined});}}/>;
  return <section aria-label="Add your reaction source" aria-busy={!!working} className="reaction-source-picker">
   {!working&&<h2 ref={reviewHeading} tabIndex={-1} className="source-review-heading">{resolved?'Review your source':'What would you like to react to?'}</h2>}
   {working?null:!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
    {file&&<div className="source-attachment"><MediaPreview file={file}/><span>{file.name}</span><button type="button" aria-label="Remove attachment" disabled={locked} onClick={()=>{setFile(null);setConflict(false);}}>×</button></div>}
    <textarea aria-label="Source link and optional direction" placeholder="Paste a link or add a video or screenshot…" rows={3} maxLength={12000} value={text} disabled={locked} onChange={e=>{setText(e.target.value);setConflict(false);}} onPaste={e=>{const files=Array.from(e.clipboardData.files);if(files.length){e.preventDefault();selectFiles(files);}}}/>
-   <input ref={input} type="file" aria-label="Attach video or screenshot" hidden accept=".mp4,.MP4,.webm,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
+   <input ref={input} type="file" multiple aria-label="Attach video or screenshot" hidden accept=".mp4,.MP4,.webm,.png,.jpg,.jpeg,.webp,video/mp4,video/webm,image/png,image/jpeg,image/webp" disabled={locked} onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)selectFiles(files);e.target.value='';}}/>
    <div className="source-composer-footer"><button className="attach-source" type="button" aria-label="Add video or screenshot" title="Add video or screenshot" disabled={locked} onClick={()=>input.current?.click()}>＋</button><button className="button" type="button" disabled={locked||!profileId||(!file&&!text.trim())} onClick={()=>start()}>Continue →</button></div>
   </div><div className="source-supported"><strong>Paste a link from</strong><ul aria-label="Supported link sources"><li>Instagram</li><li>TikTok</li><li>YouTube</li><li>Website article</li></ul><p>Or add a video or screenshot with <strong>＋</strong>. Tell us your angle in the box.</p></div><details className="source-file-guide"><summary>Supported files & limits</summary><div><p><strong>Video</strong><span>MP4 or WebM · up to 3 minutes · 500 MB</span></p><p><strong>Screenshot</strong><span>PNG, JPEG or WebP · up to 10 MB</span></p></div></details></>:<>
    <div className="source-ready-toolbar"><span role="status">✓ {resolved.kind==='video'?'Video':resolved.kind==='article'?'Article':'Graphic post'} ready{resolved.firstOnly?' · First image':''}</span>

@@ -18,5 +18,5 @@ export function GraphicImage({id}:{id:string}){
 }
 export function GraphicPreview({plan}:{plan:VideoPlan}){
  const l=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,previewAspect(plan));
- return <><div className="article-layout-stage" style={{aspectRatio:`${l.w}/${l.h}`}}>{plan.article_capture&&<GraphicImage id={plan.article_capture.id}/>}<SelectedAvatarOverlay plan={plan}/></div><p><small>Your graphic stays on screen while the avatar speaks. No original audio or video introduction.</small></p></>;
+return <><div className="article-layout-stage" style={{aspectRatio:`${l.w}/${l.h}`}}>{plan.article_capture&&<GraphicImage id={plan.article_capture.id}/>}<SelectedAvatarOverlay plan={plan}/></div><p><small>{plan.screenshot_story?'Your screenshots change as your avatar discusses them. This shows the first screenshot.':'Your graphic stays on screen while the avatar speaks. No original audio or video introduction.'}</small></p></>;
 }

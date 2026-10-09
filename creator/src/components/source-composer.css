@@ -31,3 +31,9 @@
 .scripts-workspace .source-file-guide>summary{font-size:14px;font-weight:700;padding:12px 0;color:#28445e}
 .scripts-workspace .source-file-guide p{display:grid;gap:3px;font-size:13px;line-height:1.5;margin:10px 0;color:#46627d}
 .source-composer textarea::placeholder{color:#62758a;opacity:1;font-weight:600}
+.story-images{list-style:none;padding:0;display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+.story-images>li{min-width:0;border:1px solid #d6e4f5;background:#f5f9ff;border-radius:14px;padding:14px;display:grid;gap:10px}
+.story-images img{display:block;max-width:100%;max-height:220px;object-fit:contain;margin:auto}
+.story-images button{min-width:44px;min-height:44px;border:1px solid #cbd9ea;border-radius:10px;margin-right:6px;background:white;font-weight:650}
+.story-images textarea{width:100%;font-size:16px}
+.story-script-review p{white-space:pre-wrap}

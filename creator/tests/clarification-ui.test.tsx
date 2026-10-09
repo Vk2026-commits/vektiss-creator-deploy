@@ -17,7 +17,7 @@ it('defaults to a clear link path and offers a unified file upload',()=>{
  
  expect(html).toContain('Paste a link or add a video or screenshot');
  expect(html).toContain('Add video or screenshot');
- expect(html).toContain('Instagram, TikTok, YouTube');
+ for(const platform of ['Instagram','TikTok','YouTube'])expect(html).toContain(`<li>${platform}</li>`);
  expect(html).not.toContain('Find content');
  expect(html).not.toContain('Perplexity');
  expect(html).not.toContain('Where to look');
