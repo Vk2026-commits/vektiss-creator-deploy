@@ -3,6 +3,12 @@ import {ctaSchema,campaignSchema} from './cta.ts';
 
 const text = (max = 2000) => z.string().trim().max(max);
 const items = z.array(z.string().trim().min(1).max(160)).max(20);
+// Guided answers accept prose as well as newline-separated examples. Never
+// truncate a paragraph to the old short-tag limit.
+export const audienceAnswerLimit = 3220;
+const audienceItems = z.array(z.string().trim().min(1).max(audienceAnswerLimit)).max(20)
+  .refine(values => values.join('\n').length <= audienceAnswerLimit,
+    `Keep this answer within ${audienceAnswerLimit} characters.`);
 export const creatorContextSchema = z
   .object({
     expertise: text(),
@@ -22,15 +28,15 @@ export const strategySchema = z
     research_source_platforms:items.optional(),
     research_reference_urls:z.array(z.string().max(2000)).max(20).optional(),
     secondary_audience: text(500),
-    audience_problems: items,
-    audience_interests: items,
-    content_pillars: items,
-    source_topics: items,
-    reaction_angles: items,
-    desired_outcomes: items,
-    tone: items,
-    things_to_avoid: items,
-    preferred_ctas: items,
+    audience_problems: audienceItems,
+    audience_interests: audienceItems,
+    content_pillars: audienceItems,
+    source_topics: audienceItems,
+    reaction_angles: audienceItems,
+    desired_outcomes: audienceItems,
+    tone: audienceItems,
+    things_to_avoid: audienceItems,
+    preferred_ctas: audienceItems,
     additional_context: text(5000),
   })
   .strict();
@@ -127,7 +133,10 @@ export function selectedProfile(
 }
 export function explainError(error: unknown): string {
   if (error instanceof z.ZodError)
-    return error.issues.map((i) => i.message).join(" ");
+    return [...new Set(error.issues.map((i) => {
+      const field = i.path.filter(p => typeof p === 'string').at(-1)?.toString().replaceAll('_', ' ') ?? 'Answer';
+      return `${field.charAt(0).toUpperCase()}${field.slice(1)}: ${i.message}`;
+    }))].join(" ");
   if (error && typeof error === "object" && "code" in error) {
     const code = String(error.code);
     if (code === "23505")

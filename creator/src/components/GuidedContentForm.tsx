@@ -1,4 +1,5 @@
 import {useRef,useState} from 'react';
+import {ZodError} from 'zod';
 import {contentInputSchema,emptyContent,explainError,type ContentInput} from '../domain/strategy';
 import {applyProfileProposal} from '../domain/profile-edit';
 import {ProfileChat} from './ProfileChat';
@@ -28,7 +29,7 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onboar
   if(cleaned.cta_default&&!cleaned.cta_default.text.trim())cleaned.cta_default=null;
   if(cleaned.cta_default?.keyword&&(!cleaned.cta_default.offer.trim()||!cleaned.cta_default.delivery.trim()))throw Error('Add the offer and how viewers will receive it.');
   await onSave(contentInputSchema.parse(cleaned));onClose();
- }catch(e){setError(e instanceof Error&&!(e instanceof SyntaxError)?e.message:explainError(e));}finally{setBusy(false);lock.current=false;}}
+ }catch(e){setError(e instanceof ZodError?explainError(e):e instanceof Error&&e.message==='Add the offer and how viewers will receive it.'?e.message:explainError(e));}finally{setBusy(false);lock.current=false;}}
  return <div className="form-body guided-profile">
   {question?<>
    <p className="muted">Question {step+1} of {questions.length} · Your own words are welcome</p>
