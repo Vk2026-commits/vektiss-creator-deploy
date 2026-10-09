@@ -1,6 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {validateAlphaSamples,validateAlphaStream,validateVerificationJob} from '../server/avatar-verification';
-import {avatarVerification} from '../supabase/functions/_shared/avatar-verification';
+import {avatarVerification,verifySavedAvatar} from '../supabase/functions/_shared/avatar-verification';
+import {avatarCommandSchema} from '../supabase/functions/_shared/avatar-contract';
 import {presenterTestService} from '../supabase/functions/_shared/presenter-test-service';
 import {readFileSync} from 'node:fs';
 it('rejects opaque, blank, and rectangular alpha while accepting a silhouette',()=>{
@@ -41,4 +42,21 @@ it('keeps certification server-write-only',()=>{
  expect(sql).toContain('revoke all on public.creator_avatar_verifications from anon,authenticated');
  expect(sql).toContain('user_id=(select auth.uid())');
  expect(sql).not.toContain('for insert to authenticated');
+});
+it('requires explicit visual approval, including direct service calls',async()=>{
+ const command={action:'verify_avatar_test',test_id:'00000000-0000-4000-8000-000000000001'};
+ expect(avatarCommandSchema.safeParse(command).success).toBe(false);
+ expect(avatarCommandSchema.safeParse({...command,visual_approved:false}).success).toBe(false);
+ expect(avatarCommandSchema.safeParse({...command,visual_approved:true}).success).toBe(true);
+ const from=vi.fn();
+ await expect(verifySavedAvatar({from} as any,'u',command.test_id,'token','https://example.com')).rejects.toThrow('Watch the saved test');
+ expect(from).not.toHaveBeenCalled();
+});
+it('does not unlock a look using an old alpha-only certification',async()=>{
+ let record:any={test_id:'t',thumbnail_url:'photo',visual_approved_at:null};
+ const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:record,error:null})};
+ const args=[{from:()=>q} as any,'u',{id:'a',connection_id:'c',thumbnail_url:'photo'},'avatar_iii','9:16'] as const;
+ expect(await avatarVerification(...args)).toBeNull();
+ record={...record,visual_approved_at:'2026-10-09T23:00:00Z'};
+ expect(await avatarVerification(...args)).toEqual(record);
 });

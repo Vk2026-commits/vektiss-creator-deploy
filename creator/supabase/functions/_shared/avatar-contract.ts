@@ -62,7 +62,7 @@ const connection = { connection_id: z.string().uuid() };
 const cursor = z.string().max(2048).nullable().optional();
 const managementCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("library") }).strict(),
-  z.object({action:z.literal('verify_avatar_test'),test_id:z.string().uuid()}).strict(),
+  z.object({action:z.literal('verify_avatar_test'),test_id:z.string().uuid(),visual_approved:z.literal(true)}).strict(),
   z.object({ action: z.literal("engine_capabilities"), avatar_id:z.string().uuid() }).strict(),
   z.object({ action: z.literal("balance"), avatar_id:z.string().uuid() }).strict(),
   z
