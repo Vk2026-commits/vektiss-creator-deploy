@@ -8,6 +8,8 @@ import {
 import type { Session } from "@supabase/supabase-js";
 import { authRedirectUrl } from './lib/auth-redirect';
 import { signInError } from './lib/auth-errors';
+import {PasswordSignup} from './components/PasswordSignup';
+import {setupStep} from './lib/signup';
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
@@ -191,6 +193,7 @@ function SignIn({
   initialError: string;
 }) {
   const [email, setEmail] = useState("");
+  const [signup,setSignup]=useState(false);
   const [mode,setMode]=useState<'link'|'password'|'reset'>('link');
   const [password,setPassword]=useState('');
   const [busy, setBusy] = useState(false);
@@ -251,6 +254,7 @@ function SignIn({
       </section>
       <section className="auth-panel">
         <div className="auth-card">
+          {signup ? <PasswordSignup onSignIn={()=>setSignup(false)}/> : <>
           <span className="mini-icon">
             <Sparkles size={24} />
           </span>
@@ -280,6 +284,7 @@ function SignIn({
             ) : (
               <>
                 <p>{mode==='password'?'Sign in with your email and password.':mode==='reset'?'We’ll email you a secure link to set or reset your password.':'Sign in or create an account with a secure email link.'}</p>
+                <button type="button" className="button secondary" disabled={busy} onClick={()=>setSignup(true)}>Create account with password</button>
                 <form onSubmit={submit}>
                   <label className="field">
                     <span>Email address</span>
@@ -320,6 +325,7 @@ function SignIn({
               </div>
             </>
           )}
+          </>}
           {error && (
             <p role="alert" className="error-message">
               {error}
@@ -466,6 +472,25 @@ function CreatorWorkspace({
     }
   }
   const creator = data?.creator;
+  // Persisted records, not a browser-only flag, determine first-time setup.
+  // Archived profiles still identify an established workspace.
+  if (!preview && !loading && data && setupStep(Boolean(creator), data.profiles.length)) {
+    return <main className="setup-page"><section className="onboarding-setup">
+      <p className="eyebrow">WELCOME TO VEKTISS · STEP {creator?'2':'1'} OF 2</p>
+      <h1>{creator?'Who do you want to help?':'Let’s set up your creator profile'}</h1>
+      <p>{creator?'Choose your audience and call to action. Your saved answers guide Discover and your scripts.':'Tell us about your expertise and how you communicate. Save this step to continue.'}</p>
+      {!creator?<CreatorForm onboarding onClose={()=>{}} onSave={async value=>{
+        const saved=await repo.saveCreator(value,null);
+        setData(current=>({creator:saved,profiles:current?.profiles??[]}));
+      }}/>:<ContentForm onboarding onClose={()=>{}} onSave={async value=>{
+        const saved=await repo.saveContent(value,creator.id);
+        setData(current=>current?{...current,profiles:[...current.profiles,saved]}:current);
+        select(saved);
+        setAudienceChoice(value=>({id:saved.id,version:(value?.version??0)+1}));
+      }}/>}
+      <button type="button" className="text-button" onClick={()=>void onSignOut()}>Log out</button>
+    </section></main>;
+  }
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">

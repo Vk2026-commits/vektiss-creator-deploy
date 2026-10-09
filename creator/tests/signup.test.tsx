@@ -1,0 +1,25 @@
+import {describe,it,expect,vi} from 'vitest';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {signupValidation,signupError,setupStep} from '../src/lib/signup';
+import {PasswordSignup} from '../src/components/PasswordSignup';
+vi.mock('../src/lib/supabase',()=>({supabase:null}));
+describe('password signup',()=>{
+ it('resumes setup from saved records without re-onboarding existing profiles',()=>{
+  expect(setupStep(false,0)).toBe('creator');expect(setupStep(true,0)).toBe('audience');
+  expect(setupStep(true,1)).toBeNull();expect(setupStep(true,5)).toBeNull();
+ });
+ it('requires twelve characters and matching confirmation',()=>{
+  expect(signupValidation('short','short')).toContain('12');
+  expect(signupValidation('long-enough-password','different')).toContain('match');
+  expect(signupValidation('long-enough-password','long-enough-password')).toBe('');
+ });
+ it('does not disclose duplicate-account information',()=>{
+  expect(signupError({code:'user_already_exists',message:'Registered'})).toBe(signupError(new TypeError('Network')));
+  expect(signupError({code:'over_email_send_rate_limit'})).toContain('wait');
+ });
+ it('provides labelled password-manager compatible signup fields',()=>{
+  const html=renderToStaticMarkup(<PasswordSignup onSignIn={()=>{}}/>);
+  expect(html).toContain('Create your account');expect(html.match(/autoComplete="new-password"/g)).toHaveLength(2);
+  expect(html).toContain('Confirm password');expect(html).toContain('Show passwords');expect(html).toContain('Back to sign in');
+ });
+});

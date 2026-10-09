@@ -16,7 +16,7 @@ const questions=[
  {key:'cta',title:'What would you like viewers to do next?',examples:['Comment GUIDE to receive my free guide','Book a consultation through my profile','Follow for more practical tips']},
 ] as const;
 type Key=typeof questions[number]['key'];
-export function ContentForm({initial=emptyContent,profileId,preview=false,onSave,onClose}:{initial?:ContentInput;profileId?:string;preview?:boolean;onSave:(value:ContentInput)=>Promise<void>;onClose:()=>void}){
+export function ContentForm({initial=emptyContent,profileId,preview=false,onboarding=false,onSave,onClose}:{initial?:ContentInput;profileId?:string;preview?:boolean;onboarding?:boolean;onSave:(value:ContentInput)=>Promise<void>;onClose:()=>void}){
  const [draft,setDraft]=useState<ContentInput>(()=>({name:initial.name,primary_audience:initial.primary_audience,strategy:{...initial.strategy},cta_default:initial.cta_default,cta_campaign:initial.cta_campaign}));
  const [step,setStep]=useState(profileId?questions.length:0);
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const lock=useRef(false);
@@ -47,7 +47,7 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onSave
    {draft.cta_campaign&&<p>Temporary CTA: “{draft.cta_campaign.cta.text}” · Up to {draft.cta_campaign.limit} approved scripts in this campaign.</p>}
    <details><summary>Additional context and existing preferences</summary>{(['secondary_audience','audience_interests','preferred_ctas','additional_context'] as const).map(key=><label className="field" key={key}><span>{key.replaceAll('_',' ')}</span><textarea value={Array.isArray(draft.strategy[key])?(draft.strategy[key] as string[]).join('\n'):draft.strategy[key] as string} onChange={e=>setDraft(old=>({...old,strategy:{...old.strategy,[key]:Array.isArray(old.strategy[key])?e.target.value.split('\n'):e.target.value}}))} maxLength={key==='additional_context'?5000:key==='secondary_audience'?500:3220} /></label>)}</details>
    </details>
-   <div className="profile-actions"><button type="button" className="button secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Save audience profile'}</button></div>
+   <div className="profile-actions">{!onboarding&&<button type="button" className="button secondary" disabled={busy} onClick={onClose}>Cancel</button>}<button type="button" className="button primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Save audience profile'}</button></div>
   </>}
   {error&&<p className="error-message" role="alert">{error}</p>}
  </div>;

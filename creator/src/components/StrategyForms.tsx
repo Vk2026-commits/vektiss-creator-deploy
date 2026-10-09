@@ -113,11 +113,13 @@ function FormFooter({
   error,
   label,
   onCancel,
+  hideCancel = false,
 }: {
   busy: boolean;
   error: string;
   label: string;
   onCancel: () => void;
+  hideCancel?: boolean;
 }) {
   return (
     <footer className="form-footer">
@@ -127,14 +129,14 @@ function FormFooter({
         </p>
       )}
       <div>
-        <button
+        {!hideCancel && <button
           type="button"
           className="button secondary"
           onClick={onCancel}
           disabled={busy}
         >
           Cancel
-        </button>
+        </button>}
         <button className="button primary" disabled={busy}>
           {busy ? (
             <LoaderCircle className="spin" size={16} />
@@ -152,10 +154,12 @@ export function CreatorForm({
   initial = emptyCreator,
   onSave,
   onClose,
+  onboarding = false,
 }: {
   initial?: CreatorInput;
   onSave: (value: CreatorInput) => Promise<void>;
   onClose: () => void;
+  onboarding?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -285,6 +289,7 @@ export function CreatorForm({
         error={error}
         label="Save creator profile"
         onCancel={onClose}
+        hideCancel={onboarding}
       />
     </form>
   );
