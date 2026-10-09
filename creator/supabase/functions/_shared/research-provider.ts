@@ -244,18 +244,23 @@ export async function startNativeVideoScreening(input: {
   const brief = researchBriefSchema.parse(input.brief);
   const sources = input.sources.map((source) => researchSourceSchema.parse(source));
   if (!sources.length) throw new Error("NATIVE_SOURCES_MISSING");
-  const candidateTarget = Math.min(sources.length, Math.min(50, input.requestedCount + Math.max(4, Math.ceil(input.requestedCount * 0.4))));
+  const candidateTarget = Math.min(sources.length, input.requestedCount);
+  const compactSchema = structuredClone(candidateJsonSchema);
+  compactSchema.properties.opportunities.maxItems = candidateTarget;
+  for (const key of ['factualSummary','whyAudienceCares','creatorConnection','recommendedAngle'] as const) {
+    compactSchema.properties.opportunities.items.properties[key].maxLength = 240;
+  }
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
     body: JSON.stringify({
       model: Deno.env.get("CREATOR_PERPLEXITY_RESEARCH_MODEL") ?? "openai/gpt-5.6-sol",
-      input: nativeScreeningInstructions(brief, input.requestedCount, candidateTarget, sources),
+      input: nativeScreeningInstructions(brief, input.requestedCount, candidateTarget, sources) + '\nBe concise: each explanation is one short sentence, at most 240 characters. Return only the requested number, or fewer when relevance is insufficient.',
       background: true,
       temperature: 0.1,
-      max_output_tokens: 7000,
+      max_output_tokens: Math.min(18000, 4000 + candidateTarget * 400),
       response_format: {
         type: "json_schema",
-        json_schema: { name: "native_video_opportunities", schema: candidateJsonSchema },
+        json_schema: { name: "native_video_opportunities", schema: compactSchema },
       },
     }),
   });

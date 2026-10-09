@@ -30,13 +30,13 @@ type ResearchProgress = { percent: number; title: string; timing: string };
 function progressForResearch(job: { status: string; phase: string }): ResearchProgress {
   const phase = job.phase.toLowerCase();
   if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
-  if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "About 1 minute left" };
-  if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "About 30 seconds left" };
-  if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "About 30 seconds left" };
-  if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Almost there" };
-  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best matches", timing: "Almost done" };
+  if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "Searching the source platform" };
+  if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
+  if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
+  if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Reviewing source evidence" };
+  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best matches", timing: "Ranking relevant results" };
   if (job.status === "researching") return { percent: 65, title: "Researching relevant sources", timing: "Search is still running" };
-  return { percent: 45, title: "Finding relevant sources", timing: "Usually ready in 1–2 minutes" };
+  return { percent: 45, title: "Finding relevant sources", timing: "Search is still running" };
 }
 
 function embeddedClip(url: string): EmbeddedClip | null {
@@ -125,6 +125,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     });
   }
   const visible = feed?.opportunities ?? [];
+  const latestJob = feed?.jobs.filter(job=>job.content_profile_id===profile?.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0];
   const filterCount = (filter: HistoryFilter) => feed?.statusCounts?.[filter] ?? 0;
   const currentPage = Math.floor(pageOffset / archivePageSize) + 1;
   const totalPages = Math.max(1, Math.ceil((feed?.opportunityTotal ?? 0) / archivePageSize));
@@ -150,6 +151,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
     {notice&&<p role="status">{notice}</p>}
+    {!activeJobs.length && latestJob?.status==='failed' && <div className="error-message" role="alert"><strong>Search couldn’t finish</strong><p>{latestJob.error_code==='PROVIDER_INCOMPLETE'?'The search provider returned an incomplete result.':'The search provider could not finish this run.'} Your saved ideas are safe. Unused idea allowance has been released. Select Find 10 to try a new search.</p></div>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>{feed?'Discover is almost ready.':'Loading your ideas…'}</h2>{feed&&<p>This feature is available to selected Pro pilot accounts.</p>}</div> : <>
       <div className="discover-source-options"><div role="group" aria-label="Source type">{(['videos','articles','all'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>{setSourceMode(mode);setPageOffset(0);setFeed(null);}}>{mode==='videos'?'Videos':mode==='articles'?'Articles':'All'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}</>}</div>
       {sourceMode==='all'?<p className="discover-library-hint">Select Videos or Articles above to find new ideas.</p>:<><section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'We’ll look for clips you can react to.'}</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} ${sourceMode==='articles'?'articles':'clips'}`}>{count}</button>)}</div></div></section></>}
@@ -157,9 +159,9 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
       <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav><label className="discover-sort">Sort by<select value={sort} disabled={busy} onChange={e=>{setSort(e.target.value as ResearchSort);setPageOffset(0);}}>{Object.entries(researchSortLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       {activeJobs.map((job) => {
         const progress = progressForResearch(job);
-        return <section className="research-progress" key={job.id} aria-label={`${progress.title}: ${progress.percent}% complete`}>
-          <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div><b>{progress.percent}%</b></div>
-          <div className="research-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}><i style={{ width: `${progress.percent}%` }} /></div>
+        return <section className="research-progress" key={job.id} aria-label={progress.title}>
+          <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div></div>
+          <div className="research-progress-track" role="progressbar" aria-label={progress.title}><i style={{ width: `${progress.percent}%` }} /></div>
           <p>{job.phase}</p>
           {stopConfirm===job.id?<div className="research-stop-confirm"><strong>Keep the results found so far and stop searching?</strong><p>Work already sent to a search provider may still incur a cost.</p><div><button type="button" className="button secondary" disabled={stopping===job.id} onClick={()=>setStopConfirm(null)}>Keep searching</button><button type="button" className="button primary" disabled={stopping===job.id} onClick={()=>void stop(job.id)}>{stopping===job.id?'Stopping…':'Stop search'}</button></div></div>:<button type="button" className="button secondary" onClick={()=>setStopConfirm(job.id)}>Stop search</button>}
         </section>;

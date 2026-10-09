@@ -52,11 +52,18 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] 
   const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
   const safetyProfile = /women.?s? safety|personal safety|situational awareness/i.test(topics.join(' '));
   if (!safetyProfile) {
-    const terms = [...new Set((topics.length ? topics : [brief.expertise || brief.primaryAudience])
-      .flatMap(topic => topic.split(/[,;\n]|—/)).map(topic => topic.trim()).filter(Boolean))];
+    const cleanTopics = (values: string[]) => values.flatMap(topic => topic.split(/[.,;!?:\n]|—/))
+      .map(topic => topic.trim().replace(/^(?:and|or|including|such as)\s+/i, ''))
+      .filter(topic => {
+        const words=topic.split(/\s+/);
+        return words.length>=2 && words.length<=8 && topic.length<=85
+          && !/\b(prioritize|explain|should|someone|content|opportunity|look for|want|make sure|teach|help people)\b/i.test(topic);
+      });
+    const terms = [...new Set(cleanTopics(topics))];
+    if(!terms.length)terms.push(...cleanTopics([brief.expertise,brief.audienceName,brief.primaryAudience]));
     if (!terms.length) throw new Error('RESEARCH_TOPICS_REQUIRED');
     const start = queryRotation(`${brief.audienceName}:${seed}`) % terms.length;
-    return Array.from({length:Math.min(3,terms.length)},(_,offset)=>`${terms[(start+offset)%terms.length].slice(0,150)} real life video`);
+    return Array.from({length:Math.min(3,terms.length)},(_,offset)=>terms[(start+offset)%terms.length]);
   }
   const scenarios = [
     "woman followed parking lot gets help original video",

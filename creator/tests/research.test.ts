@@ -94,6 +94,12 @@ describe("research contracts", () => {
     expect(rosePack).toHaveLength(3);
     expect(rosePack.join(' ')).toMatch(/credit|financing|collections/);
     expect(rosePack.join(' ')).not.toMatch(/woman|parking lot|security|stranger/);
+    const prose={...rose,sourceTopics:['consumer protection issues, and common credit mistakes. Prioritize content that gives Rose a natural opportunity to explain what someone should know, check, or do next.'],contentPillars:[],audienceInterests:[]};
+    for(const seed of ['a','b','c','d']){
+      const queries=buildTikTokQueryPack(prose,seed);
+      expect(queries).toEqual(expect.arrayContaining(['consumer protection issues','common credit mistakes']));
+      expect(queries.join(' ')).not.toMatch(/Prioritize|check|real life|opportunity/);
+    }
   });
 
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {
