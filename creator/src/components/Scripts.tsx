@@ -78,7 +78,8 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
   useEffect(()=>{
-    if(!dirty||busy||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
+    // Source preparation owns the next save; avoid racing its revision-checked handoff.
+    if(!dirty||busy||sourceProcessing||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
     const timer=setTimeout(()=>{
       const snapshot=draft;lastAutoAttempt.current=snapshot;setBusy(true);
       const input={...snapshot,title:snapshot.title.trim()||'Untitled video'};
@@ -88,7 +89,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
       }).catch(e=>setError(`Could not save progress: ${explainError(e)}`)).finally(()=>setBusy(false));
     },1200);
     return()=>clearTimeout(timer);
-  },[draft,current,dirty,busy,repo]);
+  },[draft,current,dirty,busy,sourceProcessing,repo]);
   const step=videoStep(draft.brief,planning);
   useEffect(()=>{
     const create=()=>{if(busy){setMessage('Please wait for saving to finish, then choose New video.');return;}open(null);};

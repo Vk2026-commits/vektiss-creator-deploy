@@ -10,6 +10,7 @@ export function ScreenshotStory({files,initial,notes,profileId,projectId,scope,o
  const [images,setImages]=useState<Story['images']>(initial?.images??[]),[working,setWorking]=useState(''),[error,setError]=useState('');
  const active=useRef<AbortController|null>(null),dragged=useRef<number|null>(null);
  const processing=useRef(onProcessing);processing.current=onProcessing;
+ const complete=useRef(onComplete);complete.current=onComplete;
  useEffect(()=>()=>{active.current?.abort();processing.current(false);},[]);
  function save(next:Story['images']){setImages(next);onSave({version:1,images:next,sections:[]});}
  function move(from:number,to:number){if(active.current||to<0||to>=images.length||from===to)return;const next=[...images];next.splice(to,0,next.splice(from,1)[0]);save(next);}
@@ -47,7 +48,7 @@ export function ScreenshotStory({files,initial,notes,profileId,projectId,scope,o
      next=next.map((image,index)=>index===i?{...image,analysis:result.text.slice(0,6500)}:image);save(next);
     }
     setWorking('Writing your story…');
-    await onComplete({version:1,images:next,sections:[]},next.map((image,i)=>`Screenshot ${i+1} (${image.id}):\n${image.analysis}`).join('\n\n'));
+    await complete.current({version:1,images:next,sections:[]},next.map((image,i)=>`Screenshot ${i+1} (${image.id}):\n${image.analysis}`).join('\n\n'));
    }
   }catch(e){if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Could not prepare the story. Retry using the saved screenshots.');}
   finally{if(!controller.signal.aborted){setWorking('');processing.current(false);}active.current=null;}
