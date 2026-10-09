@@ -32,7 +32,7 @@ function providerCost(usage: Record<string, unknown>): number | null {
   const value = (cost as Record<string, unknown>).total_cost;
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
-async function markFailed(job: Record<string, unknown>, code: string, cancelled = false) {
+async function markFailed(job: Record<string, unknown>, code: string, cancelled = false, diagnostics: {incompleteReason?:string;usage?:Record<string,unknown>;model?:string} = {}) {
   if (["ready", "failed", "cancelled"].includes(String(job.status))) return;
   await db.from("creator_research_jobs").update({
     status: cancelled ? "cancelled" : "failed", reserved_count:0, phase: cancelled ? "Research cancelled" : "Research unavailable", error_code: code,
@@ -41,7 +41,9 @@ async function markFailed(job: Record<string, unknown>, code: string, cancelled 
 
   await db.from("creator_research_usage").insert({
     id: crypto.randomUUID(), job_id: job.id, user_id: job.user_id, operation: "deep_research_failed",
-    provider_response_id: job.provider_response_id ?? null, status: cancelled ? "cancelled" : "failed", request_metadata: { code },
+    provider_response_id: job.provider_response_id ?? null, status: cancelled ? "cancelled" : "failed",
+    model:diagnostics.model, usage:diagnostics.usage ?? {}, provider_cost_usd:providerCost(diagnostics.usage ?? {}),
+    request_metadata: { code, incompleteReason:diagnostics.incompleteReason },
   });
 }
 
@@ -152,7 +154,7 @@ Deno.serve(async (request) => {
       return reply(headers, { job: updated.data ?? job }, 202);
     }
     if (["failed", "cancelled", "incomplete"].includes(providerRun.status)) {
-      await markFailed(job, `PROVIDER_${providerRun.status.toUpperCase()}`, providerRun.status === "cancelled");
+      await markFailed(job, `PROVIDER_${providerRun.status.toUpperCase()}`, providerRun.status === "cancelled", providerRun);
       return reply(headers, { code: `PROVIDER_${providerRun.status.toUpperCase()}` }, 503);
     }
     if (providerRun.status !== "completed" || !("candidates" in providerRun)) return reply(headers, { code: "PROVIDER" }, 502);

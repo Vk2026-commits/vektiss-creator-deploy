@@ -29,6 +29,15 @@ it('bounds screening to requested results and concise explanations',async()=>{
   expect(body.response_format.json_schema.schema.properties.opportunities.maxItems).toBe(requestedCount);
   expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.factualSummary.maxLength).toBe(240);
   expect(body.max_output_tokens).toBeGreaterThanOrEqual(requestedCount*400);
+  expect(body.reasoning).toEqual({effort:'low'});
+  expect(body.max_steps).toBe(1);
   expect(body.input).toContain('fewer when relevance is insufficient');
  }
+});
+it('preserves incomplete reason and billed usage without parsing partial JSON',async()=>{
+ mock({id:'test',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{output_tokens:8000},output_text:'{"opportunities":['});
+ const result=await getDeepResearchRun('test',brief);
+ expect(result.incompleteReason).toBe('max_output_tokens');
+ expect(result.usage).toEqual({output_tokens:8000});
+ expect('candidates' in result).toBe(false);
 });

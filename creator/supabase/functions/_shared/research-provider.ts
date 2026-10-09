@@ -20,6 +20,7 @@ const agentResponseSchema = z.object({
   output: z.array(z.unknown()).optional(),
   usage: z.unknown().optional(),
   error: z.unknown().nullable().optional(),
+  incomplete_details: z.object({reason:z.string().optional()}).passthrough().nullish(),
   created_at: z.number().nullish(),
   completed_at: z.number().nullish(),
 }).passthrough();
@@ -38,6 +39,8 @@ export type ProviderRun = {
   status: string;
   model?: string;
   createdAt?: number | null;
+  incompleteReason?: string;
+  usage?: Record<string, unknown>;
 };
 export type CompletedResearchRun = ProviderRun & {
   usage: Record<string, unknown>;
@@ -256,8 +259,11 @@ export async function startNativeVideoScreening(input: {
       model: Deno.env.get("CREATOR_PERPLEXITY_RESEARCH_MODEL") ?? "openai/gpt-5.6-sol",
       input: nativeScreeningInstructions(brief, input.requestedCount, candidateTarget, sources) + '\nBe concise: each explanation is one short sentence, at most 240 characters. Return only the requested number, or fewer when relevance is insufficient.',
       background: true,
-      temperature: 0.1,
-      max_output_tokens: Math.min(18000, 4000 + candidateTarget * 400),
+      // This is bounded classification of supplied clips, not open-ended research.
+      // Reasoning shares the output budget; leave room for the final JSON.
+      reasoning: { effort: "low" },
+      max_steps: 1,
+      max_output_tokens: Math.min(24000, 8000 + candidateTarget * 400),
       response_format: {
         type: "json_schema",
         json_schema: { name: "native_video_opportunities", schema: compactSchema },
@@ -269,7 +275,10 @@ export async function startNativeVideoScreening(input: {
 
 export async function getDeepResearchRun(providerResponseId: string, brief?: ResearchBrief, suppliedSources?: ResearchSource[]): Promise<ProviderRun | CompletedResearchRun> {
   const response = await requestPerplexity(`/v1/agent/${encodeURIComponent(providerResponseId)}`, { method: "GET" });
-  const run: ProviderRun = { id: response.id, status: response.status, model: response.model, createdAt: response.created_at };
+  const run: ProviderRun = { id: response.id, status: response.status, model: response.model, createdAt: response.created_at,
+    incompleteReason: response.incomplete_details?.reason,
+    usage: response.usage && typeof response.usage === 'object' ? response.usage as Record<string,unknown> : {},
+  };
   if (response.status !== "completed") return run;
   const envelope = providerResearchEnvelopeSchema.parse(JSON.parse(outputText(response)));
   let sources = suppliedSources?.map((source) => researchSourceSchema.parse(source))
