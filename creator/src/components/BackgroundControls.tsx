@@ -1,0 +1,8 @@
+import type {VideoPlan} from '../domain/video-plan';
+import {fillBackground} from '../domain/background-framing';
+export function BackgroundControls({plan,onChange}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void}){
+ if(!plan.article_capture||plan.screenshot_story)return null;
+ const value=plan.background_framing??{...fillBackground,mode:'fit' as const};
+ const update=(patch:Partial<typeof value>)=>onChange({...plan,background_framing:{...value,...patch}});
+ return <details className="background-controls"><summary>Adjust background</summary><div className="background-options" role="group" aria-label="Background fit"><button type="button" aria-pressed={value.mode==='fill'} onClick={()=>update({mode:'fill'})}>Fill frame</button><button type="button" aria-pressed={value.mode==='fit'} onClick={()=>update({mode:'fit'})}>Show full image</button></div>{value.mode==='fill'&&<><label>Size <output>{Math.round(value.zoom*100)}%</output><input aria-label="Background zoom" type="range" min="1" max="3" step="0.05" value={value.zoom} onChange={e=>update({zoom:Number(e.target.value)})}/></label><label>Move up or down<input aria-label="Background vertical position" type="range" min="0" max="1" step="0.01" value={value.y} onChange={e=>update({y:Number(e.target.value)})}/></label><label>Move left or right<input aria-label="Background horizontal position" type="range" min="0" max="1" step="0.01" value={value.x} onChange={e=>update({x:Number(e.target.value)})}/></label><small>Keep the headline in view. The edges outside the frame will be cropped.</small></>}<button type="button" onClick={()=>onChange({...plan,background_framing:{...fillBackground}})}>Reset background</button></details>;
+}
