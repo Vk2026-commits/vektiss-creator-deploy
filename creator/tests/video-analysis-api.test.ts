@@ -1,10 +1,30 @@
 import {beforeAll,afterAll,it,expect,vi} from 'vitest';
-const mocks=vi.hoisted(()=>({fetch:vi.fn(),update:vi.fn()}));
+import {emptyBrief} from '../src/domain/script-brief';
+import {emptyCreator} from '../src/domain/strategy';
+const mocks=vi.hoisted(()=>({fetch:vi.fn(),update:vi.fn(),creator:vi.fn(),owner:vi.fn()}));
 vi.mock('@supabase/supabase-js',()=>({createClient:()=>({
  auth:{getUser:async()=>({data:{user:{id:'owner'}}})},rpc:async()=>({data:true}),
- from:(table:string)=>table==='content_profiles'?{select:()=>({eq:()=>({eq:()=>({single:async()=>({data:{name:'test'}})})})})}:{insert:async()=>({}),update:(value:unknown)=>{mocks.update(value);return {eq:async()=>({})};}}
+ from:(table:string)=>table==='creator_profiles'?{select:()=>({eq:(key:string,value:string)=>{mocks.owner(key,value);return {maybeSingle:mocks.creator};}})}:table==='content_profiles'?{select:()=>({eq:()=>({eq:()=>({single:async()=>({data:{name:'test'}})})})})}:{insert:async()=>({}),update:(value:unknown)=>{mocks.update(value);return {eq:async()=>({})};}}
 })}));
 let handler:(request:Request)=>Promise<Response>;
+it('loads current owner voice and preserves a concise default CTA instead of overwriting it',async()=>{
+ mocks.fetch.mockClear();mocks.owner.mockClear();
+ mocks.creator.mockResolvedValue({data:{context:{...emptyCreator.context,communication_style:'Start with a viewer callout. No greetings.',preferred_cta_style:'Short comment-keyword invitation.'}}});
+ const draft={hook:'Buying a house? Check this first.',body:'Ask which scoring model the lender uses.',cta:'Comment CLASS for information about my credit community.',review:'Source-based commentary.'};
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
+ const brief={...emptyBrief(),source:'A substantive source discusses how lenders use different credit scoring models.',cta_selection:{scope:'default',campaign_id:null,cta:{text:'Join my $37/month community with Tuesday calls. Comment CLASS and I will send information.',keyword:'CLASS',offer:'Credit community',delivery:'Send information'}}};
+ const result=await handler(new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief})}));
+ expect(result.status).toBe(200);expect((await result.json()).cta).toBe(draft.cta);
+ const payload=JSON.parse(mocks.fetch.mock.calls[0][1].body);
+ expect(JSON.parse(payload.messages[1].content).profile.creatorContext.communication_style).toContain('No greetings');
+ expect(payload.messages[0].content).toContain('do not paste the full offer description');
+ expect(mocks.owner).toHaveBeenCalledWith('user_id','owner');
+ // Explicit per-video wording remains exact, even for a creator with a style preference.
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
+ brief.cta_selection.scope='video';
+ const exact=await handler(new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief})}));
+ expect((await exact.json()).cta).toBe(brief.cta_selection.cta.text);
+});
 it('requests word timestamps for story alignment and records duration-based estimated cost',async()=>{
  mocks.fetch.mockClear();mocks.update.mockClear();
  const words=[{word:'Hello',start:0,end:.5}];
