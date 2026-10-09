@@ -137,6 +137,7 @@ Deno.serve(async (request) => {
       throw new Error("PERSISTENCE");
     }
 
+    reservation=0; // After insertion the job's terminal transition settles quota atomically.
     if(input.sourceMode==='articles'){
       const run=await startDeepResearch({brief,requestedCount:input.requestedCount,candidateMultiplier:1});
       const updated=await db.from('creator_research_jobs').update({provider_response_id:run.id,status:'researching',phase:'Finding relevant web articles…',started_at:new Date().toISOString(),provider_metadata:{stage:'article_research',sourceMode:'articles'},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();
@@ -160,7 +161,7 @@ Deno.serve(async (request) => {
   } catch (error) {
     const code = safeCode(error);
     if (jobId && userId) {
-      await db.from("creator_research_jobs").update({ status: "failed", phase: "Research unavailable", error_code: code, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", jobId);
+      await db.from("creator_research_jobs").update({ status: "failed", reserved_count:0, phase: "Research unavailable", error_code: code, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", jobId);
       await db.from("creator_research_usage").insert({ id: crypto.randomUUID(), job_id: jobId, user_id: userId, operation: "deep_research_failed", status: "failed", request_metadata: { code } });
     }
     if (userId && reservation) await releaseReservation(userId, reservation);

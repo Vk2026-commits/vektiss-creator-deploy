@@ -49,6 +49,15 @@ function queryRotation(value: string): number {
 }
 
 export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] {
+  const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
+  const safetyProfile = /women.?s? safety|personal safety|situational awareness/i.test(topics.join(' '));
+  if (!safetyProfile) {
+    const terms = [...new Set((topics.length ? topics : [brief.expertise || brief.primaryAudience])
+      .flatMap(topic => topic.split(/[,;\n]|—/)).map(topic => topic.trim()).filter(Boolean))];
+    if (!terms.length) throw new Error('RESEARCH_TOPICS_REQUIRED');
+    const start = queryRotation(`${brief.audienceName}:${seed}`) % terms.length;
+    return Array.from({length:Math.min(3,terms.length)},(_,offset)=>`${terms[(start+offset)%terms.length].slice(0,150)} real life video`);
+  }
   const scenarios = [
     "woman followed parking lot gets help original video",
     "store employee walks woman to car safety original video",
@@ -116,7 +125,7 @@ function dateValue(value: unknown): string | null {
   return null;
 }
 
-function sourceFromTiktokItem(item: unknown, index: number): ResearchSource | null {
+function sourceFromTiktokItem(item: unknown, index: number, safetyProfile = true): ResearchSource | null {
   const record = asRecord(item);
   if (!record) return null;
   const author = asRecord(record.author) ?? asRecord(record.authorMeta) ?? {};
@@ -131,13 +140,13 @@ function sourceFromTiktokItem(item: unknown, index: number): ResearchSource | nu
   const description = stringValue(record, ["text", "desc", "description"]);
   const subtitles = stringValue(record, ["subtitles", "textExtra"]);
   const sourceText = [description, subtitles, authorName].filter(Boolean).join("\n");
-  if (automaticTikTokRejectReason(sourceText)) return null;
+  if (safetyProfile && automaticTikTokRejectReason(sourceText)) return null;
   if (sourceText.replace(/[^a-z0-9]/gi, "").length < 35 || /^tiktok video from /i.test(description)) return null;
   const snippet = [description, subtitles].filter(Boolean).join("\n").slice(0, 5000);
   const title = (description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim().slice(0, 300);
   return researchSourceSchema.parse({
     providerSourceId: index + 1,
-    title: title || "TikTok safety-video lead",
+    title: title || "TikTok video lead",
     url: direct,
     snippet,
     publishedAt: dateValue(record.createTime ?? record.createTimeISO ?? record.timestamp),
@@ -172,7 +181,7 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
   return { id: run.id, status: run.status, platform: "TikTok", queryPack };
 }
 
-export async function getNativeDiscoveryRun(runId: string, requestedCount: number): Promise<NativeDiscoveryResult> {
+export async function getNativeDiscoveryRun(runId: string, requestedCount: number, brief?: ResearchBrief): Promise<NativeDiscoveryResult> {
   const payload = await apify(`/actor-runs/${encodeURIComponent(runId)}`);
   const run = asRecord(payload.data);
   const status = typeof run?.status === "string" ? run.status : "UNKNOWN";
@@ -185,7 +194,8 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
   const seen = new Set<string>();
   const sources: ResearchSource[] = [];
   for (const item of items) {
-    const parsed = sourceFromTiktokItem(item, sources.length);
+    const safetyProfile = !brief || /women.?s? safety|personal safety|situational awareness/i.test([...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(' '));
+    const parsed = sourceFromTiktokItem(item, sources.length, safetyProfile);
     if (!parsed || seen.has(parsed.url)) continue;
     seen.add(parsed.url);
     sources.push(parsed);

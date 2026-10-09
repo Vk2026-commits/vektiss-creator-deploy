@@ -89,6 +89,11 @@ describe("research contracts", () => {
     expect(pack).toHaveLength(3);
     expect(pack.some((query) => query.includes("parking lot") || query.includes("store"))).toBe(true);
     expect(pack.every((query) => query.length > 10)).toBe(true);
+    const rose={...brief,audienceName:'Fix Your Own Credit',sourceTopics:['credit reports, car financing, collections'],contentPillars:['credit rebuilding'],audienceProblems:['credit score']};
+    const rosePack=buildTikTokQueryPack(rose);
+    expect(rosePack).toHaveLength(3);
+    expect(rosePack.join(' ')).toMatch(/credit|financing|collections/);
+    expect(rosePack.join(' ')).not.toMatch(/woman|parking lot|security|stranger/);
   });
 
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {

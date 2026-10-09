@@ -33,3 +33,6 @@
 .discover-sort select{font:inherit;min-height:44px;max-width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
 .discover .discover-filters{margin:16px 0 20px;flex-wrap:wrap}
 .discover .discover-library-hint{margin:0 0 16px;color:var(--soft-ink);line-height:1.5}
+.research-stop-confirm { margin-top: 12px; padding: 16px; border: 1px solid #c8dcfa; border-radius: 16px; background: #fff; }
+.research-stop-confirm > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.research-stop-confirm p { font-size: 14px; line-height: 1.5; }

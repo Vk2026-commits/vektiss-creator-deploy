@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
-  loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch,
+  loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch, stopResearch,
   type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
 } from "../lib/research-client";
 import "./discover.css";
@@ -63,6 +63,10 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   const profile = profiles.find((item) => item.id === selectedId && !item.archived_at) ?? profiles.find((item) => !item.archived_at) ?? null;
   const [feed, setFeed] = useState<ResearchFeed | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stopConfirm,setStopConfirm]=useState<string|null>(null);
+  const [stopping,setStopping]=useState<string|null>(null);
+  const [notice,setNotice]=useState('');
+  const stopLock=useRef(false);
   const [error, setError] = useState("");
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState<string>("not_relevant");
@@ -85,7 +89,19 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   }, [historyFilter, pageOffset, profile?.id, sourceMode, sort]);
   useEffect(() => { setPageOffset(0); }, [profile?.id]);
   useEffect(() => { void load().catch(() => setError("Discover could not load. Refresh to retry.")); }, [load]);
-  const activeJobs = useMemo(() => feed?.jobs.filter((job) => activeStatuses.has(job.status)) ?? [], [feed]);
+  const activeJobs = useMemo(() => feed?.jobs.filter((job) => job.content_profile_id===profile?.id&&activeStatuses.has(job.status)) ?? [], [feed,profile?.id]);
+  useEffect(()=>{
+    if(!busy)return;
+    const timer=window.setInterval(()=>void load().catch(()=>undefined),2000);
+    return ()=>window.clearInterval(timer);
+  },[busy,load]);
+  async function stop(jobId:string){
+    if(stopLock.current)return;
+    stopLock.current=true;setStopping(jobId);setError('');
+    try{const result=await stopResearch(jobId);setStopConfirm(null);setNotice(result.job.status==='cancelled'?'Search stopped. Saved results are kept and unused allowance is returned.':'This search has already finished.');await load();}
+    catch{setError('Could not stop the search. Please try Stop search again.');}
+    finally{stopLock.current=false;setStopping(null);}
+  }
   useEffect(() => {
     if (!activeJobs.length) return;
     const timer = window.setInterval(() => {
@@ -133,6 +149,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
       </div>
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
+    {notice&&<p role="status">{notice}</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>{feed?'Discover is almost ready.':'Loading your ideas…'}</h2>{feed&&<p>This feature is available to selected Pro pilot accounts.</p>}</div> : <>
       <div className="discover-source-options"><div role="group" aria-label="Source type">{(['videos','articles','all'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>{setSourceMode(mode);setPageOffset(0);setFeed(null);}}>{mode==='videos'?'Videos':mode==='articles'?'Articles':'All'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}</>}</div>
       {sourceMode==='all'?<p className="discover-library-hint">Select Videos or Articles above to find new ideas.</p>:<><section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'We’ll look for clips you can react to.'}</span></div><div className="discover-search-actions"><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < 10} onClick={() => void find(10)}><Sparkles size={18}/><span>Find 10 {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button><div className="discover-more-options"><span>More</span>{([20, 30] as const).map((count) => <button key={count} disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < count} onClick={() => void find(count)} aria-label={`Find ${count} ${sourceMode==='articles'?'articles':'clips'}`}>{count}</button>)}</div></div></section></>}
@@ -144,6 +161,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
           <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div><b>{progress.percent}%</b></div>
           <div className="research-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}><i style={{ width: `${progress.percent}%` }} /></div>
           <p>{job.phase}</p>
+          {stopConfirm===job.id?<div className="research-stop-confirm"><strong>Keep the results found so far and stop searching?</strong><p>Work already sent to a search provider may still incur a cost.</p><div><button type="button" className="button secondary" disabled={stopping===job.id} onClick={()=>setStopConfirm(null)}>Keep searching</button><button type="button" className="button primary" disabled={stopping===job.id} onClick={()=>void stop(job.id)}>{stopping===job.id?'Stopping…':'Stop search'}</button></div></div>:<button type="button" className="button secondary" onClick={()=>setStopConfirm(job.id)}>Stop search</button>}
         </section>;
       })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}

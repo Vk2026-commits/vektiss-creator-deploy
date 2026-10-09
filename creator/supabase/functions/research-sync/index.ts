@@ -14,7 +14,7 @@ import { z } from "zod";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-const requestSchema = z.object({ jobId: z.string().uuid() }).strict();
+const requestSchema = z.object({ jobId: z.string().uuid(), action:z.enum(['sync','stop']).default('sync') }).strict();
 
 function headersFor(origin: string | null): Record<string, string> {
   const headers: Record<string, string> = {
@@ -32,24 +32,13 @@ function providerCost(usage: Record<string, unknown>): number | null {
   const value = (cost as Record<string, unknown>).total_cost;
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
-async function releaseReservation(userId: string, amount: number, delivered = 0) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const { data } = await db.from("creator_research_entitlements").select("reserved_count,delivered_count").eq("user_id", userId).maybeSingle();
-    if (!data) return;
-    const updated = await db.from("creator_research_entitlements")
-      .update({ reserved_count: Math.max(0, Number(data.reserved_count) - amount), delivered_count: Number(data.delivered_count) + delivered, updated_at: new Date().toISOString() })
-      .eq("user_id", userId).eq("reserved_count", data.reserved_count).eq("delivered_count", data.delivered_count).select("user_id");
-    if (!updated.error && updated.data?.length) return;
-  }
-  throw new Error("PERSISTENCE");
-}
 async function markFailed(job: Record<string, unknown>, code: string, cancelled = false) {
   if (["ready", "failed", "cancelled"].includes(String(job.status))) return;
   await db.from("creator_research_jobs").update({
-    status: cancelled ? "cancelled" : "failed", phase: cancelled ? "Research cancelled" : "Research unavailable", error_code: code,
+    status: cancelled ? "cancelled" : "failed", reserved_count:0, phase: cancelled ? "Research cancelled" : "Research unavailable", error_code: code,
     completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
   }).eq("id", job.id);
-  await releaseReservation(String(job.user_id), Number(job.reserved_count));
+
   await db.from("creator_research_usage").insert({
     id: crypto.randomUUID(), job_id: job.id, user_id: job.user_id, operation: "deep_research_failed",
     provider_response_id: job.provider_response_id ?? null, status: cancelled ? "cancelled" : "failed", request_metadata: { code },
@@ -82,8 +71,14 @@ Deno.serve(async (request) => {
     const loaded = await db.from("creator_research_jobs").select("*").eq("id", input.jobId).eq("user_id", auth.user.id).maybeSingle();
     if (loaded.error || !loaded.data) return reply(headers, { code: "JOB" }, 404);
     job = loaded.data as Record<string, unknown>;
+    if(input.action==='stop'){
+      const stopped=await db.rpc('creator_research_stop',{p_job_id:input.jobId,p_user_id:auth.user.id});
+      if(stopped.error)return reply(headers,{code:'STOP_FAILED'},503);
+      return reply(headers,{job:stopped.data});
+    }
     if (["ready", "failed", "cancelled"].includes(String(job.status))) return reply(headers, { job });
     if (!job.provider_response_id) {
+      if(job.status==='queued')return reply(headers,{job},202);
       await markFailed(job, "PROVIDER_RESPONSE_MISSING");
       return reply(headers, { code: "PROVIDER_RESPONSE_MISSING" }, 503);
     }
@@ -93,7 +88,7 @@ Deno.serve(async (request) => {
     const providerMetadata = metadata(job);
     if (providerMetadata.stage === "native_discovery") {
       if (job.status !== "researching") return reply(headers, { job }, 202);
-      const discovery = await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count));
+      const discovery = await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
       if (discovery.state === "pending") {
         const updated = await db.from("creator_research_jobs").update({
           status: "researching", phase: "Finding direct TikTok videos…",
@@ -134,6 +129,7 @@ Deno.serve(async (request) => {
         return reply(headers, { job: current ?? job }, 202);
       }
       job = claimed.data as Record<string, unknown>;
+      if(job.status==='cancelled')return reply(headers,{job});
       const screening = await startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job.requested_count), sources: freshSources });
       const compactSources = freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
       const updated = await db.from("creator_research_jobs").update({
@@ -169,6 +165,7 @@ Deno.serve(async (request) => {
       return reply(headers, { job: current ?? job }, 202);
     }
     job = claimed.data as Record<string, unknown>;
+      if(job.status==='cancelled')return reply(headers,{job});
 
     const { data: duplicateRows, error: duplicateError } = await db.from("creator_research_opportunities")
       .select("title,category,status,source_snapshot").eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(250);
@@ -198,8 +195,8 @@ Deno.serve(async (request) => {
     });
     const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
     if (!ranked.length && brief.data.sourceMode==='articles') {
-      await releaseReservation(auth.user.id,Number(job.reserved_count),0);
-      const result=await db.from('creator_research_jobs').update({status:'ready',phase:'No new relevant articles with verified dates were found in this window. Try a wider date range.',delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
+
+      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase:'No new relevant articles with verified dates were found in this window. Try a wider date range.',delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
       if(result.error)throw Error('PERSISTENCE');
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model,status:'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),accepted_count:0,request_metadata:{sourceMode:'articles',articleWindow:brief.data.articleWindow}});
       return reply(headers,{job:result.data,deliveredCount:0});
@@ -253,10 +250,10 @@ Deno.serve(async (request) => {
     if (shown.error) throw new Error("PERSISTENCE");
 
     const delivered = insertedOpportunities.data.length;
-    await releaseReservation(auth.user.id, Number(job.reserved_count), delivered);
+
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:"Your opportunities are ready.", delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:"Your opportunities are ready.", delivered_count: delivered, candidate_count: providerRun.candidates.length,
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).select("*").maybeSingle();
     if (finalJob.error || !finalJob.data) throw new Error("PERSISTENCE");
@@ -271,7 +268,9 @@ Deno.serve(async (request) => {
   } catch (error) {
     const code = error instanceof Error ? error.message.slice(0, 120) : "UNAVAILABLE";
     if (job) {
-      await db.from("creator_research_opportunities").delete().eq("job_id", job.id);
+      const current=await db.from('creator_research_jobs').select('*').eq('id',job.id).maybeSingle();
+      if(current.data?.status==='cancelled')return reply(headers,{job:current.data});
+      // Keep results already saved, even if a later linking operation failed.
       await markFailed(job, code);
     }
     return reply(headers, { code: "RESEARCH_SYNC_FAILED" }, 503);
