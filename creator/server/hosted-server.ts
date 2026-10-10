@@ -14,6 +14,7 @@ import {graphicSource} from './graphic-source';
 import {resolveSource} from './source-resolve';
 import {reportProcessing,mediaInventory} from './project-usage';
 import {verifyAvatarMedia} from './avatar-verification';
+import {avatarThumbnail} from './avatar-thumbnail';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
@@ -57,6 +58,11 @@ export function hostedHandler(c:HostingConfig){
    // Every filename is resolved beneath the verified user's directory, never a client-supplied owner.
    const root=resolve(c.data,user.id),media=resolve(root,'.local-captures'),jobs=resolve(root,'jobs');
    await mkdir(jobs,{recursive:true,mode:0o700});await mkdir(media,{recursive:true,mode:0o700});
+   const thumbnail=path.match(/^\/api\/local-capture\/avatar-thumbnail\/([a-f0-9-]{36})$/);
+   if(req.method==='GET'&&thumbnail&&uuid.test(thumbnail[1])){
+    try{const png=await avatarThumbnail(root,thumbnail[1],user.id,authorization,c);res.setHeader('Content-Type','image/png');return res.end(png);}
+    catch{return json(res,422,{error:'We could not prepare a clean placement preview. Retry or choose another look. No paid video was started.'});}
+   }
    const avatarCheck=path.match(/^\/api\/local-capture\/avatar-verification\/([a-f0-9-]{36})$/);
    if(req.method==='GET'&&avatarCheck&&uuid.test(avatarCheck[1])){
     try{return json(res,200,await verifyAvatarMedia(root,avatarCheck[1],user.id,authorization,c));}
