@@ -31,3 +31,11 @@ export const videoPlanSchema=z.object({
 export type VideoPlan=z.infer<typeof videoPlanSchema>;
 export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:35,presenter_placement:{x:.5,y:1,width:35},presenter_sizing:'visible-person-v1'});
 export const planReady=(p:VideoPlan)=>Boolean(p.approved_at&&(p.presenter==='self'||p.avatar_id));
+
+// Render components may report the same derived preview more than once while
+// polling a saved job. Preserve all plan fields and retain the existing object
+// when nothing actually changed so callers do not trigger another save cycle.
+export function mergeRenderPlan(current:VideoPlan,incoming:VideoPlan):VideoPlan{
+ const next={...current,...incoming};
+ return JSON.stringify(current)===JSON.stringify(next)?current:next;
+}

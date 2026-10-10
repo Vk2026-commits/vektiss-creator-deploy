@@ -1,6 +1,6 @@
 import { expect,it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { newVideoPlan,planReady,videoPlanSchema } from '../src/domain/video-plan';
+import { mergeRenderPlan,newVideoPlan,planReady,videoPlanSchema } from '../src/domain/video-plan';
 import { VideoPlan } from '../src/components/VideoPlan';
 import { FinishedVideo } from '../src/components/FinishedVideo';
 import { scriptSchema } from '../src/domain/scripts';
@@ -47,6 +47,14 @@ it('persists the complete plan through script validation',()=>{
  const plan={...newVideoPlan(),step:'saved' as const,approved_at:new Date().toISOString(),visual_notes:'Highlight the takeaway.'};
  const saved=scriptSchema.parse({...script,brief:{...script.brief,production:plan}});
  expect(saved.brief.production).toEqual(plan);
+});
+it('does not resave an unchanged render preview and keeps the selected source',()=>{
+ const plan={...newVideoPlan(),step:'saved' as const,presenter:'avatar' as const,avatar_id:'avatar',video_background:{id:'c43ce9f2-ceba-4650-814f-539ef068daac',source_url:''}};
+ const preview={...plan,avatar_preview:{avatar_id:'avatar',engine:'avatar_iii',format:'portrait',aspect:9/16}};
+ const merged=mergeRenderPlan(plan,preview);
+ expect(merged.video_background).toEqual(plan.video_background);
+ expect(merged.avatar_preview).toEqual(preview.avatar_preview);
+ expect(mergeRenderPlan(merged,preview)).toBe(merged);
 });
 it('makes the rendering boundary explicit on the next screen',()=>{
  const html=renderToStaticMarkup(<VideoPlan {...props} plan={{...newVideoPlan(),step:'review',approved_at:new Date().toISOString()}}/>);

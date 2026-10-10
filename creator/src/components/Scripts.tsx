@@ -7,7 +7,7 @@ import { emptyBrief, briefSchema, type ScriptBrief } from '../domain/script-brie
 import { ScriptIntake } from './ScriptIntake';
 import { scriptAI } from '../lib/script-ai';
 import { VideoPlan } from './VideoPlan';
-import { newVideoPlan, type VideoPlan as Plan } from '../domain/video-plan';
+import { mergeRenderPlan, newVideoPlan, type VideoPlan as Plan } from '../domain/video-plan';
 import { FullScriptRender } from './FullScriptRender';
 import { explainError, type ContentProfile } from '../domain/strategy';
 import { scriptRepository } from '../lib/script-repository';
@@ -137,6 +137,15 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
   }
   function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
+  function updateRenderPlan(production:Plan){
+    const currentPlan=latest.current.brief.production;
+    if(!currentPlan)return;
+    const nextPlan=mergeRenderPlan(currentPlan,production);
+    if(nextPlan===currentPlan)return;
+    const nextDraft={...latest.current,brief:{...latest.current.brief,production:nextPlan}};
+    latest.current=nextDraft;
+    setDraft(nextDraft);setDirty(true);setMessage('');
+  }
   function viewStep(index:number){
     if(index===1){setPlanning(false);setEditingScript(false);}
     else if(draft.brief.production){setPlanning(true);updateBrief({...draft.brief,production:{...draft.brief.production,step:'visuals'}});}
@@ -260,9 +269,9 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
           {!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
         </fieldset>
-{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
+	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
         </>}
-        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={updateRenderPlan} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
       </section>
     </div>
   </div>;
