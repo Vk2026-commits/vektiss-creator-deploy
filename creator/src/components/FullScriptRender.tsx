@@ -7,7 +7,7 @@ import {avatarRepository} from '../lib/avatar-repository';
 import {watchRender} from '../lib/watch-render';
 import {FinishedVideo} from './FinishedVideo';
 import {PresenterTest} from './PresenterTest';
-import type {VideoPlan} from '../domain/video-plan';
+import {sameRenderValue,type VideoPlan} from '../domain/video-plan';
 import {onResume} from '../lib/resume-events';
 const jobSchema=z.object({id:z.string(),status:z.string(),video_url:z.string().nullable(),message:z.string().nullable()});
 const reviewSchema=z.object({revision:z.string(),estimated_seconds:z.number(),verification:z.object({test_id:z.string(),crop:z.object({width:z.number().positive(),height:z.number().positive()})}).nullable().optional(),estimate:z.object({engine:z.string(),estimated_cost_usd:z.number().nullable(),basis:z.string()}).optional(),snapshot:z.object({script:z.string(),avatar_name:z.string(),voice_name:z.string().nullable().optional()}),job:jobSchema.nullable()});
@@ -20,7 +20,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
  useEffect(()=>{if(disabled)return;let live=true,reading=false;setReview(null);setJob(null);
   const read=()=>{if(reading||submitting.current)return;reading=true;setBusy(true);
    void avatarRepository.renderTest({action:'prepare_test',script_id:scriptId,scope:'full'}).then(value=>{if(live){const next=reviewSchema.parse(value);setReview(next);setJob(next.job);setError('');
-    if(next.verification&&plan.avatar_id&&(!next.job||next.job.status==='failed')){const avatar_preview={avatar_id:plan.avatar_id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:next.verification.crop.width/next.verification.crop.height};if(JSON.stringify(plan.avatar_preview)!==JSON.stringify(avatar_preview))onPlanChange({...plan,avatar_preview});}
+    if(next.verification&&plan.avatar_id&&(!next.job||next.job.status==='failed')){const avatar_preview={avatar_id:plan.avatar_id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:next.verification.crop.width/next.verification.crop.height};if(!sameRenderValue(plan.avatar_preview,avatar_preview))onPlanChange({...plan,avatar_preview});}
    }}).catch(e=>{if(live)setError(e instanceof Error?e.message:'Could not load full-script render.');}).finally(()=>{reading=false;if(live)setBusy(false);});
   };
   read();const off=onResume(read);return()=>{live=false;off();};

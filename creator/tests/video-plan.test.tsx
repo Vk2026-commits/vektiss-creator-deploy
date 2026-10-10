@@ -54,7 +54,8 @@ it('does not resave an unchanged render preview and keeps the selected source',(
  const merged=mergeRenderPlan(plan,preview);
  expect(merged.video_background).toEqual(plan.video_background);
  expect(merged.avatar_preview).toEqual(preview.avatar_preview);
- expect(mergeRenderPlan(merged,preview)).toBe(merged);
+ const reordered={...plan,avatar_preview:{aspect:9/16,format:'portrait',engine:'avatar_iii',avatar_id:'avatar'}};
+ expect(mergeRenderPlan(merged,reordered)).toBe(merged);
 });
 it('makes the rendering boundary explicit on the next screen',()=>{
  const html=renderToStaticMarkup(<VideoPlan {...props} plan={{...newVideoPlan(),step:'review',approved_at:new Date().toISOString()}}/>);
