@@ -1869,6 +1869,8 @@ dialog::backdrop {
 .short-test-panel label { display:flex; gap:10px; align-items:flex-start; margin:16px 0; }
 .short-test-panel details { margin:12px 0; }
 .short-test-panel .presenter-result-stage { max-width:360px; margin-inline:auto; }
+.avatar-preview-label { position:absolute; bottom:0; left:0; right:0; padding:3px 5px; background:#ffffffed; color:#23436b; text-align:center; font-size:10px; font-weight:600; pointer-events:none; }
+.selected-avatar-overlay button { pointer-events:auto; min-height:44px; position:relative; z-index:2; }
 .video-progress li > button { display:flex; align-items:center; gap:10px; color:inherit; font:inherit; background:transparent; border:0; padding:4px 0; text-align:left; cursor:pointer; }
 .video-progress li > button:hover { color:#0675ed; text-decoration:underline; text-underline-offset:4px; }
 .video-progress li > button:focus-visible { outline:2px solid #1686ff; outline-offset:4px; border-radius:4px; }
