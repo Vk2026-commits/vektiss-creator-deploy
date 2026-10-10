@@ -12,7 +12,8 @@ it('keeps presenter selection and placement visible for video sources',()=>{
  expect(html).not.toContain('<summary>Presenter:');
  for(const position of ['Bottom left','Bottom middle','Bottom right'])expect(html).toContain(position);
  expect(html).toContain('Pinch to resize');
- expect(html).toContain('width:70%');
+ expect(html).toContain('width:35%');
+ expect(html).toContain('Small overlay');
  expect(html).not.toContain('Capture article screenshot');
 });
 it('loads older plans with a safe presenter placement default',()=>{

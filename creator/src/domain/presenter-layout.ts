@@ -12,7 +12,7 @@ export function presenterLayout(format:VideoPlan['format'],position:VideoPlan['p
  return {w,h,width,height,x,y};
 }
 export const previewAspect=(plan:VideoPlan)=>avatarFraming(plan.avatar_id,plan.format)?stephenCrop.width/stephenCrop.height:plan.avatar_preview?.avatar_id===plan.avatar_id&&plan.avatar_preview.engine===(plan.avatar_engine??'avatar_iv')&&plan.avatar_preview.format===plan.format?plan.avatar_preview.aspect:328/426;
-export function placementFromLayout(plan:VideoPlan){
- const l=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,previewAspect(plan));
+export function placementFromLayout(plan:VideoPlan,aspect=previewAspect(plan)){
+ const l=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,aspect);
  return {x:(l.x+l.width/2)/l.w,y:(l.y+l.height)/l.h,width:l.width/l.w*100};
 }

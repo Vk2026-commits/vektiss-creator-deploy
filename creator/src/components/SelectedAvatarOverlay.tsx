@@ -1,15 +1,17 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useRef} from 'react';
+import {personThumbnail} from '../lib/person-thumbnail';
 import {avatarRepository} from '../lib/avatar-repository';
 import {presenterLayout,previewAspect} from '../domain/presenter-layout';
 import type {VideoPlan} from '../domain/video-plan';
 import {avatarFraming} from '../domain/avatar-framing';
 import {mediaFetch} from '../lib/media-fetch';
 import {subscribeAvatarLibrary} from '../lib/avatar-library-events';
-export function SelectedAvatarOverlay({plan}:{plan:VideoPlan}) {
- return <AvatarOverlay key={`${plan.avatar_id}:${plan.avatar_engine}:${plan.format}`} plan={plan}/>;
+export function SelectedAvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
+ return <AvatarOverlay key={`${plan.avatar_id}:${plan.avatar_engine}:${plan.format}`} plan={plan} onAspect={onAspect}/>;
 }
-function AvatarOverlay({plan}:{plan:VideoPlan}) {
- const [image,setImage]=useState<{id:string;url:string|null;verified?:boolean;placement?:boolean}|null>(null);
+function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
+ const aspectCallback=useRef(onAspect);aspectCallback.current=onAspect;
+ const [image,setImage]=useState<{id:string;url:string|null;verified?:boolean;placement?:boolean;aspect?:number}|null>(null);
  const [previewError,setPreviewError]=useState(false);
  const [epoch,setEpoch]=useState(0);
  useEffect(()=>subscribeAvatarLibrary(()=>setEpoch(n=>n+1)),[]);
@@ -23,13 +25,16 @@ function AvatarOverlay({plan}:{plan:VideoPlan}) {
    else{
     const response=await mediaFetch(`/api/local-capture/avatar-thumbnail/${plan.avatar_id}`,{signal:controller.signal});
     if(!response.ok)throw Error('Placement preview unavailable');
-    const blob=await response.blob();if(!live)return;objectUrl=URL.createObjectURL(blob);
-    setImage({id:plan.avatar_id!,url:objectUrl,placement:true});
+    const blob=await response.blob();if(!live)return;
+    const prepared=plan.presenter_sizing==='visible-person-v1'?await personThumbnail(blob):{blob,aspect:undefined};
+    if(!live)return;objectUrl=URL.createObjectURL(prepared.blob);
+    setImage({id:plan.avatar_id!,url:objectUrl,placement:true,aspect:prepared.aspect});
+    if(prepared.aspect)aspectCallback.current?.(prepared.aspect);
    }
   }).catch(()=>{if(live){setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}});
   return()=>{live=false;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
- },[plan.avatar_id,plan.avatar_engine,plan.format,epoch]);
- const layout=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,previewAspect(plan));
+ },[plan.avatar_id,plan.avatar_engine,plan.format,plan.presenter_sizing,epoch]);
+ const layout=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,image?.aspect??previewAspect(plan));
  const verified=image?.id===plan.avatar_id&&image.verified;
  const cutout=Boolean(avatarFraming(plan.avatar_id,plan.format));
  const url=verified?image.url:cutout?'/brand/stephen-render-framing-v1.png':image?.id===plan.avatar_id?image.url:null;

@@ -22,11 +22,12 @@ export const videoPlanSchema=z.object({
  presenter_position:z.enum(presenterPositions).default('bottom-right'),
  presenter_size:z.number().min(15).max(90).default(28),
  presenter_placement:freePlacementSchema.optional(),
+ presenter_sizing:z.literal('visible-person-v1').optional(),
  article_capture:graphicCaptureSchema.optional(),
  background_framing:backgroundFramingSchema.optional(),
  screenshot_story:screenshotStorySchema.optional(),
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });
 export type VideoPlan=z.infer<typeof videoPlanSchema>;
-export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:70,presenter_placement:{x:.5,y:1,width:70}});
+export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:35,presenter_placement:{x:.5,y:1,width:35},presenter_sizing:'visible-person-v1'});
 export const planReady=(p:VideoPlan)=>Boolean(p.approved_at&&(p.presenter==='self'||p.avatar_id));
