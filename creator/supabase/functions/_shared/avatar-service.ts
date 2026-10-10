@@ -11,14 +11,13 @@ import { presenterTestService } from './presenter-test-service.ts';
 import {verifySavedAvatar} from './avatar-verification.ts';
 
 export interface AvatarService {
-  execute(userId: string, command: AvatarCommand, authorization?:string): Promise<unknown>;
+  execute(userId: string, command: AvatarCommand): Promise<unknown>;
 }
 export function createAvatarService(
   db: SupabaseClient,
   vault: ReturnType<typeof credentialVault>,
   providerFactory: (key: string) => AvatarCatalogProvider = (key) =>
     new HeyGenCatalog(key),
-  verificationOrigin?:string,
 ): AvatarService {
   async function rpc(name: string, params: Record<string, unknown>) {
     const { data, error } = await db.rpc(name, params);
@@ -104,7 +103,7 @@ export function createAvatarService(
     }
   }
   return {
-    async execute(userId, command,authorization) {
+    async execute(userId, command) {
       const allowed = await rpc("creator_avatar_rate_limit", {
         p_user_id: userId,
         p_operation: command.action === "connect" ? "connect" : "other",
@@ -116,8 +115,7 @@ export function createAvatarService(
           429,
         );
       if(command.action==='verify_avatar_test'){
-        if(!verificationOrigin||!authorization)throw new PublicError('VERIFICATION','Background verification is not available yet. No paid render was started.',503);
-        return verifySavedAvatar(db,userId,command.test_id,authorization,verificationOrigin,command.visual_approved);
+        return verifySavedAvatar(db,userId,command.test_id,command.visual_approved);
       }
       if(command.action==='prepare_test'||command.action==='start_test'||command.action==='test_status'||command.action==='download_test')return presenterTestService(db,vault)(userId,command);
       if (command.action === "library") return library(userId);

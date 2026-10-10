@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 import {validateAlphaSamples,validateAlphaStream,validateVerificationJob} from '../server/avatar-verification';
-import {avatarVerification,verifySavedAvatar} from '../supabase/functions/_shared/avatar-verification';
+import {avatarVerification,manualVerificationFrame,verifySavedAvatar} from '../supabase/functions/_shared/avatar-verification';
 import {avatarCommandSchema} from '../supabase/functions/_shared/avatar-contract';
 import {presenterTestService} from '../supabase/functions/_shared/presenter-test-service';
 import {readFileSync} from 'node:fs';
@@ -49,8 +49,14 @@ it('requires explicit visual approval, including direct service calls',async()=>
  expect(avatarCommandSchema.safeParse({...command,visual_approved:false}).success).toBe(false);
  expect(avatarCommandSchema.safeParse({...command,visual_approved:true}).success).toBe(true);
  const from=vi.fn();
- await expect(verifySavedAvatar({from} as any,'u',command.test_id,'token','https://example.com')).rejects.toThrow('Watch the saved test');
+ await expect(verifySavedAvatar({from} as any,'u',command.test_id)).rejects.toThrow('Watch the saved test');
  expect(from).not.toHaveBeenCalled();
+});
+it('uses the completed 720p test shape for a manually approved mobile review',()=>{
+ expect(manualVerificationFrame('9:16')).toEqual({crop:{x:0,y:0,width:720,height:1280},source_width:720,source_height:1280});
+ expect(manualVerificationFrame('16:9')).toEqual({crop:{x:0,y:0,width:1280,height:720},source_width:1280,source_height:720});
+ expect(manualVerificationFrame('1:1')).toEqual({crop:{x:0,y:0,width:720,height:720},source_width:720,source_height:720});
+ expect(()=>manualVerificationFrame('4:3')).toThrow('unsupported video shape');
 });
 it('does not unlock a look using an old alpha-only certification',async()=>{
  let record:any={test_id:'t',thumbnail_url:'photo',visual_approved_at:null};

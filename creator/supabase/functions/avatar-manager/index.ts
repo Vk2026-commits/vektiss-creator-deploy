@@ -30,6 +30,6 @@ const handler = createAvatarHandler({
     const { data, error } = await db.auth.getUser(token);
     return error ? null : (data.user?.id ?? null);
   },
-  service: createAvatarService(db, vault, undefined, new URL(required('APP_ORIGIN')).origin),
+  service: createAvatarService(db, vault),
 });
 Deno.serve(handler);
