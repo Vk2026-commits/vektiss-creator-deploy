@@ -1864,6 +1864,11 @@ dialog::backdrop {
 .engine-price-guide p strong { white-space:nowrap; color:#1267db; }
 .engine-price-guide small { display:block; line-height:1.5; }
 .short-test-panel { margin:16px 0; padding:18px; border:1px solid #d7e3f3; border-radius:16px; background:#fff; }
+.test-processing { display:grid; gap:12px; padding:20px; margin:16px 0; border:1px solid #bddaff; border-radius:16px; color:#124b8f; background:linear-gradient(135deg,#edf6ff,#f8fbff); }
+.test-processing progress { width:100%; height:8px; accent-color:#1683ff; }
+.short-test-panel label { display:flex; gap:10px; align-items:flex-start; margin:16px 0; }
+.short-test-panel details { margin:12px 0; }
+.short-test-panel .presenter-result-stage { max-width:360px; margin-inline:auto; }
 .video-progress li > button { display:flex; align-items:center; gap:10px; color:inherit; font:inherit; background:transparent; border:0; padding:4px 0; text-align:left; cursor:pointer; }
 .video-progress li > button:hover { color:#0675ed; text-decoration:underline; text-underline-offset:4px; }
 .video-progress li > button:focus-visible { outline:2px solid #1686ff; outline-offset:4px; border-radius:4px; }

@@ -41,7 +41,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
     {busy&&<RenderProgress value={15} label="Submitting to HeyGen"/>}
     <small>Creates one paid HeyGen render with your approved script.</small><div className="render-actions"><button disabled={busy} onClick={onEditLayout}>← Back</button><button className="button" disabled={disabled||busy||!backgroundReady} onClick={()=>void start()}>{busy?'Submitting…':'Confirm & create with HeyGen'}</button></div>
    </div>}
-   <div className="short-test-secondary"><PresenterTest compact required={!review.verification} onVerified={()=>setVerificationEpoch(n=>n+1)} key={`${scriptId}:${revision}`} scriptId={scriptId} revision={revision} disabled={disabled||busy||active}/></div>
+   <div className="short-test-secondary"><PresenterTest compact required={!review.verification} onChangePresenter={onEditLayout} onVerified={()=>setVerificationEpoch(n=>n+1)} key={`${scriptId}:${revision}`} scriptId={scriptId} revision={revision} disabled={disabled||busy||active}/></div>
    <details className="render-more"><summary>Render details</summary><p>{review.snapshot.avatar_name} · {review.snapshot.voice_name??'Default voice'}</p>{job?.message&&!/credit|quota|balance/i.test(job.message)&&<p>{job.message}</p>}{job&&<>{job.video_url&&<a href={job.video_url} target="_blank" rel="noreferrer">Open raw presenter clip</a>}<button disabled={busy} onClick={()=>void refresh()}>Refresh status</button></>}</details>
   </>}{error&&<p role="alert">{error}</p>}
  </section>;
