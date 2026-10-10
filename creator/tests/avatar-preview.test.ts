@@ -13,3 +13,12 @@ it('does not change provider framing or Stephen’s existing crop',()=>{
  expect(avatarFraming(rose,'portrait')).toBeUndefined();
  expect(avatarFraming(STEPHEN_AVATAR,'portrait')).toBe('stephen-portrait-v1');
 });
+it('uses requested Rose Practice artwork only for the matching source thumbnail',()=>{
+ const id='cebd8766-07ee-44eb-a914-88ba31733319';
+ const source='https://files2.heygen.ai/talking_photo/9b0cb20813cc48cfa09c17368f69eec6/152377e920d5486495fa7b8801d677cc.WEBP?signature=renewed';
+ expect(avatarPreviewCutout(id,source)?.url).toBe('/brand/rose-practice-preview-v1.png');
+ expect(avatarPreviewCutout(id,null)).toBeNull();
+ expect(avatarPreviewCutout(rose,source)).toBeNull();
+ expect(avatarPreviewCutout(id,source.replace('files2.heygen.ai','example.com'))).toBeNull();
+ expect(avatarFraming(id,'portrait')).toBeUndefined();
+});

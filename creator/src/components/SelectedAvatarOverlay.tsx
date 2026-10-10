@@ -26,7 +26,7 @@ function AvatarOverlay({plan}:{plan:VideoPlan}) {
  const layout=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,previewAspect(plan));
  const verified=image?.id===plan.avatar_id&&image.verified;
  const cutout=Boolean(avatarFraming(plan.avatar_id,plan.format));
- const reference=avatarPreviewCutout(plan.avatar_id,image?.id===plan.avatar_id?image.url:null);
+ const reference=verified?null:avatarPreviewCutout(plan.avatar_id,image?.id===plan.avatar_id?image.url:null);
  const url=verified?image.url:cutout?'/brand/stephen-render-framing-v1.png':image?.id===plan.avatar_id?image.url:null;
  return <div className={`selected-avatar-overlay${cutout||reference||verified?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{reference?<svg width="100%" height="100%" viewBox={reference.viewBox} preserveAspectRatio="xMidYMax meet" role="img" aria-label={`${plan.avatar_name} — placement preview`}><image href={reference.url} width={reference.width} height={reference.height} onError={()=>setImage({id:plan.avatar_id!,url:null})}/></svg>:url?<img src={url} alt={plan.avatar_name} style={verified?{objectFit:'contain',objectPosition:'center bottom'}:undefined} draggable={false} referrerPolicy="no-referrer" onError={()=>setImage({id:plan.avatar_id!,url:null})}/>:<span>{image?'Avatar preview unavailable':'Loading avatar…'}<br/>{plan.avatar_name}</span>}</div>;
 }
