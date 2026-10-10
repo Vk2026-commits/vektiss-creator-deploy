@@ -3,7 +3,7 @@ import {personThumbnail} from '../lib/person-thumbnail';
 import {avatarRepository} from '../lib/avatar-repository';
 import {presenterLayout,previewAspect} from '../domain/presenter-layout';
 import type {VideoPlan} from '../domain/video-plan';
-import {avatarFraming} from '../domain/avatar-framing';
+import {avatarFraming,framedAspect} from '../domain/avatar-framing';
 import {mediaFetch} from '../lib/media-fetch';
 import {subscribeAvatarLibrary} from '../lib/avatar-library-events';
 export function SelectedAvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
@@ -34,9 +34,11 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
   }).catch(()=>{if(live){setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}});
   return()=>{live=false;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[plan.avatar_id,plan.avatar_engine,plan.format,plan.presenter_sizing,epoch]);
- const layout=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,image?.aspect??previewAspect(plan));
+ const baseAspect=image?.aspect??previewAspect(plan);
+ const layout=presenterLayout(plan.format,plan.presenter_position,plan.presenter_size,plan.presenter_placement,framedAspect(baseAspect,plan.presenter_framing,plan.presenter_framing_amount));
  const verified=image?.id===plan.avatar_id&&image.verified;
  const cutout=Boolean(avatarFraming(plan.avatar_id,plan.format));
  const url=verified?image.url:cutout?'/brand/stephen-render-framing-v1.png':image?.id===plan.avatar_id?image.url:null;
- return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={verified||image?.placement?{objectFit:'contain',objectPosition:'center bottom'}:undefined} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
+ const framed=Boolean(plan.presenter_framing&&plan.presenter_framing!=='original');
+ return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={framed?{objectFit:'cover',objectPosition:'center top'}:verified||image?.placement?{objectFit:'contain',objectPosition:'center bottom'}:undefined} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
 }

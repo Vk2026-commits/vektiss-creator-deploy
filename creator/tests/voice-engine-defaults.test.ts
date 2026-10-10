@@ -3,7 +3,7 @@ import {newVideoPlan,videoPlanSchema} from '../src/domain/video-plan';
 import {testPayload} from '../supabase/functions/_shared/presenter-test';
 describe('voice engine and starting layout',()=>{
  it('starts small and centered against the bottom edge',()=>{
-  expect(newVideoPlan().presenter_placement).toEqual({x:.5,y:1,width:35});
+  expect(newVideoPlan().presenter_placement).toEqual({x:.5,y:1,width:30});
  });
  it('preserves existing small layouts',()=>{
   expect(videoPlanSchema.parse({...newVideoPlan(),presenter_placement:undefined,presenter_size:28,presenter_position:'bottom-right'}).presenter_size).toBe(28);

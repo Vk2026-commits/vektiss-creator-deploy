@@ -10,14 +10,14 @@ import {composeSchema} from './compose-video';
 import {publicResource} from './public-network';
 import {presenterCleanup,repairedCompositionId} from './presenter-cleanup';
 import {presenterLayout} from '../src/domain/presenter-layout';
-import {fixedPresenterCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
+import {avatarFramingSchema,avatarFramingCrop,fixedPresenterCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
 import {renderReactionSequence,REACTION_SEQUENCE_VERSION} from './reaction-sequence';
 import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type ScreenshotStory} from '../src/domain/screenshot-story';
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
 import {backgroundFilter} from '../src/domain/background-framing';
 const exec=promisify(execFile);
-export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
+export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
  const boxes=[...log.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].map(m=>m.slice(1).map(Number));
  if(!boxes.length)throw Error('No transparent presenter detected.');
@@ -71,7 +71,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const detected=alphaBounds(bounds.stderr,stream.width,stream.height,c.placement?0:8);
  const verified=job.snapshot?.verified_frame;
  if(verified&&(verified.source_width!==stream.width||verified.source_height!==stream.height))throw Error('The avatar framing changed. Your paid render is saved; contact support before retrying assembly.');
- const crop=fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected;
+ const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected,c.presenter_framing,c.presenter_framing_amount);
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
  const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
