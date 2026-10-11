@@ -8,7 +8,7 @@ import {selectedVoiceForPlan} from './selected-voice.ts';
 import {spokenEmergencyNumber,steveReactionProfile} from '../../../src/domain/reaction-script.ts';
 import {STEPHEN_AVATAR} from '../../../src/domain/avatar-framing.ts';
 import {validateStoryScript} from '../../../src/domain/screenshot-story.ts';
-import {avatarVerification} from './avatar-verification.ts';
+import {avatarVerification,manualVerificationFrame} from './avatar-verification.ts';
 
 export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof credentialVault>){
  async function displayJob(job:Record<string,unknown>){
@@ -103,9 +103,12 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // model switch for that same approved avatar creates a new paid full render,
   // but does not make the creator repeat the short test.
   const verification=await avatarVerification(db,user,avatar,plan.avatar_engine??'avatar_iv',snapshot.aspect_ratio,scope==='full');
+  // The original test proves this avatar's background is clean. Full renders
+  // need a crop that matches their selected shape, not the old test's shape.
+  const verificationFrame=verification?{...verification,...manualVerificationFrame(snapshot.aspect_ratio)}:null;
   if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
-  if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose a new avatar and complete its short background check before creating the full video. Your completed checks stay with the same avatar in this video shape.',409);
+  if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose a new avatar and complete its short background check before creating the full video. Your completed checks stay with the same avatar.',409);
   if(prior.data){
    if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
    // Retain the failed attempt for audit; atomically free the revision for one new reservation.
@@ -118,7 +121,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Read credentials BEFORE reserving, but reserve durably BEFORE any paid call.
   const key=await keyFor(user,avatar.connection_id);
   const id=crypto.randomUUID();
-  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate,...(scope==='full'&&verification?{verified_frame:verification}: {})}}).select('*').single();
+  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate,...(scope==='full'&&verificationFrame?{verified_frame:verificationFrame}: {})}}).select('*').single();
   if(reserved.error)throw new PublicError('EXISTS','A test may already be starting. Refresh its status; do not submit again.',409);
   try{
    const result=await providerVideo(key,'',testPayload(snapshot));

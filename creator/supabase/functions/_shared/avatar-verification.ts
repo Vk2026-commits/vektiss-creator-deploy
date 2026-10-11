@@ -17,12 +17,12 @@ export function manualVerificationFrame(aspect:unknown):VerificationFrame{
 }
 
 export async function avatarVerification(db:SupabaseClient,user:string,avatar:any,engine:string,aspect:string,reuseKnownAvatar=false){
- let query:any=db.from('creator_avatar_verifications').select('test_id,crop,thumbnail_url,source_width,source_height,visual_approved_at').eq('user_id',user).eq('connection_id',avatar.connection_id).eq('avatar_id',avatar.id).eq('aspect_ratio',aspect).eq('verification_version',1);
+ let query:any=db.from('creator_avatar_verifications').select('test_id,crop,thumbnail_url,source_width,source_height,visual_approved_at').eq('user_id',user).eq('connection_id',avatar.connection_id).eq('avatar_id',avatar.id).eq('verification_version',1);
  // A completed visual review belongs to the actual avatar look, not a single
- // animation model. Reuse it when the same avatar stays in the same shape;
- // only a newly selected avatar needs another short paid check.
+ // animation model or video shape. Reuse it for that same avatar; only a
+ // newly selected avatar needs another short paid check.
  if(reuseKnownAvatar)query=query.order('visual_approved_at',{ascending:false}).limit(1);
- else query=query.eq('engine',engine);
+ else query=query.eq('engine',engine).eq('aspect_ratio',aspect);
  const {data,error}=await query.maybeSingle();
  if(error)throw new PublicError('VERIFICATION','Could not check avatar readiness. Retry before generating.',503);
  return data&&data.visual_approved_at&&data.thumbnail_url===avatar.thumbnail_url?data:null;

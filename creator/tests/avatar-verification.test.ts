@@ -27,13 +27,14 @@ it('scopes verification to account, connection, avatar, engine and shape; invali
  expect(await avatarVerification({from:()=>q} as any,'owner',avatar,'avatar_iii','9:16')).toBeNull();
  for(const pair of [['user_id','owner'],['connection_id','c'],['avatar_id','a'],['engine','avatar_iii'],['aspect_ratio','9:16']])expect(eq).toHaveBeenCalledWith(...pair);
 });
-it('reuses an approved same-avatar check when switching its model',async()=>{
+it('reuses an approved same-avatar check when switching its model or format',async()=>{
  const eq=vi.fn(),order=vi.fn(),limit=vi.fn();
  const record={test_id:'t',thumbnail_url:'current',visual_approved_at:'2026-10-10T01:00:00Z'};
  const q:any={select:()=>q,eq:(...args:unknown[])=>{eq(...args);return q;},order:(...args:unknown[])=>{order(...args);return q;},limit:(...args:unknown[])=>{limit(...args);return q;},maybeSingle:async()=>({data:record,error:null})};
  const avatar={id:'a',connection_id:'c',thumbnail_url:'current'};
  expect(await avatarVerification({from:()=>q} as any,'owner',avatar,'avatar_v','9:16',true)).toEqual(record);
  expect(eq).not.toHaveBeenCalledWith('engine','avatar_v');
+ expect(eq).not.toHaveBeenCalledWith('aspect_ratio','9:16');
  expect(order).toHaveBeenCalledWith('visual_approved_at',{ascending:false});expect(limit).toHaveBeenCalledWith(1);
 });
 it('blocks direct paid full submissions before reservation when no test is verified',async()=>{
