@@ -15,20 +15,30 @@ import {resolveSource} from './source-resolve';
 import {reportProcessing,mediaInventory} from './project-usage';
 import {verifyAvatarMedia} from './avatar-verification';
 import {avatarThumbnail} from './avatar-thumbnail';
+import {sendVideoReadyEmail,type VideoReadyNotification} from './resend-notifications';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const prefix='/api/local-capture';
-export type HostingConfig={origin:string;webOrigin?:string;data:string;dist:string;supabaseUrl:string;publicKey:string;users:string[]};
+const compositionId=/^[a-f0-9]{64}$/;
+export type HostingConfig={origin:string;webOrigin?:string;data:string;dist:string;supabaseUrl:string;publicKey:string;users:string[];resendApiKey?:string;resendFrom?:string};
 export function validateHostingConfig(c:HostingConfig){
  if(new URL(c.origin).origin!==c.origin||!c.origin.startsWith('https://'))throw Error('Set the exact HTTPS Creator origin.');
  if(c.webOrigin&&(new URL(c.webOrigin).origin!==c.webOrigin||!c.webOrigin.startsWith('https://')))throw Error('Set the exact HTTPS website origin.');
  if(!c.supabaseUrl.startsWith('https://')||!c.publicKey||!c.users.length||c.users.some(id=>!uuid.test(id)))throw Error('Hosted pilot requires Supabase configuration and explicit allowed user IDs.');
+ if(Boolean(c.resendApiKey)!==Boolean(c.resendFrom))throw Error('Configure both Resend runtime settings or neither.');
  if(resolve(c.data)===resolve(c.dist))throw Error('Media storage must be separate from public files.');
  return c;
 }
-type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean};
+type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean;notification?:VideoReadyNotification};
 async function saveJob(path:string,job:Job){const temp=`${path}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(job),{mode:0o600});await rename(temp,path);}
 function json(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));}
+async function notifyVideoReady(c:HostingConfig,user:{id?:unknown;email?:unknown},root:string,job:Job){
+ if(job.route!==`${prefix}/full-compose`||job.state!=='done'||job.notification?.state==='sent'||job.notification?.state==='skipped')return;
+ const exportId=(job.result as {id?:unknown}|undefined)?.id;
+ if(typeof user.id!=='string'||typeof exportId!=='string'||!compositionId.test(exportId))return;
+ try{await stat(resolve(root,'edit/compositions',`${exportId}.mp4`));}catch{return;}
+ job.notification=await sendVideoReadyEmail({apiKey:c.resendApiKey,from:c.resendFrom,to:typeof user.email==='string'?user.email:'',webOrigin:c.webOrigin??c.origin,exportId,idempotencyKey:`creator-video-ready-${user.id}-${exportId}`});
+}
 async function bytesUsed(dir:string):Promise<number>{
  const entries=await readdir(dir,{withFileTypes:true}).catch(()=>[]);
  let bytes=0;for(const entry of entries){const path=resolve(dir,entry.name);bytes+=entry.isDirectory()?await bytesUsed(path):(await stat(path)).size;}return bytes;
@@ -71,10 +81,11 @@ export function hostedHandler(c:HostingConfig){
    const avatarPoster=path.match(/^\/api\/local-capture\/avatar-preview\/([a-f0-9-]{36})$/);
    if(req.method==='GET'&&avatarPoster&&uuid.test(avatarPoster[1])){res.setHeader('Content-Type','image/png');return res.end(await readFile(resolve(root,'avatar-previews',`${avatarPoster[1]}.png`)));}
    const jobMatch=path.match(/^\/api\/local-capture\/jobs\/([a-f0-9-]{36})$/);
-   if(req.method==='GET'&&jobMatch){
-    const id=jobMatch[1];if(!uuid.test(id))return json(res,404,{error:'Not found'});
-    const job:Job=JSON.parse(await readFile(resolve(jobs,`${id}.json`),'utf8'));
-    if(job.cost){
+	   if(req.method==='GET'&&jobMatch){
+	    const id=jobMatch[1];if(!uuid.test(id))return json(res,404,{error:'Not found'});
+	    const job:Job=JSON.parse(await readFile(resolve(jobs,`${id}.json`),'utf8'));
+	    if(job.state==='done'&&job.notification?.state!=='sent'&&job.notification?.state!=='skipped'){await notifyVideoReady(c,user,root,job);await saveJob(resolve(jobs,`${id}.json`),job);}
+	    if(job.cost){
      if(job.state==='running'&&activeJob!==id&&job.cost.status!=='interrupted'){job.cost={...job.cost,status:'interrupted',finished_at:new Date().toISOString()};job.costSynced=false;}
      if(!job.costSynced&&(job.state!=='running'||activeJob!==id)){
       try{await reportProcessing(c,authorization,job.cost);job.costSynced=true;
@@ -166,10 +177,11 @@ export function hostedHandler(c:HostingConfig){
       else if(path.endsWith('/script-draft'))job.result=await createSavedDraft(input,authorization,c);
       else if(path.endsWith('/full-compose'))job.result=await fullComposition(root,input,authorization,{VITE_SUPABASE_URL:c.supabaseUrl,VITE_SUPABASE_PUBLISHABLE_KEY:c.publicKey});
       else if(path.endsWith('/video-frames'))job.result=await extractVideoFrames(createReadStream(savedInput),frameTimes);
-      else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)),sourceEnd);await writeFile(resolve(media,`${mediaId}.mime`),sourceEnd?'video/mp4':type,{mode:0o600});job.result={id:mediaId};}
-      else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
-      job.state='done';
-     }catch(e){job.state='failed';job.error=e instanceof DraftError?e.message:importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
+	      else if(path.endsWith('/video-background')){const mediaId=randomUUID();await prepareMedia(createReadStream(savedInput),p=>copyFile(p,resolve(media,`${mediaId}.video`)),sourceEnd);await writeFile(resolve(media,`${mediaId}.mime`),sourceEnd?'video/mp4':type,{mode:0o600});job.result={id:mediaId};}
+	      else{const result=path.endsWith('/video-import')?await importVideo(root,input.url,prepareMedia):await prepareMedia(createReadStream(savedInput));await writeFile(resolve(jobs,`${id}.mp4`),result.body,{mode:0o600});job.file=id;job.type=result.type;}
+	      job.state='done';
+	      await notifyVideoReady(c,user,root,job);
+	     }catch(e){job.state='failed';job.error=e instanceof DraftError?e.message:importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
      finally{
       const assets=(await mediaInventory(root).catch(()=>[])).filter(asset=>before.get(asset.key)!==asset.modified).map(({key,bytes})=>({key,bytes}));
       job.cost={...job.cost,status:job.state,finished_at:new Date().toISOString(),elapsed_ms:Date.now()-started,retained_bytes:assets.reduce((n,a)=>n+a.bytes,0),assets};
@@ -185,7 +197,7 @@ export function hostedHandler(c:HostingConfig){
 }
 
 export function startHosted(){
- const c=validateHostingConfig({origin:process.env.CREATOR_ORIGIN??'',webOrigin:process.env.CREATOR_WEB_ORIGIN??'https://creator.vektiss.com',data:process.env.CREATOR_DATA_DIR??'/data',dist:resolve('dist'),supabaseUrl:process.env.VITE_SUPABASE_URL??'',publicKey:process.env.VITE_SUPABASE_PUBLISHABLE_KEY??'',users:(process.env.CREATOR_ALLOWED_USERS??'').split(',').filter(Boolean)});
+	 const c=validateHostingConfig({origin:process.env.CREATOR_ORIGIN??'',webOrigin:process.env.CREATOR_WEB_ORIGIN??'https://creator.vektiss.com',data:process.env.CREATOR_DATA_DIR??'/data',dist:resolve('dist'),supabaseUrl:process.env.VITE_SUPABASE_URL??'',publicKey:process.env.VITE_SUPABASE_PUBLISHABLE_KEY??'',users:(process.env.CREATOR_ALLOWED_USERS??'').split(',').filter(Boolean),resendApiKey:process.env.RESEND_API_KEY??'',resendFrom:process.env.RESEND_FROM_EMAIL??''});
  process.umask(0o077);
  const server=createServer(hostedHandler(c));server.requestTimeout=600000;server.headersTimeout=30000;
  server.listen(Number(process.env.PORT??8080),'0.0.0.0',()=>console.log('Creator hosted pilot listening'));

@@ -29,6 +29,26 @@ The authenticated Head & Shoulders / 30% presenter export evidence is kept in
 `../edit/compositions/` with this source branch. It was produced against the
 staging project only.
 
+## Transactional email with Resend
+
+Creator uses two separate, server-side email paths:
+
+- **Account confirmation and password-reset emails:** configure the staging
+  Supabase project's Auth SMTP settings with Resend. Use `smtp.resend.com`,
+  port `465`, username `resend`, and the Resend API key as the SMTP password.
+  Use the approved verified sender address `creator@vektiss.com` and keep
+  Supabase email confirmation enabled.
+- **Finished-video email:** configure `RESEND_API_KEY` and
+  `RESEND_FROM_EMAIL` as runtime secrets on the hosted Creator service. The
+  worker sends an idempotent email only after a completed MP4 exists in the
+  authenticated user's private media directory. The email links to the exact
+  `CREATOR_WEB_ORIGIN`; it does not expose a public MP4 URL.
+
+The GitHub publishing workflow reads the staging browser key only from the
+`CREATOR_STAGING_SUPABASE_PUBLISHABLE_KEY` GitHub Actions secret. It targets
+`glm-creator-test`, never `main`. Configure all Resend and SMTP values in the
+corresponding secret stores; do not commit or paste them into source files.
+
 - Bunny app: `WWV1BV2bs4oVBWj`; one Miami region, one instance maximum.
 - Image: `ghcr.io/vk2026-commits/vektiss-creator:pilot` (initial release `2e66e4d`).
 - Private persistent volume: `creator-media`, 10 GB at `/data` ($1/month plus usage).
