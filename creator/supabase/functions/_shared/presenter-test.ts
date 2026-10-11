@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {PublicError} from './avatar-contract.ts';
+import {videoVoiceSettings,voiceEngineSchema} from '../../../src/domain/voice-settings.ts';
 export const testCommand=z.discriminatedUnion('action',[
  z.object({action:z.literal('prepare_test'),script_id:z.string().uuid(),scope:z.enum(['test','full']).optional()}).strict(),
  z.object({action:z.literal('start_test'),script_id:z.string().uuid(),revision:z.string().min(1).max(100),paid_consent:z.literal(true),scope:z.enum(['test','full']).optional(),retry_of:z.string().uuid().optional()}).strict(),
@@ -17,8 +18,9 @@ export function fullScript(script:{hook:string;body:string;cta:string}){
  if(text.length>15000)throw new PublicError('SCRIPT_LENGTH','Full-script videos currently support up to 15,000 characters. Shorten the script before rendering.');
  return text;
 }
-export function testPayload(snapshot:{avatar_id:string;voice_id:string;script:string;aspect_ratio:string;scope?:string;voice_engine?:string;avatar_engine?:string}){
- return {type:'avatar',engine:{type:snapshot.avatar_engine??'avatar_iv'},avatar_id:snapshot.avatar_id,voice_id:snapshot.voice_id,...(snapshot.voice_engine==='fish'?{voice_settings:{engine_settings:{engine_type:'fish'}}}:{}),script:snapshot.script,aspect_ratio:snapshot.aspect_ratio,resolution:'720p',output_format:'webm',title:snapshot.scope==='full'?'Vektiss Creator · full script':'Vektiss Creator · presenter cutout test'};
+export function testPayload(snapshot:{avatar_id:string;voice_id:string;script:string;aspect_ratio:string;scope?:string;voice_engine?:string;voice_speed?:number;avatar_engine?:string}){
+ const settings=videoVoiceSettings(voiceEngineSchema.parse(snapshot.voice_engine??'auto'),snapshot.voice_speed??1);
+ return {type:'avatar',engine:{type:snapshot.avatar_engine??'avatar_iv'},avatar_id:snapshot.avatar_id,voice_id:snapshot.voice_id,...(Object.keys(settings).length?{voice_settings:settings}:{}),script:snapshot.script,aspect_ratio:snapshot.aspect_ratio,resolution:'720p',output_format:'webm',title:snapshot.scope==='full'?'Vektiss Creator · full script':'Vektiss Creator · presenter cutout test'};
 }
 export async function providerVideo(key:string,path:string,body?:unknown,request:typeof fetch=fetch){
  const result=await request(`https://api.heygen.com/v3/videos${path}`,{method:body?'POST':'GET',headers:{'X-Api-Key':key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(25000),redirect:'error'});

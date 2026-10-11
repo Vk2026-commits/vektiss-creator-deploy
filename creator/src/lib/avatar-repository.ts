@@ -6,6 +6,7 @@ import {
   librarySchema,
   catalogSchema,
   voicesSchema,
+  voiceSchema,
   type AvatarCommand,
 } from "../../supabase/functions/_shared/avatar-contract";
 
@@ -27,6 +28,8 @@ async function request(command: AvatarCommand) {
   return data;
 }
 export const avatarRepository = {
+  voiceDetails:async(avatar_id:string,voice_id?:string)=>voiceSchema.parse(await request({action:'voice_details',avatar_id,voice_id})),
+  previewVoice:async(avatar_id:string,voice_id:string|undefined,engine:import('../domain/voice-settings').VoiceEngine,speed:number)=>request({action:'preview_voice',avatar_id,voice_id,engine,speed,paid_consent:true}) as Promise<{audio_url:string;engine:string;duration:number}>,
   renderTest: request,
   library: async () =>
     librarySchema.parse(await request({ action: "library" })),

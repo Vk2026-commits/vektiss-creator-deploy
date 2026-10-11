@@ -21,6 +21,9 @@ const voiceSchema = z.object({
   voice_id: z.string().min(1).max(300),
   name: z.string().max(300),
   language: optionalText,
+  preview_audio_url:optionalText,
+  default_engine:optionalText,
+  available_engines:z.array(z.string()).optional(),
 });
 const pagination = { has_more: z.boolean(), next_token: optionalText };
 
@@ -38,6 +41,7 @@ export interface AvatarCatalogProvider {
   ): Promise<VoiceCatalog>;
   getAvatar(id: string): Promise<CatalogAvatar>;
   getVoice(id: string): Promise<ProviderVoice>;
+  previewSpeech?(body:Record<string,unknown>):Promise<{audio_url:string;engine:string;duration:number}>;
 }
 
 function thumbnail(value: string | null | undefined): string | null {
@@ -81,6 +85,9 @@ function mapVoice(raw: z.infer<typeof voiceSchema>): ProviderVoice {
     provider_voice_id: raw.voice_id,
     name: raw.name,
     language: raw.language ?? null,
+    preview_audio_url:thumbnail(raw.preview_audio_url),
+    default_engine:raw.default_engine??null,
+    available_engines:raw.available_engines??[],
   };
 }
 function nextPage(
@@ -211,5 +218,13 @@ export class HeyGenCatalog implements AvatarCatalogProvider {
         502,
       );
     return mapVoice(raw.data);
+  }
+  async previewSpeech(body:Record<string,unknown>){
+    const response=await this.fetcher('https://api.heygen.com/v3/voices/speech',{method:'POST',headers:{'X-Api-Key':this.apiKey,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(30000),redirect:'error'});
+    if(!response.ok)throw new PublicError('VOICE_TEST_FAILED','HeyGen could not create this audio test. Check your voice compatibility, API balance, and key permissions. No automatic retry was made.',502);
+    const data=z.object({data:z.object({audio_url:z.string(),engine:z.string(),duration:z.number().positive()})}).parse(await response.json()).data;
+    const audio_url=thumbnail(data.audio_url);
+    if(!audio_url)throw new Error('Invalid audio preview URL');
+    return {...data,audio_url};
   }
 }

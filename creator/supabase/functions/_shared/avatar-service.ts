@@ -9,6 +9,7 @@ import { credentialVault, type SealedCredential } from "./credential-crypto.ts";
 import { HeyGenCatalog, type AvatarCatalogProvider } from "./heygen.ts";
 import { presenterTestService } from './presenter-test-service.ts';
 import {verifySavedAvatar} from './avatar-verification.ts';
+import {previewVoice} from './voice-preview.ts';
 
 export interface AvatarService {
   execute(userId: string, command: AvatarCommand): Promise<unknown>;
@@ -119,6 +120,16 @@ export function createAvatarService(
       }
       if(command.action==='prepare_test'||command.action==='start_test'||command.action==='test_status'||command.action==='download_test')return presenterTestService(db,vault)(userId,command);
       if (command.action === "library") return library(userId);
+      if(command.action==='voice_details'||command.action==='preview_voice'){
+        const {data:avatar,error}=await db.from('avatar_profiles').select('connection_id,provider_voice_id').eq('id',command.avatar_id).eq('user_id',userId).single();
+        if(error||!avatar)throw new PublicError('NOT_AVAILABLE','That avatar is not available in your account.',403);
+        const voiceId=command.voice_id??avatar.provider_voice_id;
+        if(!voiceId)throw new PublicError('VOICE_REQUIRED','Choose a speaking voice first.',400);
+        return withProvider(userId,avatar.connection_id,async p=>{
+          const voice=await p.getVoice(voiceId);
+          return command.action==='voice_details'?voice:previewVoice(db,userId,avatar.connection_id,p,voice,command.engine,command.speed);
+        });
+      }
       if(command.action==='engine_capabilities'){
         const {data:avatar,error}=await db.from('avatar_profiles').select('connection_id,provider_avatar_id').eq('id',command.avatar_id).eq('user_id',userId).single();
         if(error||!avatar)throw new PublicError('NOT_AVAILABLE','Avatar unavailable.',403);

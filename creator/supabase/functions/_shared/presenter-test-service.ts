@@ -9,6 +9,7 @@ import {spokenEmergencyNumber,steveReactionProfile} from '../../../src/domain/re
 import {STEPHEN_AVATAR} from '../../../src/domain/avatar-framing.ts';
 import {validateStoryScript} from '../../../src/domain/screenshot-story.ts';
 import {avatarVerification,manualVerificationFrame} from './avatar-verification.ts';
+import {voiceEngineSchema,voiceSpeedSchema} from '../../../src/domain/voice-settings.ts';
 
 export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof credentialVault>){
  async function displayJob(job:Record<string,unknown>){
@@ -75,11 +76,11 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Validate the chosen voice through this user's connected HeyGen account.
   const selectedVoice=await selectedVoiceForPlan(plan,avatar,async id=>new HeyGenCatalog(await keyFor(user,avatar.connection_id)).getVoice(id));
   const scope=command.scope??'test';
-  if(plan.voice_engine!==undefined&&!['auto','fish'].includes(plan.voice_engine))throw new PublicError('VOICE_ENGINE','Choose a supported voice engine.',400);
+  if(!voiceEngineSchema.safeParse(plan.voice_engine??'auto').success||!voiceSpeedSchema.safeParse(plan.voice_speed??1).success)throw new PublicError('VOICE_ENGINE','Choose a supported voice engine and speed.',400);
   const snapshot={scope,avatar_id:avatar.provider_avatar_id,voice_id:selectedVoice?.provider_voice_id??avatar.provider_voice_id,avatar_name:avatar.name,voice_name:selectedVoice?.name??avatar.voice_name,script:scope==='full'?fullScript(script):testExcerpt(script),aspect_ratio:plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9'};
   if(script.content_profile_id===steveReactionProfile||plan.avatar_id===STEPHEN_AVATAR)snapshot.script=spokenEmergencyNumber(snapshot.script);
   // Include the engine in the paid-job revision; never reuse audio from another engine.
-  const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string;avatar_engine?:string};
+  const engineSnapshot=snapshot as typeof snapshot & {voice_engine?:string;voice_speed?:number;avatar_engine?:string};
   let avatarType:string|undefined;
   if(plan.avatar_engine!==undefined){
    if(!['avatar_iii','avatar_iv','avatar_v'].includes(plan.avatar_engine))throw new PublicError('AVATAR_ENGINE','Choose an avatar engine before rendering.',400);
@@ -88,7 +89,8 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
    engineSnapshot.avatar_engine=plan.avatar_engine;
    avatarType=look.avatar_type;
   }
-  if(plan.voice_engine==='fish')engineSnapshot.voice_engine='fish';
+  if(plan.voice_engine&&plan.voice_engine!=='auto')engineSnapshot.voice_engine=plan.voice_engine;
+  if(plan.voice_speed!==undefined&&plan.voice_speed!==1)engineSnapshot.voice_speed=plan.voice_speed;
   // A new test revision is needed to certify the current look. Full-render
   // revisions remain unchanged so existing paid outputs are still recoverable.
   if(scope==='test')Object.assign(snapshot,{verification_version:1,look_thumbnail_url:avatar.thumbnail_url});
@@ -98,7 +100,8 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const revision=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
   const prior=await db.from('creator_presenter_tests').select('*').eq('script_id',script.id).eq('revision',revision).eq('user_id',user).maybeSingle();
   if(prior.error)throw Error('STORAGE');
-  const estimate=engineEstimate(plan.avatar_engine??'avatar_iv',avatarType,Math.ceil(snapshot.script.split(/\s+/).length/2.5));
+  const estimatedSeconds=Math.ceil(snapshot.script.split(/\s+/).length/2.5/(plan.voice_speed??1));
+  const estimate=engineEstimate(plan.avatar_engine??'avatar_iv',avatarType,estimatedSeconds);
   // A short review certifies the selected avatar's real-world background. A
   // model switch for that same approved avatar creates a new paid full render,
   // but does not make the creator repeat the short test.
@@ -106,7 +109,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // The original test proves this avatar's background is clean. Full renders
   // need a crop that matches their selected shape, not the old test's shape.
   const verificationFrame=verification?{...verification,...manualVerificationFrame(snapshot.aspect_ratio)}:null;
-  if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
+  if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:estimatedSeconds};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
   if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose a new avatar and complete its short background check before creating the full video. Your completed checks stay with the same avatar.',409);
   if(prior.data){
