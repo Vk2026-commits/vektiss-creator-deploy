@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {avatarFramingSchema} from './avatar-framing.ts';
 import {screenshotStorySchema} from './screenshot-story.ts';
 import {backgroundFramingSchema} from './background-framing.ts';
 import {voiceEngineSchema,voiceSpeedSchema} from './voice-settings.ts';
@@ -25,13 +26,15 @@ export const videoPlanSchema=z.object({
  presenter_size:z.number().min(15).max(90).default(28),
  presenter_placement:freePlacementSchema.optional(),
  presenter_sizing:z.literal('visible-person-v1').optional(),
+ presenter_framing:avatarFramingSchema.optional(),
+ presenter_framing_amount:z.number().int().min(30).max(100).optional(),
  article_capture:graphicCaptureSchema.optional(),
  background_framing:backgroundFramingSchema.optional(),
  screenshot_story:screenshotStorySchema.optional(),
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });
 export type VideoPlan=z.infer<typeof videoPlanSchema>;
-export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:35,presenter_placement:{x:.5,y:1,width:35},presenter_sizing:'visible-person-v1'});
+export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:30,presenter_placement:{x:.5,y:1,width:30},presenter_sizing:'visible-person-v1',presenter_framing:'head-shoulders'});
 export const planReady=(p:VideoPlan)=>Boolean(p.approved_at&&(p.presenter==='self'||p.avatar_id));
 
 export function sameRenderValue(left:unknown,right:unknown):boolean{
