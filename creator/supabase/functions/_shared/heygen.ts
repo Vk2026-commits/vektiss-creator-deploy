@@ -44,6 +44,24 @@ export interface AvatarCatalogProvider {
   previewSpeech?(body:Record<string,unknown>):Promise<{audio_url:string;engine:string;duration:number}>;
 }
 
+// Voice detail contains the sample, but speech-engine capabilities are only
+// documented on the paginated catalog. Match by ID, never by display name.
+export async function getSpeechVoice(provider:AvatarCatalogProvider,id:string):Promise<ProviderVoice>{
+ const detail=await provider.getVoice(id);
+ for(const kind of ['private','public'] as const){
+  let cursor:string|null=null;
+  for(let page=0;page<20;page++){
+   const catalog=await provider.listVoices(cursor,kind);
+   const match=catalog.items.find(v=>v.provider_voice_id===id);
+   if(match)return {...detail,available_engines:match.available_engines??[],default_engine:match.default_engine??null,preview_audio_url:detail.preview_audio_url??match.preview_audio_url};
+   if(!catalog.next_token)break;
+   if(catalog.next_token===cursor)throw new PublicError('PROVIDER_RESPONSE','Voice availability could not be checked. Refresh voices to retry.',502);
+   cursor=catalog.next_token;
+  }
+ }
+ return {...detail,available_engines:[]};
+}
+
 function thumbnail(value: string | null | undefined): string | null {
   if (!value) return null;
   try {

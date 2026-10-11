@@ -2,11 +2,19 @@ import {describe,it,expect,vi} from 'vitest';
 import {voiceEngineSchema,voiceSpeedSchema,audioTestEngine,videoVoiceSettings} from '../src/domain/voice-settings';
 import {videoPlanSchema,newVideoPlan} from '../src/domain/video-plan';
 import {avatarCommandSchema} from '../supabase/functions/_shared/avatar-contract';
-import {HeyGenCatalog} from '../supabase/functions/_shared/heygen';
+import {HeyGenCatalog,getSpeechVoice} from '../supabase/functions/_shared/heygen';
 import {speechTestPayload,previewVoice} from '../supabase/functions/_shared/voice-preview';
 import {testPayload} from '../supabase/functions/_shared/presenter-test';
 const voice={provider_voice_id:'voice',name:'Rose',language:'English',available_engines:['starfish','elevenlabs']};
 describe('voice controls',()=>{
+ it('reads engine compatibility from the paginated catalog rather than voice detail',async()=>{
+  const p:any={getVoice:vi.fn(async()=>({provider_voice_id:'v',name:'Rose',preview_audio_url:'https://files.heygen.ai/sample.mp3'})),listVoices:vi.fn(async(cursor:string|null,kind:string)=>kind==='private'?{items:[{provider_voice_id:'other',name:'Rose',available_engines:['starfish']}],next_token:null}:cursor?{items:[{provider_voice_id:'v',name:'Rose',available_engines:['elevenlabs']}],next_token:null}:{items:[],next_token:'next'})};
+  const result=await getSpeechVoice(p,'v');expect(result.available_engines).toEqual(['elevenlabs']);expect(audioTestEngine('elevenlabs',result.available_engines)).toBe('elevenlabs');expect(result.preview_audio_url).toContain('sample.mp3');expect(p.listVoices).toHaveBeenCalledTimes(3);
+ });
+ it('keeps missing or explicitly unsupported voices blocked',async()=>{
+  const p:any={getVoice:async()=>voice,listVoices:async()=>({items:[],next_token:null})};
+  expect((await getSpeechVoice(p,'voice')).available_engines).toEqual([]);
+ });
  it('preserves legacy rendering at normal speed',()=>{expect(videoVoiceSettings()).toEqual({});expect(videoVoiceSettings('fish')).toEqual({engine_settings:{engine_type:'fish'}});expect(videoPlanSchema.parse(newVideoPlan())).not.toHaveProperty('voice_speed');});
  it.each(['panda','orca','unknown'])('does not pretend %s is a supported video override',e=>expect(voiceEngineSchema.safeParse(e).success).toBe(false));
  it.each([0,.49,1.51,Infinity,NaN])('rejects unsafe speed %s',s=>expect(voiceSpeedSchema.safeParse(s).success).toBe(false));

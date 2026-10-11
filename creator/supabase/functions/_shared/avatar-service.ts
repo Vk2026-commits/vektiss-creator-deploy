@@ -6,7 +6,7 @@ import {
   type AvatarLibrary,
 } from "./avatar-contract.ts";
 import { credentialVault, type SealedCredential } from "./credential-crypto.ts";
-import { HeyGenCatalog, type AvatarCatalogProvider } from "./heygen.ts";
+import { HeyGenCatalog, getSpeechVoice, type AvatarCatalogProvider } from "./heygen.ts";
 import { presenterTestService } from './presenter-test-service.ts';
 import {verifySavedAvatar} from './avatar-verification.ts';
 import {previewVoice} from './voice-preview.ts';
@@ -126,7 +126,7 @@ export function createAvatarService(
         const voiceId=command.voice_id??avatar.provider_voice_id;
         if(!voiceId)throw new PublicError('VOICE_REQUIRED','Choose a speaking voice first.',400);
         return withProvider(userId,avatar.connection_id,async p=>{
-          const voice=await p.getVoice(voiceId);
+          const voice=await getSpeechVoice(p,voiceId);
           return command.action==='voice_details'?voice:previewVoice(db,userId,avatar.connection_id,p,voice,command.engine,command.speed);
         });
       }
