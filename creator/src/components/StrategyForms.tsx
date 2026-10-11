@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { X, ArrowRight, LoaderCircle } from "lucide-react";
+import {DeliverySetup} from './DeliverySetup';
 import {
   creatorInputSchema,
   emptyCreator,
@@ -163,9 +164,12 @@ export function CreatorForm({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [delivery,setDelivery]=useState(initial.context.delivery);
+  const [deliverySetup,setDeliverySetup]=useState(initial.context.delivery_setup);
+  const [deliveryBusy,setDeliveryBusy]=useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy||deliveryBusy) return;
     setBusy(true);
     setError("");
     const data = new FormData(event.currentTarget);
@@ -176,6 +180,7 @@ export function CreatorForm({
           display_name: get("display_name"),
           bio: get("bio"),
           context: {
+            delivery,delivery_setup:deliverySetup,
             expertise: get("expertise"),
             experience: get("experience"),
             industries: splitItems(get("industries")),
@@ -284,8 +289,9 @@ export function CreatorForm({
           </div>
         </details>
       </fieldset>
+      <fieldset disabled={busy} className="delivery-fieldset"><DeliverySetup value={delivery} onBusy={setDeliveryBusy} onChange={(value,skipped)=>{setDelivery(value);setDeliverySetup(skipped?'skipped':'approved');}}/></fieldset>
       <FormFooter
-        busy={busy}
+        busy={busy||deliveryBusy}
         error={error}
         label="Save creator profile"
         onCancel={onClose}

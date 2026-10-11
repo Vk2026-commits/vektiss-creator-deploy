@@ -197,16 +197,16 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         if(!input.body.trim()){snapshot=await repo.save(next,snapshot);setCurrent(snapshot);setDraft(snapshot);setDirty(false);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);}
         setMessage('');setDraftProgress({percent:85,label:'Writing your script and angle…'});
         result=await scriptAI('generate',draft.content_profile_id,next.brief);
-        next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,review:result.review,stage:'review'}};
+        next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,delivery_preferences:result.delivery_preferences,review:result.review,stage:'review'}};
       } else if(action==='clarify') {
         const brief={...input.brief,summary:result.summary,questions:[...input.brief.questions.filter(q=>q.answer.trim()).slice(-4),...result.questions.slice(0,1).map((question:string)=>({question,answer:''}))],clarified:true,stage:'clarify' as const};
         next={...input,brief};
         if(result.questions.length===0){
           setMessage('Your point of view is clear. Writing your script…');
           result=await scriptAI('generate',draft.content_profile_id,brief);
-          next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...brief,production:undefined,review:result.review,stage:'review'}};
+          next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...brief,production:undefined,delivery_preferences:result.delivery_preferences,review:result.review,stage:'review'}};
         }
-      } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:undefined,review:result.review,stage:'review'}};
+      } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:undefined,delivery_preferences:result.delivery_preferences,review:result.review,stage:'review'}};
       if(result.screenshot_story&&next.brief.stage==='review')next={...next,brief:{...next.brief,screenshot_story:result.screenshot_story}}; setDraftProgress({percent:95,label:'Saving your draft…'});
       const item=await repo.save(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
       if(action==='generate'&&next.brief.research_opportunity_id&&!preview)void researchFeedback(next.brief.research_opportunity_id,'script_created').catch(()=>{/* Conversion tracking must not interrupt a completed draft. */});

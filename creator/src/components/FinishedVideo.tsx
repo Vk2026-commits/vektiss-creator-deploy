@@ -50,7 +50,7 @@ function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
    const storyRevision=plan.screenshot_story?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(storyRevisionInput(plan.screenshot_story)))),byte=>byte.toString(16).padStart(2,'0')).join(''):undefined;
    const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;if(!token)throw Error('Sign in again to assemble your video.');
    const background=sourceKind!=='video'&&!plan.screenshot_story&&!presenterOnly&&plan.background_framing?{background_framing:plan.background_framing}:{};
-   const response=await mediaFetch('/api/local-capture/full-compose',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1',Authorization:`Bearer ${token}`},signal:controller.signal,body:JSON.stringify({job_id:jobId,script_id:scriptId,...background,...(plan.screenshot_story?{story:true,story_revision:storyRevision}:presenterOnly?{presenter_only:true}:sourceKind==='video'?{video_id:captureId}:{capture_id:captureId}),size:plan.presenter_size,position:plan.presenter_position,format:plan.format,placement:plan.presenter_placement,framing:avatarFraming(plan.avatar_id,plan.format),presenter_framing:plan.presenter_framing,presenter_framing_amount:plan.presenter_framing_amount})});
+   const response=await mediaFetch('/api/local-capture/full-compose',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1',Authorization:`Bearer ${token}`},signal:controller.signal,body:JSON.stringify({job_id:jobId,script_id:scriptId,...background,...(plan.screenshot_story?{story:true,story_revision:storyRevision}:presenterOnly?{presenter_only:true}:sourceKind==='video'?{video_id:captureId}:{capture_id:captureId}),size:plan.presenter_size,position:plan.presenter_position,format:plan.format,placement:plan.presenter_placement,framing:avatarFraming(plan.avatar_id,plan.format),presenter_framing:plan.presenter_framing,presenter_framing_amount:plan.presenter_framing_amount,ending_hold:plan.ending_hold})});
    const result=await response.json();if(!response.ok)throw Error(result.error??'Assembly failed.');if(!live)return;
    loader.current=lazyMP4(result.id,controller.signal,(received,total)=>{if(live)setDownload({received,total});});setReady(true);
    // A real JPEG does not depend on iOS decoding video before a user gesture.
@@ -64,7 +64,7 @@ function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
    setError(e instanceof TypeError||e instanceof DOMException&&['TimeoutError','AbortError'].includes(e.name)?'The preview download was interrupted. Your completed avatar is saved. Reconnect and retry loading the MP4; no new avatar render will be charged.':e instanceof Error?e.message:'Assembly failed.');
   }}}
   void assemble();return()=>{live=false;controller.abort();loader.current=null;if(posterUrl)URL.revokeObjectURL(posterUrl);};
- },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,retry]);
+ },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,plan.ending_hold,retry]);
  async function activate(intent:'play'|'download'){
   if(action.current||!loader.current)return;
   const controller=controllerRef.current!;
