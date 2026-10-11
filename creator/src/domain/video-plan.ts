@@ -16,6 +16,8 @@ export const videoPlanSchema=z.object({
  voice:z.object({id:z.string().trim().min(1).max(300),name:z.string().max(300)}).optional(),
  voice_engine:voiceEngineSchema.optional(),
  voice_speed:voiceSpeedSchema.optional(),
+ voice_preview_approval:z.object({voice_id:z.string().max(300),engine:voiceEngineSchema,speed:voiceSpeedSchema,text:z.string().max(1200),approved_at:z.string().datetime()}).optional(),
+ ending_hold:z.literal(1).optional(),
  avatar_engine:z.enum(['avatar_iii','avatar_iv','avatar_v']).nullable().optional(),
  avatar_preview:z.object({avatar_id:z.string(),engine:z.string(),format:z.string(),aspect:z.number().positive().max(10)}).optional(),
  format:z.enum(['portrait','landscape','square']),
@@ -34,7 +36,7 @@ export const videoPlanSchema=z.object({
  video_background:z.object({id:z.string().uuid(),source_url:z.string().max(2000)}).optional(),
 });
 export type VideoPlan=z.infer<typeof videoPlanSchema>;
-export const newVideoPlan=():VideoPlan=>({step:'approve',avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:30,presenter_placement:{x:.5,y:1,width:30},presenter_sizing:'visible-person-v1',presenter_framing:'head-shoulders'});
+export const newVideoPlan=():VideoPlan=>({step:'approve',ending_hold:1,avatar_engine:null,approved_at:null,presenter:'self',avatar_id:null,avatar_name:'',format:'portrait',style:'source-cutaways',captions:true,visual_notes:'',presenter_position:'bottom-center',presenter_size:30,presenter_placement:{x:.5,y:1,width:30},presenter_sizing:'visible-person-v1',presenter_framing:'head-shoulders'});
 export const planReady=(p:VideoPlan)=>Boolean(p.approved_at&&(p.presenter==='self'||p.avatar_id));
 
 export function sameRenderValue(left:unknown,right:unknown):boolean{

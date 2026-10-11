@@ -127,7 +127,7 @@ export function createAvatarService(
         if(!voiceId)throw new PublicError('VOICE_REQUIRED','Choose a speaking voice first.',400);
         return withProvider(userId,avatar.connection_id,async p=>{
           const voice=await getSpeechVoice(p,voiceId);
-          return command.action==='voice_details'?voice:previewVoice(db,userId,avatar.connection_id,p,voice,command.engine,command.speed);
+          return command.action==='voice_details'?voice:previewVoice(db,userId,avatar.connection_id,p,voice,command.engine,command.speed,command.text);
         });
       }
       if(command.action==='engine_capabilities'){

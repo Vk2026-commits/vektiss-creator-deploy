@@ -7,6 +7,7 @@ export type VoiceEngine=z.infer<typeof voiceEngineSchema>;
 export const voiceSpeedSchema=z.number().finite().min(.5).max(1.5);
 export const voiceEngineNames:Record<VoiceEngine,string>={auto:'HeyGen default',fish:'Fish',elevenlabs:'ElevenLabs',elevenlabs_v3:'ElevenLabs v3',starfish:'Starfish'};
 export const voiceTestText='Here is a quick voice check. Listen to the tone, clarity, and pace to find the right sound for your video.';
+export const voicePreviewTextSchema=z.string().trim().min(1).max(1200);
 export function videoVoiceSettings(engine:VoiceEngine='auto',speed=1){
  voiceEngineSchema.parse(engine);voiceSpeedSchema.parse(speed);
  return {

@@ -16,8 +16,9 @@ import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type Screen
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
 import {backgroundFilter} from '../src/domain/background-framing';
+import {endingVideoFilter} from './narration-ending';
 const exec=promisify(execFile);
-export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
+export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),ending_hold:z.literal(1).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
  const boxes=[...log.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].map(m=>m.slice(1).map(Number));
  if(!boxes.length)throw Error('No transparent presenter detected.');
@@ -74,17 +75,18 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected,c.presenter_framing,c.presenter_framing_amount);
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
- const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
+ const hold=c.ending_hold??0;
+ const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p${endingVideoFilter(duration,hold)}[out]`;
  const temp=resolve(folder,`${id}.partial.mp4`);
  let background=resolve(root,'.local-captures',c.video_id?`${c.video_id}.video`:`${c.capture_id}.png`);
- let totalDuration=duration;
+ let totalDuration=duration+hold;
  let storyTiming; if(story){const rendered=await storyBackground({root,folder,id,jobId:c.job_id,source,story,duration,w,h,profileId,projectId:c.script_id,authorization,env});background=rendered.path;storyTiming=rendered.timing;}
  if(c.video_id){
   const info=JSON.parse((await exec(ffprobe,['-v','error','-show_format','-show_streams','-of','json',background],{timeout:15000})).stdout);
   const sourceDuration=Number(info.format.duration);
   if(!info.streams.some((s:{codec_type:string})=>s.codec_type==='video')||!Number.isFinite(sourceDuration)||sourceDuration<=0||sourceDuration>600)throw Error('Unsupported presenter background video.');
-  totalDuration=await renderReactionSequence({ffmpeg,background,source,output:temp,filter,w,h,sourceDuration,reactionDuration:duration,hasSourceAudio:info.streams.some((s:{codec_type:string})=>s.codec_type==='audio')});
- }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...(story?['-i',background]:c.presenter_only?['-f','lavfi','-i',`color=c=0xe8edf4:s=${w}x${h}:r=25`]:['-loop','1','-framerate','25','-i',background]),'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0','-t',String(duration),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart','-shortest',temp],{timeout:600000,maxBuffer:1024*1024});
+  totalDuration=await renderReactionSequence({ffmpeg,background,source,output:temp,filter,w,h,sourceDuration,reactionDuration:duration,endingHold:hold,hasSourceAudio:info.streams.some((s:{codec_type:string})=>s.codec_type==='audio')});
+ }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...(story?['-i',background]:c.presenter_only?['-f','lavfi','-i',`color=c=0xe8edf4:s=${w}x${h}:r=25`]:['-loop','1','-framerate','25','-i',background]),'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0',...(hold?['-af',`apad=pad_dur=${hold}`]:[]),'-t',String(duration+hold),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart','-shortest',temp],{timeout:600000,maxBuffer:1024*1024});
  await rename(temp,output);
  const result={id,...(storyTiming?{story_timing:storyTiming,story_version:STORY_COMPOSITION_VERSION}:{}),script_id:c.script_id,job_id:c.job_id,size:c.size,position:c.position,placement:c.placement,framing:c.framing,crop,format:c.format,created_at:new Date().toISOString(),duration:totalDuration,reaction_duration:duration,sequence:c.video_id?REACTION_SEQUENCE_VERSION:undefined};
  await writeFile(meta,JSON.stringify(result),{mode:0o600});return result;

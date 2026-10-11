@@ -93,6 +93,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   if(plan.voice_speed!==undefined&&plan.voice_speed!==1)engineSnapshot.voice_speed=plan.voice_speed;
   // A new test revision is needed to certify the current look. Full-render
   // revisions remain unchanged so existing paid outputs are still recoverable.
+  if(script.brief?.delivery_preferences)Object.assign(snapshot,{delivery_preferences:script.brief.delivery_preferences});
   if(scope==='test')Object.assign(snapshot,{verification_version:1,look_thumbnail_url:avatar.thumbnail_url});
   if(!snapshot.script.trim())throw new PublicError('SCRIPT','The script is empty.');
   // Size, article and save timestamps do not change the paid presenter asset.

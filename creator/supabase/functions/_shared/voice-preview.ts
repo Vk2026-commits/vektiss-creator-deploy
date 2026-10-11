@@ -1,15 +1,15 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {PublicError,type ProviderVoice} from './avatar-contract.ts';
 import type {AvatarCatalogProvider} from './heygen.ts';
-import {audioTestEngine,voiceTestText,type VoiceEngine} from '../../../src/domain/voice-settings.ts';
+import {audioTestEngine,voiceTestText,voicePreviewTextSchema,type VoiceEngine} from '../../../src/domain/voice-settings.ts';
 
-export function speechTestPayload(voice:ProviderVoice,engine:VoiceEngine,speed:number){
+export function speechTestPayload(voice:ProviderVoice,engine:VoiceEngine,speed:number,text=voiceTestText){
  const resolved=audioTestEngine(engine,voice.available_engines);
  if(!resolved)throw new PublicError('VOICE_TEST_UNSUPPORTED','Audio-only testing is not available for this engine and voice. Choose an available ElevenLabs or Starfish engine, or listen to the saved voice sample. No credits were used.',400);
- return {voice_id:voice.provider_voice_id,text:voiceTestText,engine:resolved,speed,...(engine==='elevenlabs_v3'?{settings:{model_id:'eleven_v3'}}:{})};
+ return {voice_id:voice.provider_voice_id,text:voicePreviewTextSchema.parse(text),engine:resolved,speed,...(engine==='elevenlabs_v3'?{settings:{model_id:'eleven_v3'}}:{})};
 }
-export async function previewVoice(db:SupabaseClient,user:string,connection:string,provider:AvatarCatalogProvider,voice:ProviderVoice,engine:VoiceEngine,speed:number){
- const settings=speechTestPayload(voice,engine,speed);
+export async function previewVoice(db:SupabaseClient,user:string,connection:string,provider:AvatarCatalogProvider,voice:ProviderVoice,engine:VoiceEngine,speed:number,text=voiceTestText){
+ const settings=speechTestPayload(voice,engine,speed,text);
  if(!provider.previewSpeech)throw new PublicError('UNAVAILABLE','Audio testing is unavailable.',503);
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(settings)));
  const revision=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {deliveryProfileSchema} from './delivery.ts';
 import {screenshotStorySchema} from './screenshot-story.ts';
 import {ctaSchema,ctaSelectionSchema} from './cta.ts';
 import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
@@ -6,6 +7,7 @@ import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 import {researchSourceSchema} from './research.ts';
 export const briefSchema = z.object({
+  delivery_preferences:deliveryProfileSchema.optional(),
   cta_override:ctaSchema.nullable().optional(),
   cta_selection:ctaSelectionSchema.optional(),
   cost_project_id:z.string().uuid().optional(),
