@@ -9,7 +9,7 @@ import { ArticleLayout } from './ArticleLayout';
 import { avatarRepository } from '../lib/avatar-repository';
 import { subscribeAvatarLibrary } from '../lib/avatar-library-events';
 import { usableAvatar, type Avatar } from '../../supabase/functions/_shared/avatar-contract';
-import { planReady, type VideoPlan as Plan } from '../domain/video-plan';
+import { planReady, sameRenderValue, type VideoPlan as Plan } from '../domain/video-plan';
 import { scriptText, type ScriptInput } from '../domain/scripts';
 
 export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void}) {
@@ -25,7 +25,17 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
   return()=>{unsubscribe();window.removeEventListener('focus',refresh);};
  },[]);
  useEffect(()=>{if(preview)return;let active=true;setLoading(true);setError('');avatarRepository.library().then(lib=>{if(active)setAvatars(lib.avatars.filter(a=>usableAvatar(a,lib.connections)));}).catch(()=>{if(active)setError('Could not load your avatar library.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[preview,retry]);
- const update=(patch:Partial<Plan>)=>onChange({...plan,...patch,...(patch.avatar_id&&patch.avatar_id!==plan.avatar_id?{avatar_engine:null,voice_engine:patch.avatar_id===STEPHEN_AVATAR?'fish' as const:'auto' as const}:{})});
+ const update=(patch:Partial<Plan>)=>{
+ const avatarChanged=Boolean(patch.avatar_id&&patch.avatar_id!==plan.avatar_id);
+ const modelChanged=patch.avatar_engine!==undefined&&patch.avatar_engine!==plan.avatar_engine;
+ const shapeChanged=patch.format!==undefined&&patch.format!==plan.format;
+  const next:Plan={
+   ...plan,...patch,
+   ...(avatarChanged?{avatar_engine:null,voice_engine:patch.avatar_id===STEPHEN_AVATAR?'fish' as const:'auto' as const}:{}),
+   ...((avatarChanged||modelChanged||shapeChanged)?{avatar_preview:undefined}:{}),
+  };
+  onChange(next);
+ };
  const words=scriptText(script).split(/\s+/).filter(Boolean).length;
 	 const selectedAvatar=avatars.find(a=>a.id===plan.avatar_id);
 	 const presenterReady=plan.presenter==='avatar'&&Boolean(selectedAvatar)&&plan.avatar_engine!==null&&engineValid;
@@ -36,7 +46,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
   const verified=selectedAvatar.verified_previews?.find(v=>v.engine===(plan.avatar_engine??'avatar_iv')&&v.aspect_ratio===aspect);
   if(!verified)return;
   const avatar_preview={avatar_id:selectedAvatar.id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:verified.crop.width/verified.crop.height};
-  if(JSON.stringify(plan.avatar_preview)!==JSON.stringify(avatar_preview))onChange({...plan,avatar_preview});
+  if(!sameRenderValue(plan.avatar_preview,avatar_preview))onChange({...plan,avatar_preview});
  },[choosing,busy,selectedAvatar,plan,onChange]);
 	 const videoSource=script.brief.kind==='video';
 	 const graphicSource=script.brief.kind==='graphic';
@@ -47,7 +57,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
  
  {(plan.step==='review'||(plan.step==='saved'&&plan.presenter!=='avatar'))&&<p>Presenter position: {plan.presenter_position.replace('-',' ')}</p>}
  {plan.step==='approve'&&<><h2>Approve your script</h2><p>Check the facts and your wording before choosing how it will look.</p><h3>{script.title}</h3><div className="plan-script">{scriptText(script)}</div><p>{words} words · approximately {Math.ceil(words/150*60)} seconds. Actual speech timing may vary.</p><button className="button" disabled={busy||!script.body.trim()} onClick={()=>update({approved_at:new Date().toISOString(),step:'presenter'})}>Approve & choose presenter →</button><button disabled={busy} onClick={onEdit}>Edit script</button></>}
- {choosing&&<><div className="presenter-picker"><details className="saved-choice" open={!plan.avatar_id}><summary><span>Avatar<strong>{selectedAvatar?.name??plan.avatar_name??'Choose an avatar'}</strong></span><span className="change-choice">Change</span></summary>{plan.presenter!=='avatar'&&<button type="button" className="button" onClick={()=>update({presenter:'avatar'})}>Choose an avatar</button>}
+	 {choosing&&<><>{plan.step==='visuals'&&<div className="regenerate-look-note"><strong>Making another version?</strong><span>Choose a different avatar or model. The next screen shows the HeyGen price before a new render begins. A short test is only needed for a new avatar.</span></div>}</><div className="presenter-picker"><details className="saved-choice" open={!plan.avatar_id}><summary><span>Avatar<strong>{selectedAvatar?.name??plan.avatar_name??'Choose an avatar'}</strong></span><span className="change-choice">Change</span></summary>{plan.presenter!=='avatar'&&<button type="button" className="button" onClick={()=>update({presenter:'avatar'})}>Choose an avatar</button>}
  {plan.presenter==='avatar'&&<>{loading?<p>Loading presenters…</p>:error?<p role="alert">{error} <button onClick={()=>setRetry(r=>r+1)}>Retry</button></p>:avatars.length?<div className="avatar-picture-grid" aria-label="Choose a presenter">{avatars.map(a=><button type="button" key={a.id} disabled={busy} aria-pressed={plan.avatar_id===a.id} onClick={()=>update({avatar_id:a.id,avatar_name:a.name,voice:undefined})}><AvatarPicture url={a.thumbnail_url} name={a.name}/><strong>{a.name}</strong>{a.voice_name&&<small>{a.voice_name}</small>}</button>)}</div>:<p>No connected presenters yet. Connect and import one in Avatar library, then return here. Your choices stay in this workspace.</p>}</>}
  {plan.presenter==='avatar'&&<button type="button" disabled={loading||busy||preview} onClick={()=>setRetry(value=>value+1)}>Refresh presenters</button>}
  </details>

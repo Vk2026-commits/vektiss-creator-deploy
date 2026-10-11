@@ -27,14 +27,23 @@ it('scopes verification to account, connection, avatar, engine and shape; invali
  expect(await avatarVerification({from:()=>q} as any,'owner',avatar,'avatar_iii','9:16')).toBeNull();
  for(const pair of [['user_id','owner'],['connection_id','c'],['avatar_id','a'],['engine','avatar_iii'],['aspect_ratio','9:16']])expect(eq).toHaveBeenCalledWith(...pair);
 });
+it('reuses an approved same-avatar check when switching its model',async()=>{
+ const eq=vi.fn(),order=vi.fn(),limit=vi.fn();
+ const record={test_id:'t',thumbnail_url:'current',visual_approved_at:'2026-10-10T01:00:00Z'};
+ const q:any={select:()=>q,eq:(...args:unknown[])=>{eq(...args);return q;},order:(...args:unknown[])=>{order(...args);return q;},limit:(...args:unknown[])=>{limit(...args);return q;},maybeSingle:async()=>({data:record,error:null})};
+ const avatar={id:'a',connection_id:'c',thumbnail_url:'current'};
+ expect(await avatarVerification({from:()=>q} as any,'owner',avatar,'avatar_v','9:16',true)).toEqual(record);
+ expect(eq).not.toHaveBeenCalledWith('engine','avatar_v');
+ expect(order).toHaveBeenCalledWith('visual_approved_at',{ascending:false});expect(limit).toHaveBeenCalledWith(1);
+});
 it('blocks direct paid full submissions before reservation when no test is verified',async()=>{
  const script={id:'s',user_id:'u',hook:'Hello',body:'This is a test.',cta:'',brief:{production:{step:'saved',approved_at:'now',presenter:'avatar',avatar_id:'a',format:'portrait'}}};
  const avatar={id:'a',status:'ready',provider_avatar_id:'provider',provider_voice_id:'voice',connection_id:'c',thumbnail_url:'photo'};
  const insert=vi.fn(),rpc=vi.fn();
- const db:any={rpc,from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,insert, single:async()=>({data:table==='creator_scripts'?script:avatar,error:null}),maybeSingle:async()=>({data:null,error:null})};return q;}};
+ const db:any={rpc,from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,insert, single:async()=>({data:table==='creator_scripts'?script:avatar,error:null}),maybeSingle:async()=>({data:null,error:null})};return q;}};
  const service=presenterTestService(db,{} as any);
  const prepared:any=await service('u',{action:'prepare_test',script_id:'s',scope:'full'});
- await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:prepared.revision,paid_consent:true})).rejects.toThrow('Complete and verify');
+ await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:prepared.revision,paid_consent:true})).rejects.toThrow('Choose a new avatar');
  expect(insert).not.toHaveBeenCalled();expect(rpc).not.toHaveBeenCalled();
 });
 it('keeps certification server-write-only',()=>{

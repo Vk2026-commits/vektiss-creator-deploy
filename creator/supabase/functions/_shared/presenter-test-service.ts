@@ -99,10 +99,13 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const prior=await db.from('creator_presenter_tests').select('*').eq('script_id',script.id).eq('revision',revision).eq('user_id',user).maybeSingle();
   if(prior.error)throw Error('STORAGE');
   const estimate=engineEstimate(plan.avatar_engine??'avatar_iv',avatarType,Math.ceil(snapshot.script.split(/\s+/).length/2.5));
-  const verification=await avatarVerification(db,user,avatar,plan.avatar_engine??'avatar_iv',snapshot.aspect_ratio);
+  // A short review certifies the selected avatar's real-world background. A
+  // model switch for that same approved avatar creates a new paid full render,
+  // but does not make the creator repeat the short test.
+  const verification=await avatarVerification(db,user,avatar,plan.avatar_engine??'avatar_iv',snapshot.aspect_ratio,scope==='full');
   if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
-  if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Complete and verify a short avatar test before creating the full video. This check is saved for this avatar, engine and video shape.',409);
+  if(scope==='full'&&!verification&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose a new avatar and complete its short background check before creating the full video. Your completed checks stay with the same avatar in this video shape.',409);
   if(prior.data){
    if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
    // Retain the failed attempt for audit; atomically free the revision for one new reservation.
