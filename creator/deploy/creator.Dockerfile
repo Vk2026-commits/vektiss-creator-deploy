@@ -9,7 +9,7 @@ COPY server ./server
 COPY supabase/functions ./supabase/functions
 COPY public ./public
 COPY deploy/build-server.mjs ./deploy/build-server.mjs
-ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_URL=https://meihyxdibqbqggogseon.supabase.co
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 RUN pnpm exec vite build && node deploy/build-server.mjs

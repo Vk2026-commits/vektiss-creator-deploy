@@ -2,6 +2,33 @@
 
 Creator: https://mc-zdnmms5ls0.bunny.run
 
+## Creator runtime Supabase backend
+
+Hosted Creator builds target the isolated staging project
+`https://meihyxdibqbqggogseon.supabase.co`. This is deliberately separate
+from the shared Vektiss Conversations production project; do not configure a
+Creator build to use that production project.
+
+1. Copy `.env.production.example` to `.env.production` on the trusted build
+   machine, or configure the equivalent build secrets in the deployment
+   platform.
+2. Keep `VITE_SUPABASE_URL` set to the staging URL above.
+3. Set `VITE_SUPABASE_PUBLISHABLE_KEY` only through the build-secret store.
+   This must be the staging publishable/anon key—not an `sb_secret_` key or a
+   service-role key. Do not commit the copied `.env.production` file.
+4. Build the hosted image with `node deploy/build-local.mjs`; the script fails
+   closed if the URL is changed away from the isolated staging project or a
+   secret key is supplied.
+5. In the staging Supabase dashboard, set the deployed app's exact HTTPS
+   origin as `APP_ORIGIN` for Creator Edge Functions. Add any separately
+   approved exact origin through `CREATOR_ADDITIONAL_ORIGINS`; do not use
+   wildcards. Keep encryption keys and all provider credentials in Function
+   secrets only.
+
+The authenticated Head & Shoulders / 30% presenter export evidence is kept in
+`../edit/compositions/` with this source branch. It was produced against the
+staging project only.
+
 - Bunny app: `WWV1BV2bs4oVBWj`; one Miami region, one instance maximum.
 - Image: `ghcr.io/vk2026-commits/vektiss-creator:pilot` (initial release `2e66e4d`).
 - Private persistent volume: `creator-media`, 10 GB at `/data` ($1/month plus usage).
