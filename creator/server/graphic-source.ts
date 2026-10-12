@@ -26,6 +26,14 @@ export function graphicMetadata(html:string){
  const caption=(get('og:description')??get('twitter:description')??get('description')??'').trim().slice(0,2000);
  return {image,title:(get('og:title')??'Social post graphic').slice(0,2000),...(caption?{caption}:{})};
 }
+export async function articleGraphicFallback(source_url:string){
+ const page=await publicResource(source_url,AbortSignal.timeout(25000),0,4*1024*1024);
+ if(page.status!==200||!page.headers['content-type']?.includes('text/html'))throw new DraftError('This article is not publicly readable right now. Try the link again later.');
+ const meta=graphicMetadata(page.body.toString('utf8'));
+ const image=await publicResource(new URL(meta.image,source_url).href,AbortSignal.timeout(25000),0,10*1024*1024);
+ if(image.status!==200||!/^image\/(png|jpeg|webp)(;|$)/i.test(image.headers['content-type']??''))throw new DraftError('This article opened, but its featured image could not be loaded. Try the link again later.');
+ return {body:image.body,title:meta.title,source_url,caption:meta.caption};
+}
 export async function graphicSource(root:string,file:string,type:string,input:unknown,profile:unknown,authorization:string,config:{supabaseUrl:string;publicKey:string;costProjectId?:string},prepared?:{body:Buffer;title:string;source_url:string;caption?:string}){
  const media=resolve(root,'.local-captures');
  const options=type==='application/json'?z.object({url:z.string().max(2000).optional(),id:z.string().uuid().optional(),analyze:z.boolean().optional(),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()}).strict().parse(input):{};
@@ -46,7 +54,12 @@ export async function graphicSource(root:string,file:string,type:string,input:un
   const url=socialGraphicUrl(z.string().parse(options.url));source_url=url.href;
   if(!socialGraphicHost(url.hostname)){
    try{const article=await captureArticle(source_url);bytes=article.png;title=article.title;caption=article.caption;}
-   catch{throw new DraftError('This page could not be captured publicly. Upload a screenshot instead.');}
+   catch{
+    // A public article can still be useful when a publisher's responsive layout,
+    // consent UI, or bot rules prevent a clean viewport screenshot. Fall back to
+    // its declared featured image instead of making the creator take a screenshot.
+    const article=await articleGraphicFallback(source_url);bytes=article.body;title=article.title;caption=article.caption??'';
+   }
   }else{
   const page=await publicResource(source_url,AbortSignal.timeout(25000),0,2*1024*1024);
   if(page.status!==200||!page.headers['content-type']?.includes('text/html'))throw new DraftError('This post could not be opened publicly. Upload a screenshot instead.');

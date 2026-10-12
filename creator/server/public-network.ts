@@ -29,6 +29,15 @@ export function captureUrl(value:string){
  if(url.protocol!=='https:'||url.username||url.password||url.port||!url.hostname.includes('.')||url.hostname.endsWith('.')||/(^|\.)(localhost|local|internal|test|invalid)$/.test(url.hostname))throw Error('Use a public HTTPS article link.');
  url.hash='';return url;
 }
+const publicBrowserHeaders={
+ 'accept-encoding':'identity',
+ 'accept':'*/*',
+ 'accept-language':'en-US,en;q=0.9',
+ // Some publishers rate-limit old/mobile crawler signatures even when the same
+ // page is public in a current browser. Keep this aligned with the Chromium
+ // version in the hosted capture image instead of impersonating Mobile Safari.
+ 'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+} as const;
 // All browser network traffic is fulfilled here. DNS is checked and the selected
 // public IP is pinned to the TLS request; redirects are checked again, not followed blindly.
 export async function publicResource(value:string,signal:AbortSignal,redirects=0,maxBytes=8*1024*1024):Promise<{status:number;headers:Record<string,string>;body:Buffer}>{
@@ -37,7 +46,7 @@ export async function publicResource(value:string,signal:AbortSignal,redirects=0
  if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw Error('Private network addresses are not supported.');
  const address=addresses[0];
  const result=await new Promise<{status:number;headers:Record<string,string>;body:Buffer}>((resolve,reject)=>{
-  const req=request(url,{signal,family:address.family,lookup:(_host,_options,cb)=>cb(null,address.address,address.family),headers:{'accept-encoding':'identity','user-agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'}},res=>{
+  const req=request(url,{signal,family:address.family,lookup:(_host,_options,cb)=>cb(null,address.address,address.family),headers:publicBrowserHeaders},res=>{
    const chunks:Buffer[]=[];let size=0;
    res.on('data',(part:Buffer)=>{size+=part.length;if(size>maxBytes){res.destroy(Error('Resource too large.'));return;}chunks.push(part);});
    res.on('error',reject);
