@@ -4,6 +4,16 @@ export function signupValidation(password: string, confirmation: string): string
   return '';
 }
 
+export function normalizePhone(phone: string): string {
+  return phone.trim().replace(/[\s().-]/g, '');
+}
+
+export function phoneValidation(phone: string): string {
+  return /^\+[1-9]\d{7,14}$/.test(normalizePhone(phone))
+    ? ''
+    : 'Enter a valid international phone number, including + and country code.';
+}
+
 export function setupStep(hasCreator: boolean, profileCount: number): 'creator'|'audience'|null {
   return !hasCreator ? 'creator' : profileCount === 0 ? 'audience' : null;
 }
