@@ -14,6 +14,7 @@ h1,h2,h3,.brand { font-family: Inter, sans-serif; }
 .new-video,.primary,.avatar-library .button { background: linear-gradient(135deg,#0088ff,#006ce6); color: #fff; box-shadow: 0 5px 15px #0079eb24, inset 0 1px #ffffff26; border-radius: 10px; }
 .primary:hover,.new-video:hover,.avatar-library .button:hover { background: #006ad5; box-shadow: 0 7px 20px #0079eb38; }
 .button { min-height: 44px; }
+.secondary { color:#17263c; }
 .workspace-main { background: radial-gradient(ellipse at 70% 0,#0088ff07,transparent 55%),#f8fafc; }
 .topbar { background: #ffffffd9; border-bottom-color: #e4e9ef; backdrop-filter: blur(16px); }
 .foundation-badge { background: #edf6ff; color: #1763a4; border: 1px solid #d6eaff; }
@@ -62,6 +63,11 @@ h1,h2,h3,.brand { font-family: Inter, sans-serif; }
 .auth-card h2 { font-size: 30px; font-weight: 750; line-height: 1.2; letter-spacing: -1.2px; }
 .auth-card > p { color: #667487; font-size: 13px; }
 .auth-bottom { color: #748195; }
+.auth-actions { display:grid; gap:10px; margin-top:22px; padding-top:20px; border-top:1px solid #dce5ef; }
+.auth-account-link { width:100%; min-height:48px; padding:11px 16px; border:1px solid #b9dcfb; border-radius:10px; background:#edf7ff; color:#075da8; font:600 15px/1.35 Inter,sans-serif; text-align:center; cursor:pointer; }
+.auth-account-link:hover { background:#dff1ff; border-color:#83c3f6; }
+.auth-account-link:focus-visible,.auth-actions .text-button:focus-visible { outline:2px solid #0088ff; outline-offset:2px; }
+.auth-actions .text-button { justify-self:start; min-height:40px; padding:4px 0; color:#176db6; font-weight:600; text-align:left; }
 /* Mobile sign-in is one compact surface, not a stacked marketing split. */
 @media (max-width: 700px) {
   .auth-page { background: #080d13; color: #f4f7fc; padding: 0 20px; }
@@ -77,6 +83,9 @@ h1,h2,h3,.brand { font-family: Inter, sans-serif; }
   .auth-page .auth-card form .button { min-height: 48px; margin-top: 16px; }
   .auth-page .auth-bottom { position: static; text-align: center; color: #9aacbf; margin: 28px 0 0; }
   .auth-page .preview-entry { color: #adbdcf; border-color: #293647; }
+  .auth-page .auth-actions { border-color:#293647; }
+  .auth-page .auth-account-link { background:#f5f9ff; color:#075da8; border-color:#a9d7ff; }
+  .auth-page .auth-actions .text-button { color:#9ed1ff; }
 }
 .preview-entry small { color: #748195; }
 .setup-note { background: #eef6ff; color: #0877d4; }

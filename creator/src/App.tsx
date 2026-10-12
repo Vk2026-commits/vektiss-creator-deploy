@@ -185,7 +185,7 @@ export function PasswordSetup({onDone}:{onDone:()=>void}) {
   return <main className="auth-page"><section className="auth-panel"><div className="auth-card"><h2>Set your password</h2><p>Choose a password with at least 12 characters.</p><form onSubmit={save}><label className="field"><span>New password</span><input type="password" autoComplete="new-password" minLength={12} required value={password} onChange={e=>setPassword(e.target.value)}/></label><label className="field"><span>Confirm password</span><input type="password" autoComplete="new-password" minLength={12} required value={confirmation} onChange={e=>setConfirmation(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy?'Saving…':'Save password & continue'}</button></form></div></section></main>;
 }
 
-function SignIn({
+export function SignIn({
   onPreview,
   initialError,
 }: {
@@ -194,7 +194,7 @@ function SignIn({
 }) {
   const [email, setEmail] = useState("");
   const [signup,setSignup]=useState(false);
-  const [mode,setMode]=useState<'link'|'password'|'reset'>('link');
+  const [mode,setMode]=useState<'link'|'password'|'reset'>('password');
   const [password,setPassword]=useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -283,8 +283,7 @@ function SignIn({
               </>
             ) : (
               <>
-                <p>{mode==='password'?'Sign in with your email and password.':mode==='reset'?'We’ll email you a secure link to set or reset your password.':'Sign in or create an account with a secure email link.'}</p>
-                <button type="button" className="button secondary" disabled={busy} onClick={()=>setSignup(true)}>Create account with password</button>
+                <p>{mode==='password'?'Sign in with your email and password. New to Creator? Create an account below.':mode==='reset'?'We’ll email you a secure link to set or reset your password.':'Sign in with a secure email link.'}</p>
                 <form onSubmit={submit}>
                   <label className="field">
                     <span>Email address</span>
@@ -303,7 +302,12 @@ function SignIn({
                     <ArrowRight size={17} />
                   </button>
                 </form>
-                <div className="preview-entry">{(['link','password','reset'] as const).filter(item=>item!==mode).map(item=><button key={item} type="button" className="text-button" disabled={busy} onClick={()=>{setMode(item);setError('');setPassword('');}}>{item==='link'?'Use email link':item==='password'?'Use password':'Set / reset password'}</button>)}</div>
+                <div className="auth-actions">
+                  <button type="button" className="auth-account-link" disabled={busy} onClick={()=>setSignup(true)}>New to Creator? Create an account</button>
+                  {mode!=='password'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('password');setError('');setPassword('');}}>Use email and password</button>}
+                  {mode!=='link'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('link');setError('');setPassword('');}}>Use an email sign-in link instead</button>}
+                  {mode!=='reset'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('reset');setError('');setPassword('');}}>Forgot your password? Set or reset it</button>}
+                </div>
               </>
             )
           ) : (

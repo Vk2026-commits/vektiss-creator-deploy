@@ -2,7 +2,8 @@ import {describe,it,expect,vi} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {signupValidation,signupError,setupStep} from '../src/lib/signup';
 import {PasswordSignup} from '../src/components/PasswordSignup';
-vi.mock('../src/lib/supabase',()=>({supabase:null}));
+import {SignIn} from '../src/App';
+vi.mock('../src/lib/supabase',()=>({supabase:{auth:{}},localPreviewAvailable:false}));
 describe('password signup',()=>{
  it('resumes setup from saved records without re-onboarding existing profiles',()=>{
   expect(setupStep(false,0)).toBe('creator');expect(setupStep(true,0)).toBe('audience');
@@ -21,5 +22,13 @@ describe('password signup',()=>{
   const html=renderToStaticMarkup(<PasswordSignup onSignIn={()=>{}}/>);
   expect(html).toContain('Create your account');expect(html.match(/autoComplete="new-password"/g)).toHaveLength(2);
   expect(html).toContain('Confirm password');expect(html).toContain('Show passwords');expect(html).toContain('Back to sign in');
+ });
+ it('shows password sign-in without requiring a mode switch',()=>{
+  const html=renderToStaticMarkup(<SignIn onPreview={async()=>{}} initialError=""/>);
+  expect(html).toContain('Sign in with your email and password.');
+  expect(html).toContain('autoComplete="current-password"');
+  expect(html).toContain('New to Creator? Create an account');
+  expect(html).toContain('Use an email sign-in link instead');
+  expect(html).toContain('Forgot your password? Set or reset it');
  });
 });
