@@ -3,6 +3,7 @@ import {
   canonicalResearchUrl,
   providerResearchEnvelopeSchema,
   rankResearchCandidates,
+  researchPercentScore,
   researchBriefSchema,
   type ProviderResearchCandidate,
   type ResearchHistorySignal,
@@ -36,6 +37,13 @@ const candidate = (overrides: Partial<ProviderResearchCandidate> = {}): Provider
 });
 
 describe("research contracts", () => {
+  it('normalizes legacy ten-point provider scores to percentages',()=>{
+    expect(researchPercentScore(9)).toBe(90);
+    expect(researchPercentScore(88)).toBe(88);
+    expect(researchPercentScore(120)).toBe(100);
+    const ranked=rankResearchCandidates([candidate({relevanceScore:9,timelinessScore:8})],[source(1,'https://new.example.com/item')],[],1);
+    expect(ranked[0]).toMatchObject({relevanceScore:90,timelinessScore:80,rankScore:82});
+  });
   const score = (history: ResearchHistorySignal[], duplicates = history) => rankResearchCandidates([candidate({relevanceScore:50,timelinessScore:50})], [source(1,'https://new.example.com/item')], history, 1, duplicates)[0]?.rankScore;
   const signal = (reason?: ResearchHistorySignal['rejectionReason'], status: ResearchHistorySignal['status'] = 'rejected'): ResearchHistorySignal => ({title:'Old',category:'Home buying',status,sourceSnapshot:[],rejectionReason:reason});
   it('only penalizes explicit topic or audience rejection reasons',()=>{

@@ -75,6 +75,15 @@ export type ProviderResearchCandidate = z.infer<
   typeof providerResearchCandidateSchema
 >;
 
+// Early research runs occasionally returned a documented percentage score on
+// a 0-10 scale. Preserve those useful results while keeping the public UI and
+// ranking contract consistently expressed as 0-100.
+export function researchPercentScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const normalized = value >= 0 && value <= 10 ? value * 10 : value;
+  return Math.round(Math.max(0, Math.min(100, normalized)));
+}
+
 export const providerResearchEnvelopeSchema = z
   .object({
     opportunities: z.array(providerResearchCandidateSchema).max(50),
@@ -241,6 +250,8 @@ export function rankResearchCandidates(
   const accepted: RankedResearchCandidate[] = [];
 
   for (const candidate of candidates) {
+    const relevanceScore = researchPercentScore(candidate.relevanceScore);
+    const timelinessScore = researchPercentScore(candidate.timelinessScore);
     const sources = candidate.sourceIds
       .map((id) => sourceById.get(id))
       .filter((source): source is ResearchSource => Boolean(source));
@@ -260,10 +271,12 @@ export function rankResearchCandidates(
     }, 0)));
     const evidenceBoost = Math.min(sources.length, 3) * 3;
     const rankScore = Math.round(
-      Math.max(0, Math.min(100, candidate.relevanceScore * 0.68 + candidate.timelinessScore * 0.22 + evidenceBoost + preferenceBoost)),
+      Math.max(0, Math.min(100, relevanceScore * 0.68 + timelinessScore * 0.22 + evidenceBoost + preferenceBoost)),
     );
     accepted.push({
       ...candidate,
+      relevanceScore,
+      timelinessScore,
       sources,
       rankScore,
       normalizedTitle: candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(),

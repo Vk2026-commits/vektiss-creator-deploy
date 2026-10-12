@@ -4,6 +4,7 @@ import {
   LoaderCircle, ShieldCheck, Sparkles, ThumbsDown, WandSparkles,
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
+import { researchPercentScore } from "../domain/research";
 import {
   loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch, stopResearch,
   type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
@@ -180,7 +181,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
               <div className="opportunity-meta">
                 <span className="signal-category">{opportunity.category}</span>
                 <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
-                <small>Match {Math.round(opportunity.relevance_score)}%</small>
+                <small>Match {researchPercentScore(opportunity.relevance_score)}%</small>
               </div>
               <div className="signal-main">
                 <div>
@@ -188,7 +189,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
                   {isArticle&&<p><a href={source.url} target="_blank" rel="noreferrer">Read article · {new URL(source.url).hostname.replace(/^www\./,'')}</a> · Published {opportunity.published_at?.slice(0,10)}<br/>{opportunity.why_audience_cares}</p>}
                   <p className="opportunity-summary">{opportunity.factual_summary}</p>
                 </div>
-                <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>
+                <div className="signal-score" aria-label={`${researchPercentScore(opportunity.relevance_score)} percent match`}><strong>{researchPercentScore(opportunity.relevance_score)}</strong><span>match</span></div>
               </div>
               <div className="signal-take">
                 <span><Sparkles size={15}/> YOUR SIMPLE TAKE</span>
