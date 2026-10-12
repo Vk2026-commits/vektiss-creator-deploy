@@ -26,6 +26,15 @@ export function validateHostingConfig(c:HostingConfig){
  if(resolve(c.data)===resolve(c.dist))throw Error('Media storage must be separate from public files.');
  return c;
 }
+async function hasHostedPilotAccess(c:HostingConfig,authorization:string,userId:string){
+ if(c.users.includes(userId))return true;
+ try{
+  const entitlement=await fetch(`${c.supabaseUrl}/rest/v1/rpc/creator_hosted_pilot_access`,{
+   method:'POST',headers:{Authorization:authorization,apikey:c.publicKey,'Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(15000)
+  });
+  return entitlement.ok&&await entitlement.json()===true;
+ }catch{return false;}
+}
 type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean};
 async function saveJob(path:string,job:Job){const temp=`${path}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(job),{mode:0o600});await rename(temp,path);}
 function json(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));}
@@ -54,7 +63,7 @@ export function hostedHandler(c:HostingConfig){
    if(!authorization.startsWith('Bearer '))return json(res,401,{error:'Sign in to access your media.'});
    const auth=await fetch(`${c.supabaseUrl}/auth/v1/user`,{headers:{Authorization:authorization,apikey:c.publicKey},signal:AbortSignal.timeout(15000)});
    if(!auth.ok)return json(res,401,{error:'Your session expired. Sign in again.'});
-   const user=await auth.json();if(!uuid.test(user.id??'')||!c.users.includes(user.id))return json(res,403,{error:'This hosted pilot is limited to approved accounts.'});
+   const user=await auth.json();if(!uuid.test(user.id??'')||!await hasHostedPilotAccess(c,authorization,user.id))return json(res,403,{error:'This hosted pilot is limited to approved accounts.'});
    // Every filename is resolved beneath the verified user's directory, never a client-supplied owner.
    const root=resolve(c.data,user.id),media=resolve(root,'.local-captures'),jobs=resolve(root,'jobs');
    await mkdir(jobs,{recursive:true,mode:0o700});await mkdir(media,{recursive:true,mode:0o700});

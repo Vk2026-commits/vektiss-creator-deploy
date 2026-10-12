@@ -66,6 +66,14 @@ it('does not allow another account or access to another account’s media',async
  vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({id:other}),{status:200}));
  expect((await realFetch(url+'/api/local-capture/exports',{headers})).status).toBe(403);
 });
+it('allows a signed-in Discover pilot without duplicating the account in the worker allowlist',async()=>{
+ const {url,headers}=await setup();
+ vi.mocked(globalThis.fetch)
+  .mockResolvedValueOnce(new Response(JSON.stringify({id:other}),{status:200}))
+  .mockResolvedValueOnce(new Response(JSON.stringify(true),{status:200}));
+ expect((await realFetch(url+'/api/local-capture/exports',{headers})).status).toBe(200);
+ expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toBe('https://project.supabase.co/rest/v1/rpc/creator_hosted_pilot_access');
+});
 it('releases capacity after rejected requests, and polls failed jobs without repeating work',async()=>{
  const {url,headers}=await setup();const route=url+'/api/local-capture/prepare-video';
  for(let i=0;i<2;i++)expect((await realFetch(route,{method:'POST',headers:{...headers,'Content-Type':'text/plain'},body:'bad'})).status).toBe(415);
