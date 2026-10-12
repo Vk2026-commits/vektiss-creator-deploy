@@ -146,9 +146,9 @@ export function explainError(error: unknown): string {
     if (code === "PGRST116" || code === "23503")
       return "This profile has changed. Reload your workspace and try again.";
     if (code === "40001")
-      return "This profile changed in another session. Reload before saving again.";
+      return "This item changed while it was saving. Your changes are still here—retry saving.";
   }
   if (error instanceof Error && error.message === "STALE")
-    return "This profile changed in another session. Reload before saving again.";
+    return "This item changed while it was saving. Your changes are still here—retry saving.";
   return "We couldn’t complete that request. Your changes are still here—please try again.";
 }

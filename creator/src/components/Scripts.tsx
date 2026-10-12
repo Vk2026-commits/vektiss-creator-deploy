@@ -27,6 +27,7 @@ import {supabase} from '../lib/supabase';
 import {avatarRepository} from '../lib/avatar-repository';
 import {watchRender} from '../lib/watch-render';
 import {fullCompositionInput} from '../lib/full-composition-input';
+import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
 export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
@@ -35,6 +36,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   useEffect(()=>recoveryWrite(`${recoveryKey}:workspace`,workspaceId),[recoveryKey,workspaceId]);
   const pendingDraftKey=`vektiss:pending-draft:v1:${userId}`;
   const draftController=useRef<AbortController|null>(null);
+  const saveTail=useRef<Promise<void>>(Promise.resolve());
   useEffect(()=>()=>draftController.current?.abort(),[]);
   const empty = (): ScriptInput => ({ content_profile_id: selectedId ?? profiles.find(p => !p.archived_at)?.id ?? '', title: '', hook: '', body: '', cta: '', brief:{...emptyBrief(),cost_project_id:workspaceId} });
   const [draft, setDraft] = useState<ScriptInput>(empty);
@@ -59,6 +61,11 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const screenStep=videoStep(draft.brief,planning);
   useEffect(()=>{if(loading)return;const frame=requestAnimationFrame(()=>{editorRef.current?.focus({preventScroll:true});editorRef.current?.scrollIntoView({block:'start',behavior:'instant'});});return()=>cancelAnimationFrame(frame);},[screenStep,loading]);
   const latest=useRef(draft);latest.current=draft;
+  function persist(input:ScriptInput,existing:Script|null,rebase?:(latest:Script)=>ScriptInput){
+    const task=saveTail.current.catch(()=>undefined).then(()=>rebase?saveScriptWithRebase(repo,input,existing,rebase):saveScriptWithRebase(repo,input,existing));
+    saveTail.current=task.then(()=>undefined,()=>undefined);
+    return task;
+  }
   const appliedAudience=useRef<number|null>(null);
   const appliedResearchIntent=useRef<string|null>(null);
   useEffect(()=>{
@@ -90,7 +97,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     const timer=setTimeout(()=>{
       const snapshot=draft;lastAutoAttempt.current=snapshot;setBusy(true);
       const input={...snapshot,title:snapshot.title.trim()||'Untitled video'};
-      void repo.save(input,current).then(item=>{
+      void persist(input,current).then(item=>{
         setCurrent(item);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);
         if(latest.current===snapshot){setDraft(item);setDirty(false);setMessage('');}
       }).catch(e=>setError(`Could not save progress: ${explainError(e)}`)).finally(()=>setBusy(false));
@@ -152,7 +159,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     const next={...previousScript,brief:{...previousScript.brief,production:{...previousScript.brief.production,render}}};
     setSaved(items=>[next,...items.filter(item=>item.id!==scriptId)]);
     if(current?.id===scriptId){setCurrent(next);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render}}}));}
-    void repo.save(next,previousScript).then(item=>{setSaved(items=>[item,...items.filter(value=>value.id!==item.id)]);if(current?.id===item.id){setCurrent(item);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render:item.brief.production?.render}}}));}}).catch(e=>setError(`Could not save render progress: ${explainError(e)}`));
+    void persist(next,previousScript,latest=>rebaseRenderState(latest,render)).then(item=>{setSaved(items=>[item,...items.filter(value=>value.id!==item.id)]);if(current?.id===item.id){setCurrent(item);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render:item.brief.production?.render}}}));}}).catch(e=>setError(`Could not save render progress: ${explainError(e)}`));
   }
   function viewLibrary(){if(busy||sourceProcessing)return;setLibraryView(true);setCurrent(null);setPlanning(false);setDirty(false);setMessage('Your submitted video continues in My videos.');setError('');}
   function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
@@ -191,7 +198,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     setBusy(true);setError('');setMessage('');
     try {
       const input={...draft,brief:override?{...override,...(draft.body.trim()?{stage:draft.brief.stage,production:draft.brief.production}:{})}:draft.brief,title:draft.title.trim() || 'Untitled video'};
-      let snapshot=await repo.save(input,current);setCurrent(snapshot);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);
+      let snapshot=await persist(input,current);setCurrent(snapshot);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);
       if(!preview&&import.meta.env.PROD){
         setDraft(snapshot);setDirty(false);
         const body=JSON.stringify({script_id:snapshot.id,revision:snapshot.updated_at,action});
@@ -204,7 +211,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         next={...input,brief:{...input.brief,source_summary:result.summary}};
       } else if(action==='summarize') {
         next={...input,title:suggestedVideoTitle(input.title,result.title),brief:{...input.brief,source:result.source,source_summary:result.summary,stage:'source',clarified:false,questions:[],summary:'',production:undefined}};
-        if(!input.body.trim()){snapshot=await repo.save(next,snapshot);setCurrent(snapshot);setDraft(snapshot);setDirty(false);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);}
+        if(!input.body.trim()){snapshot=await persist(next,snapshot);setCurrent(snapshot);setDraft(snapshot);setDirty(false);setSaved(items=>[snapshot,...items.filter(s=>s.id!==snapshot.id)]);}
         setMessage('');setDraftProgress({percent:85,label:'Writing your script and angle…'});
         result=await scriptAI('generate',draft.content_profile_id,next.brief);
         next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,review:result.review,stage:'review'}};
@@ -218,7 +225,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         }
       } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:undefined,review:result.review,stage:'review'}};
       if(result.screenshot_story&&next.brief.stage==='review')next={...next,brief:{...next.brief,screenshot_story:result.screenshot_story}}; setDraftProgress({percent:95,label:'Saving your draft…'});
-      const item=await repo.save(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
+      const item=await persist(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
       if(action==='generate'&&next.brief.research_opportunity_id&&!preview)void researchFeedback(next.brief.research_opportunity_id,'script_created').catch(()=>{/* Conversion tracking must not interrupt a completed draft. */});
     }catch(e){setDraftProgress(p=>({...p,percent:p?.percent??0,label:'Could not finish. Please retry.',failed:true}));setError(e instanceof Error?e.message:explainError(e));}finally{generating.current=false;setBusy(false);}
   }
@@ -228,7 +235,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     setBusy(true); setError(''); setMessage('');
     try {
       const next={...draft,title:draft.title.trim()||'Untitled video',brief:{...draft.brief,...(production?{production}:draft.brief.stage==='review'?{production:{...(draft.brief.production??newVideoPlan()),...(draft.brief.source_cut?{video_background:{id:draft.brief.source_cut.selected_id,source_url:draft.brief.url}}:{}),...(draft.brief.screenshot_story?{screenshot_story:draft.brief.screenshot_story,article_capture:draft.brief.screenshot_story.images[0]}:{}),...(draft.brief.kind==='graphic'&&draft.brief.graphic_capture?{article_capture:draft.brief.graphic_capture}:{}),presenter:'avatar' as const,approved_at:new Date().toISOString(),step:'presenter' as const}}:{})}};
-      const item = await repo.save(next, current);
+      const item = await persist(next, current);
       setCurrent(item); setDraft(item); setDirty(false);
       setSaved(items => [item, ...items.filter(s => s.id !== item.id)]);
       setMessage('');
@@ -296,7 +303,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
               if(!proposal.cta)throw Error('Add a CTA first.');
               if(proposal.changes.length)throw Error('Please change the audience separately from this video’s CTA.');
               const next={...draft,brief:{...draft.brief,cta_override:proposal.cta,cta_selection:undefined,production:undefined,stage:'source' as const}};
-              const item=await repo.save({...next,title:next.title.trim()||'Untitled video'},current);
+              const item=await persist({...next,title:next.title.trim()||'Untitled video'},current);
               setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);
               setMessage('CTA saved for this video. Continue with your saved source to regenerate the script before approving.');
             }else{
