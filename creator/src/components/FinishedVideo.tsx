@@ -62,7 +62,7 @@ function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
    setError(e instanceof TypeError||e instanceof DOMException&&['TimeoutError','AbortError'].includes(e.name)?'The preview download was interrupted. Your completed avatar is saved. Reconnect and retry loading the MP4; no new avatar render will be charged.':e instanceof Error?e.message:'Assembly failed.');
   }}}
   void assemble();return()=>{live=false;controller.abort();loader.current=null;if(posterUrl)URL.revokeObjectURL(posterUrl);};
- },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,retry]);
+ },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,plan.presenter_framing_position,retry]);
  async function activate(intent:'play'|'download'){
   if(action.current||!loader.current)return;
   const controller=controllerRef.current!;

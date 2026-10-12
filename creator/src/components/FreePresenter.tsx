@@ -4,7 +4,7 @@ import {placementFromLayout,presenterLayout,previewAspect} from '../domain/prese
 import {SelectedAvatarOverlay} from './SelectedAvatarOverlay';
 import './article-layout.css';
 import {movePlacement} from '../domain/presenter-gesture';
-import {avatarFramings,customFramingBounds,framedAspect,type AvatarFraming} from '../domain/avatar-framing';
+import {avatarFramings,customFramingBounds,customFramingPositionBounds,framedAspect,type AvatarFraming} from '../domain/avatar-framing';
 type Placement=NonNullable<VideoPlan['presenter_placement']>;
 type Point={x:number;y:number};
 const avatarFramingLabels:Record<AvatarFraming,string>={original:'Original','head-shoulders':'Head & shoulders','chest-up':'Chest up','waist-up':'Waist up',custom:'Custom'};
@@ -60,9 +60,9 @@ export function FreePresenter({plan,onChange,children,hideShortcuts=false}:{plan
     <span data-resize="true" className="avatar-resize-handle" aria-hidden="true">↔</span>
    </div>
   </div>
-  <details className="avatar-framing-controls" aria-label="Avatar framing"><summary>Framing</summary><div className="article-layout-positions" role="group" aria-label="Framing preset">{avatarFramings.map(mode=><button type="button" aria-pressed={(plan.presenter_framing??'original')===mode} key={mode} onPointerDown={e=>e.stopPropagation()} onClick={()=>onChange({...plan,presenter_framing:mode as AvatarFraming,...(mode==='custom'?{presenter_framing_amount:plan.presenter_framing_amount??customFramingBounds.default}:{})})}>{avatarFramingLabels[mode]}</button>)}</div>
-   {plan.presenter_framing==='custom'&&<label className="framing-amount">Visible body<input type="range" min={customFramingBounds.min} max={customFramingBounds.max} step={1} value={plan.presenter_framing_amount??customFramingBounds.default} aria-label="Visible body percentage" onChange={e=>onChange({...plan,presenter_framing_amount:Number(e.target.value)})}/><output>{plan.presenter_framing_amount??customFramingBounds.default}%</output></label>}
-   <small>Visible body controls the crop. Drag or pinch controls the framed person's size separately.</small>
+	  <details className="avatar-framing-controls" aria-label="Avatar framing"><summary>Framing</summary><div className="article-layout-positions" role="group" aria-label="Framing preset">{avatarFramings.map(mode=><button type="button" aria-pressed={(plan.presenter_framing??'original')===mode} key={mode} onPointerDown={e=>e.stopPropagation()} onClick={()=>onChange({...plan,presenter_framing:mode as AvatarFraming,...(mode==='custom'?{presenter_framing_amount:plan.presenter_framing_amount??customFramingBounds.default,presenter_framing_position:plan.presenter_framing_position??customFramingPositionBounds.default}:{presenter_framing_position:undefined})})}>{avatarFramingLabels[mode]}</button>)}</div>
+	   {plan.presenter_framing==='custom'&&<div className="manual-avatar-crop"><label className="framing-amount">Visible body<input type="range" min={customFramingBounds.min} max={customFramingBounds.max} step={1} value={plan.presenter_framing_amount??customFramingBounds.default} aria-label="Visible body percentage" onChange={e=>onChange({...plan,presenter_framing_amount:Number(e.target.value)})}/><output>{plan.presenter_framing_amount??customFramingBounds.default}%</output></label><label className="framing-amount">Crop position<input type="range" min={customFramingPositionBounds.min} max={customFramingPositionBounds.max} step={1} value={plan.presenter_framing_position??customFramingPositionBounds.default} aria-label="Crop position from top to bottom" onChange={e=>onChange({...plan,presenter_framing_position:Number(e.target.value)})}/><span className="crop-position-scale"><span>Top</span><output>{plan.presenter_framing_position??customFramingPositionBounds.default}% lower</output><span>Bottom</span></span></label></div>}
+	   <small>Choose Custom to set the crop height and move the crop up or down. Drag or pinch controls the framed person's size separately.</small>
   </details>
   {!hideShortcuts&&<details><summary>Placement shortcuts</summary><PlacementShortcuts plan={plan} onChange={onChange}/></details>}
  </div>;

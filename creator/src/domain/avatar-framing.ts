@@ -21,6 +21,7 @@ const DEFAULT_CUSTOM_AMOUNT=70;
 const CUSTOM_MIN_AMOUNT=30;
 const CUSTOM_MAX_AMOUNT=100;
 export const customFramingBounds={min:CUSTOM_MIN_AMOUNT,max:CUSTOM_MAX_AMOUNT,default:DEFAULT_CUSTOM_AMOUNT};
+export const customFramingPositionBounds={min:0,max:100,default:0};
 
 export type PersonCrop={x:number;y:number;width:number;height:number};
 export function framingAmount(framing:AvatarFraming|undefined,amount:number|undefined){
@@ -28,14 +29,19 @@ export function framingAmount(framing:AvatarFraming|undefined,amount:number|unde
  const value=framing==='custom'?Math.round(amount??DEFAULT_CUSTOM_AMOUNT):framePresetAmounts[framing];
  return Math.max(CUSTOM_MIN_AMOUNT,Math.min(CUSTOM_MAX_AMOUNT,value));
 }
+export function framingPosition(framing:AvatarFraming|undefined,position:number|undefined){
+ if(framing!=='custom')return 0;
+ const value=Math.round(position??customFramingPositionBounds.default);
+ return Math.max(customFramingPositionBounds.min,Math.min(customFramingPositionBounds.max,value));
+}
 export function framedAspect(baseAspect:number,framing:AvatarFraming|undefined,amount:number|undefined){
  return baseAspect*CUSTOM_MAX_AMOUNT/framingAmount(framing,amount);
 }
-export function avatarFramingCrop(base:PersonCrop,framing:AvatarFraming|undefined,amount:number|undefined){
+export function avatarFramingCrop(base:PersonCrop,framing:AvatarFraming|undefined,amount:number|undefined,position?:number){
  if(!framing||framing==='original')return base;
- const bottom=base.y+base.height*framingAmount(framing,amount)/100;
- const height=Math.max(32,Math.floor(bottom-base.y));
- return {x:base.x,y:base.y,width:base.width,height:Math.min(base.height,height)};
+ const height=Math.min(base.height,Math.max(32,Math.floor(base.height*framingAmount(framing,amount)/100)));
+ const y=base.y+Math.round((base.height-height)*framingPosition(framing,position)/100);
+ return {x:base.x,y,width:base.width,height};
 }
 export function avatarFraming(avatarId:string|null,format:string){
  return avatarId===STEPHEN_AVATAR&&format==='portrait'?STEPHEN_FRAMING:undefined;

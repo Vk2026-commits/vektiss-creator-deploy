@@ -22,7 +22,8 @@ export async function fullCompositionInput({jobId,scriptId,plan,sourceKind}:{job
   format:plan.format,
   placement:plan.presenter_placement,
   framing:avatarFraming(plan.avatar_id,plan.format),
-  presenter_framing:plan.presenter_framing,
-  presenter_framing_amount:plan.presenter_framing_amount,
- };
+	 presenter_framing:plan.presenter_framing,
+	 presenter_framing_amount:plan.presenter_framing_amount,
+	 presenter_framing_position:plan.presenter_framing_position,
+	};
 }

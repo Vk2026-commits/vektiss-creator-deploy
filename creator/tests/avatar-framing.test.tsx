@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {FreePresenter} from '../src/components/FreePresenter';
 import {framingPreviewStyle} from '../src/components/SelectedAvatarOverlay';
-import {avatarFramingCrop,customFramingBounds,framedAspect,framingAmount} from '../src/domain/avatar-framing';
+import {avatarFramingCrop,customFramingBounds,customFramingPositionBounds,framedAspect,framingAmount,framingPosition} from '../src/domain/avatar-framing';
 import {newVideoPlan,videoPlanSchema} from '../src/domain/video-plan';
 import {placementFromLayout,presenterLayout} from '../src/domain/presenter-layout';
 import {fullCompositionSchema} from '../server/full-composition';
@@ -22,12 +22,19 @@ it('trims only below the framing preset without changing person width',()=>{
 	 expect(avatarFramingCrop(baseCrop,'head-shoulders',undefined)).toEqual({...baseCrop,height:500});
  expect(avatarFramingCrop(baseCrop,'chest-up',undefined)).toEqual({...baseCrop,height:618});
  expect(avatarFramingCrop(baseCrop,'waist-up',undefined)).toEqual({...baseCrop,height:746});
-	 expect(avatarFramingCrop(baseCrop,'custom',60)).toEqual({...baseCrop,height:546});
+ expect(avatarFramingCrop(baseCrop,'custom',60)).toEqual({...baseCrop,height:546});
+});
+
+it('moves a Custom crop down without changing its source height',()=>{
+ expect(framingPosition('custom',undefined)).toBe(customFramingPositionBounds.default);
+ expect(framingPosition('head-shoulders',100)).toBe(0);
+ expect(avatarFramingCrop(baseCrop,'custom',60,100)).toEqual({x:0,y:550,width:720,height:546});
 });
 
 it('renders head-and-shoulders as an actual top-of-source crop in the editor',()=>{
- expect(framingPreviewStyle('head-shoulders',undefined)).toMatchObject({width:'auto',height:'181.8181818181818%',position:'absolute',top:0,left:'50%',transform:'translateX(-50%)'});
+ expect(framingPreviewStyle('head-shoulders',undefined)).toMatchObject({width:'auto',height:'181.8181818181818%',position:'absolute',top:'0%',left:'50%',transform:'translateX(-50%)'});
  expect(framingPreviewStyle('head-shoulders',undefined)).not.toHaveProperty('objectFit','fill');
+ expect(framingPreviewStyle('custom',60,100)).toMatchObject({height:'166.66666666666669%',top:'-66.66666666666667%'});
 });
 
 it('scales and anchors the framed person with the same layout math as export',()=>{
@@ -67,6 +74,7 @@ it('defaults new avatar plans to Head & shoulders and accepts old plans unchange
  expect(videoPlanSchema.safeParse({...legacy,presenter_framing:'chest-up'}).success).toBe(true);
  expect(videoPlanSchema.safeParse({...legacy,presenter_framing:'custom',presenter_framing_amount:29}).success).toBe(false);
  expect(videoPlanSchema.safeParse({...legacy,presenter_framing:'custom',presenter_framing_amount:customFramingBounds.max+1}).success).toBe(false);
+ expect(videoPlanSchema.safeParse({...legacy,presenter_framing:'custom',presenter_framing_position:customFramingPositionBounds.max+1}).success).toBe(false);
 });
 
 it('allows optional framing settings in local full-video assembly',()=>{
@@ -74,6 +82,7 @@ it('allows optional framing settings in local full-video assembly',()=>{
  expect(fullCompositionSchema.safeParse(command).success).toBe(true);
  expect(fullCompositionSchema.safeParse({...command,presenter_framing:'head-shoulders'}).success).toBe(true);
  expect(fullCompositionSchema.safeParse({...command,presenter_framing:'custom',presenter_framing_amount:45}).success).toBe(true);
+ expect(fullCompositionSchema.safeParse({...command,presenter_framing:'custom',presenter_framing_amount:45,presenter_framing_position:75}).success).toBe(true);
  expect(fullCompositionSchema.safeParse({...command,presenter_framing:'head-shoulders',presenter_framing_amount:10}).success).toBe(false);
 });
 
@@ -83,6 +92,9 @@ it('exposes framing presets and separates framing from gesture sizing',()=>{
  expect(html).toContain('Avatar framing');
  expect(html).toContain('Head &amp; shoulders');
  for(const label of ['Original','Chest up','Waist up','Custom'])expect(html).toContain(label);
+ const customHtml=renderToStaticMarkup(<FreePresenter plan={{...plan,presenter_framing:'custom',presenter_framing_amount:60,presenter_framing_position:50}} onChange={()=>{}}><div/></FreePresenter>);
+ expect(customHtml).toContain('Crop position');
+ expect(customHtml).toContain('Crop position from top to bottom');
  expect(html).toContain('Drag or pinch controls');
 });
 

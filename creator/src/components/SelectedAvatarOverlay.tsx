@@ -3,15 +3,16 @@ import {personThumbnail} from '../lib/person-thumbnail';
 import {avatarRepository} from '../lib/avatar-repository';
 import {presenterLayout,previewAspect} from '../domain/presenter-layout';
 import type {VideoPlan} from '../domain/video-plan';
-import {avatarFraming,framedAspect,framingAmount} from '../domain/avatar-framing';
+import {avatarFraming,framedAspect,framingAmount,framingPosition} from '../domain/avatar-framing';
 import {mediaFetch} from '../lib/media-fetch';
 import {subscribeAvatarLibrary} from '../lib/avatar-library-events';
-export function framingPreviewStyle(_framing:VideoPlan['presenter_framing'],_amount:VideoPlan['presenter_framing_amount']){
+export function framingPreviewStyle(_framing:VideoPlan['presenter_framing'],_amount:VideoPlan['presenter_framing_amount'],_position?:VideoPlan['presenter_framing_position']){
  const visible=framingAmount(_framing,_amount);
+ const position=framingPosition(_framing,_position);
  // The overlay aspect is already widened to the selected crop. Keep the
  // source aspect, scale uniformly from its height, and clip the lower body.
  // This also handles wide provider thumbnails without showing their desk.
- return {width:'auto',height:`${100/visible*100}%`,minWidth:'100%',maxWidth:'none',maxHeight:'none',position:'absolute' as const,left:'50%',top:0,transform:'translateX(-50%)'};
+ return {width:'auto',height:`${100/visible*100}%`,minWidth:'100%',maxWidth:'none',maxHeight:'none',position:'absolute' as const,left:'50%',top:`${-position*(100-visible)/visible}%`,transform:'translateX(-50%)'};
 }
 export function SelectedAvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
  return <AvatarOverlay key={`${plan.avatar_id}:${plan.avatar_engine}:${plan.format}`} plan={plan} onAspect={onAspect}/>;
@@ -51,6 +52,6 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
 	 // source to its full unframed height and clipping from the top makes the
 	 // editor show the same vertical source crop as FFmpeg, including for wide
 	 // provider thumbnails where object-fit:cover would otherwise only crop sides.
-	 const frameStyle=framed?framingPreviewStyle(plan.presenter_framing,plan.presenter_framing_amount):verified||image?.placement?{objectFit:'contain' as const,objectPosition:'center bottom'}:undefined;
+	 const frameStyle=framed?framingPreviewStyle(plan.presenter_framing,plan.presenter_framing_amount,plan.presenter_framing_position):verified||image?.placement?{objectFit:'contain' as const,objectPosition:'center bottom'}:undefined;
 	 return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={frameStyle} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
 }
