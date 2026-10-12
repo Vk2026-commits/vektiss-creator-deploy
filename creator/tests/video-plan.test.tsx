@@ -2,7 +2,7 @@ import { expect,it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { newVideoPlan,planReady,renderStateFromJob,videoPlanSchema,videoRenderProgress } from '../src/domain/video-plan';
 import { VideoPlan } from '../src/components/VideoPlan';
-import { FinishedVideo } from '../src/components/FinishedVideo';
+import { completedExportId,FinishedVideo } from '../src/components/FinishedVideo';
 import { scriptSchema } from '../src/domain/scripts';
 const script=scriptSchema.parse({content_profile_id:'profile',title:'Test',hook:'A hook',body:'A clear message.',cta:'Save this.'});
 const props={script,preview:true,busy:false,onChange:()=>{},onSave:()=>{},onEdit:()=>{}};
@@ -33,6 +33,12 @@ it('assembles an actual MP4 rather than labeling the raw presenter as MP4',()=>{
  expect(html).not.toContain('https://video.example.com/presenter.mp4');
  expect(html).toContain('Opening your video…');
  expect(html).not.toContain('85%');
+});
+it('reopens a completed export directly instead of queueing another assembly',()=>{
+ const exportId='a'.repeat(64);
+ const ready={...newVideoPlan(),render:{job_id:'11111111-1111-4111-8111-111111111111',status:'ready' as const,submitted_at:'2026-10-12T18:00:00Z',updated_at:'2026-10-12T18:05:00Z',export_id:exportId,message:null}};
+ expect(completedExportId(ready)).toBe(exportId);
+ expect(completedExportId({...ready,render:{...ready.render,status:'assembling'}})).toBeUndefined();
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);

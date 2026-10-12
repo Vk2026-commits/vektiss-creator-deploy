@@ -30,39 +30,50 @@ export function FinishedVideoPlayer({src,poster,playOnLoad=false}:{src:string;po
  </div>;
 }
 type FinishedProps={jobId:string;scriptId:string;plan:VideoPlan;sourceKind?:'article'|'video'|'graphic';rawVideoUrl?:string};
+export function completedExportId(plan:VideoPlan){
+ const render=plan.render;
+ return render?.status==='ready'?render.export_id:undefined;
+}
 export function FinishedVideo(props:FinishedProps){
  const {jobId,scriptId,plan,sourceKind}=props;
  const identity=JSON.stringify([jobId,scriptId,sourceKind,plan]);
  return <SavedVideo key={identity} {...props}/>;
 }
 function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
- const [url,setUrl]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);
- const [poster,setPoster]=useState('');
- const [ready,setReady]=useState(false),[loading,setLoading]=useState(false),[playing,setPlaying]=useState(false);
- const loader=useRef<(()=>Promise<string>)|null>(null),controllerRef=useRef<AbortController|null>(null),action=useRef(false);
- const lastAction=useRef<'play'|'download'>('play');
- const [download,setDownload]=useState<{received:number;total:number|null}|null>(null);
- const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
- const presenterOnly=sourceKind==='article'&&!captureId;
- useEffect(()=>{if(!captureId&&!presenterOnly)return;const controller=new AbortController();controllerRef.current=controller;let posterUrl='';let live=true;setUrl('');setPoster('');setError('');setDownload(null);setReady(false);loader.current=null;
-  async function assemble(){try{
-   const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;if(!token)throw Error('Sign in again to assemble your video.');
-   const input=await fullCompositionInput({jobId,scriptId,plan,sourceKind});
-   const response=await mediaFetch('/api/local-capture/full-compose',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1',Authorization:`Bearer ${token}`},signal:controller.signal,body:JSON.stringify(input)});
-   const result=await response.json();if(!response.ok)throw Error(result.error??'Assembly failed.');if(!live)return;
-   loader.current=lazyMP4(result.id,controller.signal,(received,total)=>{if(live)setDownload({received,total});});setReady(true);
+  const [url,setUrl]=useState('');const [error,setError]=useState('');const [retry,setRetry]=useState(0);
+  const [poster,setPoster]=useState('');
+  const [ready,setReady]=useState(false),[loading,setLoading]=useState(false),[playing,setPlaying]=useState(false);
+  const loader=useRef<(()=>Promise<string>)|null>(null),controllerRef=useRef<AbortController|null>(null),action=useRef(false);
+  const lastAction=useRef<'play'|'download'>('play');
+  const [download,setDownload]=useState<{received:number;total:number|null}|null>(null);
+  const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
+  const presenterOnly=sourceKind==='article'&&!captureId;
+  const savedExportId=completedExportId(plan);
+  useEffect(()=>{if(!captureId&&!presenterOnly)return;const controller=new AbortController();controllerRef.current=controller;let posterUrl='';let live=true;setUrl('');setPoster('');setError('');setDownload(null);setReady(false);loader.current=null;
+  function openExport(exportId:string){
+   if(!live)return;
+   loader.current=lazyMP4(exportId,controller.signal,(received,total)=>{if(live)setDownload({received,total});});setReady(true);
    // A real JPEG does not depend on iOS decoding video before a user gesture.
-   void mediaFetch(`/api/local-capture/export-poster/${result.id}`,{signal:controller.signal}).then(async response=>{
+   void mediaFetch(`/api/local-capture/export-poster/${exportId}`,{signal:controller.signal}).then(async response=>{
     if(!response.ok||!response.headers.get('content-type')?.startsWith('image/jpeg'))return;
     const image=await response.blob();if(live){posterUrl=URL.createObjectURL(image);setPoster(posterUrl);}
    }).catch(()=>{/* Poster availability must not block the saved MP4. */});
+  }
+  async function assemble(){try{
+   // A completed composition is durable. Reopening it must not enqueue a new
+   // assembly job (and never starts another paid presenter render).
+   if(savedExportId){openExport(savedExportId);return;}
+   const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;if(!token)throw Error('Sign in again to assemble your video.');
+   const input=await fullCompositionInput({jobId,scriptId,plan,sourceKind});
+   const response=await mediaFetch('/api/local-capture/full-compose',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1',Authorization:`Bearer ${token}`},signal:controller.signal,body:JSON.stringify(input)});
+   const result=await response.json();if(!response.ok)throw Error(result.error??'Assembly failed.');openExport(result.id);
   }catch(e){if(live){
    // A phone may suspend while the MP4 body is downloading, after headers
    // arrived. Reopen the saved export; never request a new paid presenter.
    setError(e instanceof TypeError||e instanceof DOMException&&['TimeoutError','AbortError'].includes(e.name)?'The preview download was interrupted. Your completed avatar is saved. Reconnect and retry loading the MP4; no new avatar render will be charged.':e instanceof Error?e.message:'Assembly failed.');
   }}}
   void assemble();return()=>{live=false;controller.abort();loader.current=null;if(posterUrl)URL.revokeObjectURL(posterUrl);};
- },[jobId,scriptId,captureId,sourceKind,presenterOnly,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,plan.presenter_framing_position,retry]);
+ },[jobId,scriptId,captureId,sourceKind,presenterOnly,savedExportId,plan.presenter_size,plan.presenter_position,plan.format,plan.presenter_placement,plan.avatar_id,plan.presenter_framing,plan.presenter_framing_amount,plan.presenter_framing_position,retry]);
  async function activate(intent:'play'|'download'){
   if(action.current||!loader.current)return;
   const controller=controllerRef.current!;
