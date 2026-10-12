@@ -1,7 +1,8 @@
 import {expect,it} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {FreePresenter} from '../src/components/FreePresenter';
-import {avatarFramingCrop,customFramingBounds,framedAspect} from '../src/domain/avatar-framing';
+import {framingPreviewStyle} from '../src/components/SelectedAvatarOverlay';
+import {avatarFramingCrop,customFramingBounds,framedAspect,framingAmount} from '../src/domain/avatar-framing';
 import {newVideoPlan,videoPlanSchema} from '../src/domain/video-plan';
 import {placementFromLayout,presenterLayout} from '../src/domain/presenter-layout';
 import {fullCompositionSchema} from '../server/full-composition';
@@ -17,10 +18,15 @@ it('keeps original framing identical to the detected person crop',()=>{
 });
 
 it('trims only below the framing preset without changing person width',()=>{
- expect(avatarFramingCrop(baseCrop,'head-shoulders',undefined)).toEqual({...baseCrop,height:500});
+	 expect(framingAmount('head-shoulders',undefined)).toBe(55);
+	 expect(avatarFramingCrop(baseCrop,'head-shoulders',undefined)).toEqual({...baseCrop,height:500});
  expect(avatarFramingCrop(baseCrop,'chest-up',undefined)).toEqual({...baseCrop,height:618});
  expect(avatarFramingCrop(baseCrop,'waist-up',undefined)).toEqual({...baseCrop,height:746});
- expect(avatarFramingCrop(baseCrop,'custom',60)).toEqual({...baseCrop,height:546});
+	 expect(avatarFramingCrop(baseCrop,'custom',60)).toEqual({...baseCrop,height:546});
+});
+
+it('renders head-and-shoulders as an actual top-of-source crop in the editor',()=>{
+	 expect(framingPreviewStyle('head-shoulders',undefined)).toMatchObject({height:'181.8181818181818%',objectFit:'fill',objectPosition:'center top'});
 });
 
 it('scales and anchors the framed person with the same layout math as export',()=>{

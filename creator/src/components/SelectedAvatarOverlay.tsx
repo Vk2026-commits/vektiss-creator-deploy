@@ -3,9 +3,13 @@ import {personThumbnail} from '../lib/person-thumbnail';
 import {avatarRepository} from '../lib/avatar-repository';
 import {presenterLayout,previewAspect} from '../domain/presenter-layout';
 import type {VideoPlan} from '../domain/video-plan';
-import {avatarFraming,framedAspect} from '../domain/avatar-framing';
+import {avatarFraming,framedAspect,framingAmount} from '../domain/avatar-framing';
 import {mediaFetch} from '../lib/media-fetch';
 import {subscribeAvatarLibrary} from '../lib/avatar-library-events';
+export function framingPreviewStyle(framing:VideoPlan['presenter_framing'],amount:VideoPlan['presenter_framing_amount']){
+ const visible=framingAmount(framing,amount);
+ return {width:'100%',height:`${100/visible*100}%`,maxWidth:'none',maxHeight:'none',objectFit:'fill' as const,objectPosition:'center top'};
+}
 export function SelectedAvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
  return <AvatarOverlay key={`${plan.avatar_id}:${plan.avatar_engine}:${plan.format}`} plan={plan} onAspect={onAspect}/>;
 }
@@ -39,6 +43,11 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
  const verified=image?.id===plan.avatar_id&&image.verified;
  const cutout=Boolean(avatarFraming(plan.avatar_id,plan.format));
  const url=verified?image.url:cutout?'/brand/stephen-render-framing-v1.png':image?.id===plan.avatar_id?image.url:null;
- const framed=Boolean(plan.presenter_framing&&plan.presenter_framing!=='original');
- return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={framed?{objectFit:'cover',objectPosition:'center top'}:verified||image?.placement?{objectFit:'contain',objectPosition:'center bottom'}:undefined} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
+	 const framed=Boolean(plan.presenter_framing&&plan.presenter_framing!=='original');
+	 // The overlay's aspect already reflects the selected crop. Enlarging the
+	 // source to its full unframed height and clipping from the top makes the
+	 // editor show the same vertical source crop as FFmpeg, including for wide
+	 // provider thumbnails where object-fit:cover would otherwise only crop sides.
+	 const frameStyle=framed?framingPreviewStyle(plan.presenter_framing,plan.presenter_framing_amount):verified||image?.placement?{objectFit:'contain' as const,objectPosition:'center bottom'}:undefined;
+	 return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={frameStyle} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
 }

@@ -23,7 +23,7 @@ const CUSTOM_MAX_AMOUNT=100;
 export const customFramingBounds={min:CUSTOM_MIN_AMOUNT,max:CUSTOM_MAX_AMOUNT,default:DEFAULT_CUSTOM_AMOUNT};
 
 export type PersonCrop={x:number;y:number;width:number;height:number};
-function framingAmount(framing:AvatarFraming|undefined,amount:number|undefined){
+export function framingAmount(framing:AvatarFraming|undefined,amount:number|undefined){
  if(!framing||framing==='original')return CUSTOM_MAX_AMOUNT;
  const value=framing==='custom'?Math.round(amount??DEFAULT_CUSTOM_AMOUNT):framePresetAmounts[framing];
  return Math.max(CUSTOM_MIN_AMOUNT,Math.min(CUSTOM_MAX_AMOUNT,value));
