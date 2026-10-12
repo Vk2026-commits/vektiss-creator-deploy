@@ -1,10 +1,10 @@
 import {expect,it,vi,afterEach} from 'vitest';
 import {articleGraphicFallback,graphicMetadata,socialGraphicUrl,socialGraphicHost,graphicSource} from '../server/graphic-source';
-import {captureArticle} from '../server/article-capture';
+import {captureArticle,captureArticleCard} from '../server/article-capture';
 import {briefSchema,emptyBrief} from '../src/domain/script-brief';
 import {publicResource} from '../server/public-network';
 vi.mock('../server/public-network',async importOriginal=>({...await importOriginal<typeof import('../server/public-network')>(),publicResource:vi.fn()}));
-vi.mock('../server/article-capture',()=>({captureArticle:vi.fn()}));
+vi.mock('../server/article-capture',()=>({captureArticle:vi.fn(),captureArticleCard:vi.fn()}));
 afterEach(()=>vi.clearAllMocks());
 it('accepts HTTPS social and article links, classifies social hosts exactly, and rejects credentials',()=>{
  expect(socialGraphicUrl('https://www.instagram.com/p/abc/').hostname).toBe('www.instagram.com');
@@ -22,10 +22,12 @@ it('loads a public article featured image for the automatic capture fallback',as
  await expect(articleGraphicFallback('https://example.com/news')).resolves.toEqual({body:Buffer.from('image'),title:'Public story',source_url:'https://example.com/news',caption:'Story summary'});
  expect(publicResource).toHaveBeenCalledTimes(2);
 });
-it('gives an actionable retry when neither capture nor public article metadata is available',async()=>{
+it('tries a generated source card when neither capture nor public article metadata is available',async()=>{
  vi.mocked(captureArticle).mockRejectedValueOnce(Error('No headline'));
  vi.mocked(publicResource).mockResolvedValueOnce({status:429,headers:{'content-type':'text/html'},body:Buffer.from('rate limited')});
- await expect(graphicSource('/tmp','unused','application/json',{url:'https://example.com/news'},null,'',{supabaseUrl:'',publicKey:''})).rejects.toThrow('not publicly readable right now');
+ vi.mocked(captureArticleCard).mockRejectedValueOnce(Error('Could not create source card'));
+ await expect(graphicSource('/tmp','unused','application/json',{url:'https://example.com/news'},null,'',{supabaseUrl:'',publicKey:''})).rejects.toThrow('Could not create source card');
+ expect(captureArticleCard).toHaveBeenCalledWith('https://example.com/news');
 });
 it('routes YouTube post/thumbnail metadata through the public post capture path',async()=>{
  vi.mocked(publicResource).mockResolvedValueOnce({status:403,headers:{},body:Buffer.from('')});

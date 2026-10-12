@@ -41,3 +41,29 @@ export async function captureArticle(value:string){
   return {png,title,source_url:url,caption:excerpt.trim().slice(0,2000)};
  }finally{deadline.removeEventListener('abort',close);await browser.close();}
 }
+
+export function articleCardText(value:string){
+ const url=captureUrl(value);
+ const slug=decodeURIComponent(url.pathname.split('/').filter(Boolean).at(-1)??'').replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+ const title=(slug||'Article').replace(/(^|\s)\S/g,letter=>letter.toUpperCase()).slice(0,240);
+ return {title,host:url.hostname.replace(/^www\./,'')};
+}
+
+// Some publishers return a rate-limit page to datacenter IPs even though the
+// same article is public in a reader's browser. In that case, create a clean
+// source card from the canonical URL instead of forcing the creator to take a
+// screenshot. This is deliberately visual-only: it does not invent article
+// facts or treat the creator's direction as source evidence.
+export async function captureArticleCard(value:string){
+ const url=captureUrl(value).href,{title,host}=articleCardText(url);
+ const browser=await chromium.launch({...process.env.CREATOR_CHROMIUM_PATH?{executablePath:process.env.CREATOR_CHROMIUM_PATH}:{channel:'chrome'},headless:true,chromiumSandbox:true,timeout:15000});
+ try{
+  const page=await browser.newPage({viewport:{width:1080,height:1920},deviceScaleFactor:1});
+  await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>
+   *{box-sizing:border-box}body{margin:0;width:1080px;height:1920px;background:linear-gradient(155deg,#f7fbff 0%,#e7f1ff 56%,#dbe9fb 100%);font-family:Arial,sans-serif;color:#0b1727;display:flex;align-items:center;justify-content:center;padding:96px}.card{width:100%;background:#fff;border:2px solid #cbd9ea;border-radius:44px;padding:82px 72px;box-shadow:0 28px 80px #102b5224}.eyebrow{font-size:32px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#087df0;margin-bottom:42px}.title{font-size:66px;line-height:1.08;font-weight:850;letter-spacing:-.035em;overflow-wrap:anywhere}.rule{width:120px;height:10px;border-radius:10px;background:#087df0;margin:58px 0 34px}.host{font-size:34px;color:#52667e}.note{font-size:27px;line-height:1.45;color:#647790;margin-top:70px}</style></head><body><main class="card"><div class="eyebrow">Article</div><div class="title"></div><div class="rule"></div><div class="host"></div><div class="note">Open the source to read the original article.</div></main></body></html>`,{waitUntil:'domcontentloaded'});
+  await page.locator('.title').evaluate((el,text)=>{el.textContent=text;},title);
+  await page.locator('.host').evaluate((el,text)=>{el.textContent=text;},host);
+  const png=await page.screenshot({type:'png',fullPage:false,animations:'disabled',timeout:8000});
+  return {png,title,source_url:url};
+ }finally{await browser.close();}
+}
