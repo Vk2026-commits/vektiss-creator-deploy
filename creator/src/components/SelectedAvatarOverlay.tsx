@@ -3,14 +3,15 @@ import {personThumbnail} from '../lib/person-thumbnail';
 import {avatarRepository} from '../lib/avatar-repository';
 import {presenterLayout,previewAspect} from '../domain/presenter-layout';
 import type {VideoPlan} from '../domain/video-plan';
-import {avatarFraming,framedAspect} from '../domain/avatar-framing';
+import {avatarFraming,framedAspect,framingAmount} from '../domain/avatar-framing';
 import {mediaFetch} from '../lib/media-fetch';
 import {subscribeAvatarLibrary} from '../lib/avatar-library-events';
 export function framingPreviewStyle(_framing:VideoPlan['presenter_framing'],_amount:VideoPlan['presenter_framing_amount']){
+ const visible=framingAmount(_framing,_amount);
  // The overlay aspect is already widened to the selected crop. Keep the
- // source image at its natural aspect, pin it to the top, and let the
- // overflow-hidden overlay clip the lower body. Never scale it to fill.
- return {width:'100%',height:'auto',maxWidth:'none',maxHeight:'none',position:'absolute' as const,left:0,top:0};
+ // source aspect, scale uniformly from its height, and clip the lower body.
+ // This also handles wide provider thumbnails without showing their desk.
+ return {width:'auto',height:`${100/visible*100}%`,minWidth:'100%',maxWidth:'none',maxHeight:'none',position:'absolute' as const,left:'50%',top:0,transform:'translateX(-50%)'};
 }
 export function SelectedAvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)=>void}) {
  return <AvatarOverlay key={`${plan.avatar_id}:${plan.avatar_engine}:${plan.format}`} plan={plan} onAspect={onAspect}/>;
