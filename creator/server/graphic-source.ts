@@ -8,7 +8,7 @@ import {z} from 'zod';
 import {publicResource,captureUrl} from './public-network';
 import {mediaBinary} from './media-binaries';
 import {DraftError} from './script-draft';
-import {captureArticle} from './article-capture';
+import {captureArticle,captureArticleCard} from './article-capture';
 const exec=promisify(execFile);
 const decode=(s:string)=>s.replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)));
 export function socialGraphicUrl(value:string){
@@ -58,7 +58,10 @@ export async function graphicSource(root:string,file:string,type:string,input:un
     // A public article can still be useful when a publisher's responsive layout,
     // consent UI, or bot rules prevent a clean viewport screenshot. Fall back to
     // its declared featured image instead of making the creator take a screenshot.
-    const article=await articleGraphicFallback(source_url);bytes=article.body;title=article.title;caption=article.caption??'';
+    try{const article=await articleGraphicFallback(source_url);bytes=article.body;title=article.title;caption=article.caption??'';}
+    catch{
+     const article=await captureArticleCard(source_url);bytes=article.png;title=article.title;
+    }
    }
   }else{
   const page=await publicResource(source_url,AbortSignal.timeout(25000),0,2*1024*1024);
