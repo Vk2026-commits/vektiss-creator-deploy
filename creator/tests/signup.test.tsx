@@ -1,5 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {readFileSync} from 'node:fs';
 import {nameValidation,normalizeName,normalizePhone,phoneValidation,signupValidation,signupError,setupStep} from '../src/lib/signup';
 import {PasswordSignup} from '../src/components/PasswordSignup';
 import {SignIn} from '../src/App';
@@ -43,5 +44,9 @@ describe('password signup',()=>{
   expect(html).not.toContain('Use an email sign-in link instead');
   expect(html).not.toContain('Continue with email');
   expect(html).toContain('Forgot your password? Set or reset it');
+ });
+ it('uses a bounded session recovery fallback instead of leaving the loading screen indefinitely',()=>{
+  const source=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
+  expect(source).toContain('12_000');expect(source).toContain('took too long to restore');
  });
 });

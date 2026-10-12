@@ -81,9 +81,16 @@ export function App() {
     if (!supabase) return;
     let live = true;
     let eventSeen = false;
+    const fallback = window.setTimeout(() => {
+      if (live && !eventSeen) {
+        setAuthError("Your saved sign-in took too long to restore. Please sign in again.");
+        setLoading(false);
+      }
+    }, 12_000);
     const { data } = supabase.auth.onAuthStateChange((_event, value) => {
       eventSeen = true;
       if (live) {
+        window.clearTimeout(fallback);
         if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
         setSession(value);
         setLoading(false);
@@ -93,6 +100,7 @@ export function App() {
       .getSession()
       .then(({ data, error }) => {
         if (live && !eventSeen) {
+          window.clearTimeout(fallback);
           setSession(data.session);
           if (error)
             setAuthError(
@@ -103,12 +111,14 @@ export function App() {
       })
       .catch(() => {
         if (live) {
+          window.clearTimeout(fallback);
           setAuthError("Couldn’t reach sign-in. Reload to retry.");
           setLoading(false);
         }
       });
     return () => {
       live = false;
+      window.clearTimeout(fallback);
       data.subscription.unsubscribe();
     };
   }, []);
