@@ -1,4 +1,5 @@
 import {VideoBackground} from './VideoBackground';
+import {sameAvatarPreview} from '../domain/render-preview-update';
 import {GraphicPreview} from './GraphicPreview';
 import {RenderProgress} from './RenderProgress';
 import {useEffect,useState,useRef} from 'react';
@@ -57,7 +58,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
   if(disabled)return;let live=true,reading=false;setReview(null);setJob(null);
   const read=()=>{if(reading||submitting.current)return;reading=true;setBusy(true);
    void avatarRepository.renderTest({action:'prepare_test',script_id:scriptId,scope:'full'}).then(value=>{if(live){const next=reviewSchema.parse(value);setReview(next);if(next.job)track(next.job);else setJob(null);setError('');
-    if(next.verification&&plan.avatar_id&&(!next.job||next.job.status==='failed')){const avatar_preview={avatar_id:plan.avatar_id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:next.verification.crop.width/next.verification.crop.height};if(JSON.stringify(plan.avatar_preview)!==JSON.stringify(avatar_preview))onPlanChange({...plan,avatar_preview});}
+    if(next.verification&&plan.avatar_id&&(!next.job||next.job.status==='failed')){const avatar_preview={avatar_id:plan.avatar_id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:next.verification.crop.width/next.verification.crop.height};if(!sameAvatarPreview(plan.avatar_preview,avatar_preview))onPlanChange({...plan,avatar_preview});}
    }}).catch(e=>{if(live)setError(e instanceof Error?e.message:'Could not load full-script render.');}).finally(()=>{reading=false;if(live)setBusy(false);});
   };
   read();const off=onResume(read);return()=>{live=false;off();};
