@@ -6,8 +6,10 @@ import {promisify} from 'node:util';
 import {mediaBinary} from '../server/media-binaries';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {verifyAvatarMedia} from '../server/avatar-verification';
 import {hostedHandler,validateHostingConfig,type HostingConfig} from '../server/hosted-server';
 vi.mock('node:fs/promises',async importOriginal=>({...await importOriginal<typeof import('node:fs/promises')>(),statfs:vi.fn(async()=>({bavail:10*1024*1024,bsize:4096}))}));
+vi.mock('../server/avatar-verification',async importOriginal=>({...await importOriginal<typeof import('../server/avatar-verification')>(),verifyAvatarMedia:vi.fn()}));
 const owner='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 let server:Server|undefined,dir='';const realFetch=globalThis.fetch;
@@ -36,6 +38,18 @@ it('serves cached JPEG posters from the authenticated owner’s finished MP4 onl
  vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({id:other}),{status:200}));
  expect((await realFetch(route,{headers})).status).toBe(403);
 },15000);
+it('restores a verified avatar preview after an ephemeral container restart without a paid render',async()=>{
+ const {url,headers,config}=await setup();const id='33333333-3333-4333-8333-333333333333';
+ vi.mocked(verifyAvatarMedia).mockImplementation(async(root,testId,userId,authorization,previewConfig)=>{
+  expect(testId).toBe(id);expect(userId).toBe(owner);expect(authorization).toBe('Bearer test');expect(previewConfig).toBe(config);
+  const folder=join(root,'avatar-previews');await mkdir(folder,{recursive:true});await writeFile(join(folder,`${id}.png`),Buffer.from([137,80,78,71,13,10,26,10]));
+  return {test_id:id};
+ });
+ const route=url+'/api/local-capture/avatar-preview/'+id;
+ expect((await realFetch(route,{headers})).status).toBe(200);
+ expect((await realFetch(route,{headers})).headers.get('content-type')).toBe('image/png');
+ expect(verifyAvatarMedia).toHaveBeenCalledTimes(1);
+});
 it.each(['graphic-source','source-resolve'])('saves screenshots through durable %s and serves only the owner’s graphic',async operation=>{
  const {url,headers}=await setup();const path=join(dir,'graphic.png');
  await promisify(execFile)(mediaBinary('ffmpeg'),['-v','error','-f','lavfi','-i','color=blue:s=64x64','-frames:v','1',path]);

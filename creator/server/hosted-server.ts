@@ -79,7 +79,17 @@ export function hostedHandler(c:HostingConfig){
     catch(e){const message=e instanceof Error?e.message:'';return json(res,422,{error:/^(Complete a short|Could not load your saved test|This avatar video|The short test|Unsupported test video|Could not inspect the avatar|The background could not|Another background check|Unsupported avatar media|The test video could not)/.test(message)?message:'Background check failed. Retry verification; no paid render was started.'});}
    }
    const avatarPoster=path.match(/^\/api\/local-capture\/avatar-preview\/([a-f0-9-]{36})$/);
-   if(req.method==='GET'&&avatarPoster&&uuid.test(avatarPoster[1])){res.setHeader('Content-Type','image/png');return res.end(await readFile(resolve(root,'avatar-previews',`${avatarPoster[1]}.png`)));}
+   if(req.method==='GET'&&avatarPoster&&uuid.test(avatarPoster[1])){
+    const id=avatarPoster[1],poster=resolve(root,'avatar-previews',`${id}.png`);
+    try{
+     // Container files are ephemeral. If a rollout removed the cached cutout,
+     // rebuild it only from this owner's already completed, verified short test.
+     // This never submits a new paid HeyGen render.
+     let png:Buffer;
+     try{png=await readFile(poster);}catch{await verifyAvatarMedia(root,id,user.id,authorization,c);png=await readFile(poster);}
+     res.setHeader('Content-Type','image/png');return res.end(png);
+    }catch{return json(res,422,{error:'We could not restore this clean placement preview. Retry or choose another look. No paid video was started.'});}
+   }
    const jobMatch=path.match(/^\/api\/local-capture\/jobs\/([a-f0-9-]{36})$/);
 	   if(req.method==='GET'&&jobMatch){
 	    const id=jobMatch[1];if(!uuid.test(id))return json(res,404,{error:'Not found'});
