@@ -7,6 +7,23 @@ vi.mock('@supabase/supabase-js',()=>({createClient:()=>({
  from:(table:string)=>table==='creator_profiles'?{select:()=>({eq:(key:string,value:string)=>{mocks.owner(key,value);return {maybeSingle:mocks.creator};}})}:table==='content_profiles'?{select:()=>({eq:()=>({eq:()=>({single:async()=>({data:{name:'test'}})})})})}:{insert:async()=>({}),update:(value:unknown)=>{mocks.update(value);return {eq:async()=>({})};}}
 })}));
 let handler:(request:Request)=>Promise<Response>;
+it.each(['default','campaign','video'])('uses natural %s CTAs without a creator-style preference',async scope=>{
+ mocks.fetch.mockClear();mocks.update.mockClear();mocks.creator.mockResolvedValue({data:{context:emptyCreator.context}});
+ const draft={hook:'Too much admin?',body:'Start with one repeatable task.',cta:'Comment AUDIT for your free personalized AI Business Opportunity Plan to help you reduce manual work.',review:'Source-based.'};
+ const cta={text:'Invite them to comment AUDIT for a plan.',keyword:'AUDIT',offer:'Free personalized AI Business Opportunity Plan',delivery:'I send an assessment link.'};
+ const brief={...emptyBrief(),source:'Business owners describe repetitive administrative work taking several hours each week.',cta_selection:{scope,campaign_id:null,cta}};
+ const req=()=>new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief})});
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
+ expect(await (await handler(req())).json()).toMatchObject({cta:draft.cta});
+ mocks.update.mockClear();
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...draft,cta:cta.text})}}]}));
+ const rejected=await handler(req());expect(rejected.status).toBe(503);expect(await rejected.json()).toEqual({code:'SCRIPT_STYLE'});
+ expect(mocks.update).not.toHaveBeenCalledWith(expect.objectContaining({status:'complete'}));
+ // Exact mode is explicit, not inferred from scope or profile identity.
+ Object.assign(cta,{wording:'exact',text:'Comment AUDIT for my plan.'});
+ mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
+ expect(await (await handler(req())).json()).toMatchObject({cta:cta.text});
+});
 it('loads current owner voice and preserves a concise default CTA instead of overwriting it',async()=>{
  mocks.fetch.mockClear();mocks.owner.mockClear();
  mocks.creator.mockResolvedValue({data:{context:{...emptyCreator.context,communication_style:'Start with a viewer callout. No greetings.',preferred_cta_style:'Short comment-keyword invitation.'}}});
@@ -19,11 +36,11 @@ it('loads current owner voice and preserves a concise default CTA instead of ove
  expect(JSON.parse(payload.messages[1].content).profile.creatorContext.communication_style).toContain('No greetings');
  expect(payload.messages[0].content).toContain('do not paste the full offer description');
  expect(mocks.owner).toHaveBeenCalledWith('user_id','owner');
- // Explicit per-video wording remains exact, even for a creator with a style preference.
+ // Per-video scope is also natural unless exact wording is explicitly selected.
  mocks.fetch.mockResolvedValueOnce(Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]}));
  brief.cta_selection.scope='video';
  const exact=await handler(new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief})}));
- expect((await exact.json()).cta).toBe(brief.cta_selection.cta.text);
+ expect((await exact.json()).cta).toBe(draft.cta);
 });
 it('requests word timestamps for story alignment and records duration-based estimated cost',async()=>{
  mocks.fetch.mockClear();mocks.update.mockClear();

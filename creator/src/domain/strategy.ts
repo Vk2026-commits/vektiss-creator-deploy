@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {ctaSchema,campaignSchema} from './cta.ts';
+import {deliveryProfileSchema} from './delivery.ts';
 
 const text = (max = 2000) => z.string().trim().max(max);
 const items = z.array(z.string().trim().min(1).max(160)).max(20);
@@ -11,6 +12,8 @@ export const audienceItems = z.array(z.string().trim().min(1).max(audienceAnswer
     `Keep this answer within ${audienceAnswerLimit} characters.`);
 export const creatorContextSchema = z
   .object({
+    delivery:deliveryProfileSchema.optional(),
+    delivery_setup:z.enum(['skipped','approved']).optional(),
     expertise: text(),
     experience: text(),
     industries: items,

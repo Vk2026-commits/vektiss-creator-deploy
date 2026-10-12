@@ -9,7 +9,8 @@ import {scriptResponseFormat} from '../../../src/domain/script-response-format.t
 import {boundarySchema,boundaryFormat,boundaryPrompt} from '../../../src/domain/source-cut.ts';
 import {openAICost,PRICING_VERSION} from '../../../src/domain/project-cost.ts';
 import {normalizeGraphicText} from '../../../src/domain/graphic-text.ts';
-import {ctaInstruction,ctaSelectionSchema,containsCtaKeyword} from '../../../src/domain/cta.ts';
+import {ctaInstruction,ctaSelectionSchema,finalizeCta} from '../../../src/domain/cta.ts';
+import {deliveryInstruction} from '../../../src/domain/delivery.ts';
 import {storySectionsFromStarts} from '../../../src/domain/screenshot-story.ts';
 import {creatorContextSchema} from '../../../src/domain/strategy.ts';
 import {appendResearchEvidence} from '../../../src/domain/research-evidence.ts';
@@ -122,12 +123,18 @@ Deno.serve(async request=>{
   const summarize=input!.action==='summarize';
   // Read the authenticated creator's current voice on every draft and rewrite.
   let creatorContext: z.infer<typeof creatorContextSchema> | null = null;
-  if(!summarize && profileId!==steveReactionProfile){
+  let approvedDelivery:z.infer<typeof creatorContextSchema>['delivery'];
+  if(!summarize){
    const creator=await db.from('creator_profiles').select('context').eq('user_id',auth.user.id).maybeSingle();
    if(creator.error)throw Error('PERSISTENCE');
-   if(creator.data?.context)creatorContext=creatorContextSchema.parse(creator.data.context);
+   if(creator.data?.context){
+    const context=creatorContextSchema.parse(creator.data.context);
+    approvedDelivery=context.delivery;
+    if(profileId!==steveReactionProfile)creatorContext=context;
+   }
   }
   if(creatorContext)Object.assign(profile,{creatorContext});
+  if(approvedDelivery)Object.assign(profile,{approvedDelivery});
   // Read the authoritative saved selection. Older processing workers omit newer brief fields.
   let selectedCTA=input!.brief.cta_selection;
   if(projectId){
@@ -135,9 +142,8 @@ Deno.serve(async request=>{
    if(saved.error)throw Error('PERSISTENCE');
    selectedCTA=ctaSelectionSchema.optional().parse(saved.data?.brief?.cta_selection);
   }
-  const conversationalCTA=profileId!==steveReactionProfile && selectedCTA?.scope==='default' && Boolean(creatorContext?.preferred_cta_style.trim());
   const voiceRules=creatorContext?'\nCREATOR VOICE: Apply the supplied creatorContext communication_style, tone, phrases_to_avoid and preferred_cta_style to the spoken wording. These are style preferences, not evidence. Audience strategy determines relevance; the current selected CTA determines the offer and keyword. Reference examples must not replace the current offer. Follow specific speaking preferences over generic greetings. Never invent testimonials, guarantees or personal experiences.':'';
-  const ctaRules=voiceRules+ctaInstruction(selectedCTA,conversationalCTA)+(input!.brief.screenshot_story?'\nWrite one continuous story discussing EACH screenshot in the supplied order. Give each image its own consecutive narration passage. Do not jump back to earlier screenshots. Opening belongs to first image, closing to last. Preserve the audience strategy and requested CTA.':'');
+  const ctaRules=voiceRules+'\n'+deliveryInstruction+ctaInstruction(selectedCTA)+(input!.brief.screenshot_story?'\nWrite one continuous story discussing EACH screenshot in the supplied order. Give each image its own consecutive narration passage. Do not jump back to earlier screenshots. Opening belongs to first image, closing to last. Preserve the audience strategy and requested CTA.':'');
   if(summarize){
    input!.brief.source=appendResearchEvidence(input!.brief.source,input!.brief.research_sources);
    if(input!.brief.source.trim().length<40)input!.brief.source=await readArticle(input!.brief.url);
@@ -167,10 +173,7 @@ Deno.serve(async request=>{
    }
   }
   const output=clarify?questions.parse(parsed):script.parse(profileId===steveReactionProfile?normalizeReactionDraft(script.parse(parsed)):parsed);
-  if(!clarify&&selectedCTA&&'cta' in output){
-   if(!conversationalCTA)output.cta=profileId===steveReactionProfile?selectedCTA.cta.text.replace(/\b911\b/g,'9-1-1'):selectedCTA.cta.text;
-   else if(!containsCtaKeyword(output.cta,selectedCTA.cta.keyword))throw Error('SCRIPT_STYLE');
-  }
+  if(!clarify&&'cta' in output)output.cta=finalizeCta(output.cta,selectedCTA);
   let screenshot_story=input?.brief.screenshot_story;
   let totalUsage:unknown=rewriteUsage?{initial:data.usage,rewrite:rewriteUsage}:data.usage;
   if(!clarify&&screenshot_story&&'hook' in output){
@@ -181,7 +184,7 @@ Deno.serve(async request=>{
    screenshot_story=storySectionsFromStarts(screenshot_story,speech,JSON.parse(mapped.choices[0].message.content).starts);
    totalUsage={initial:totalUsage,rewrite:mapped.usage};
   }
-  const finalOutput={...output,...(!clarify&&screenshot_story?{screenshot_story}:{})};
+  const finalOutput={...output,...(!clarify&&approvedDelivery?{delivery_preferences:approvedDelivery}:{}),...(!clarify&&screenshot_story?{screenshot_story}:{})};
   await persist(finalOutput,totalUsage);return respond({...finalOutput,generationId});
  } catch(error) {const diagnostic={requestId,phase,name:error instanceof Error?error.name:'unknown',reason:error instanceof z.ZodError?error.issues.map(i=>({code:i.code,path:i.path})):error instanceof Error&&['PROVIDER','PERSISTENCE'].includes(error.message)?error.message:'OTHER'};console.error('creator-ai-failed',diagnostic);if(generationId)await db.from('creator_ai_generations').update({status:'error'}).eq('id',generationId);const code=error instanceof Error&&['SOURCE_URL','SOURCE_UNAVAILABLE','SOURCE_TOO_LONG','SCRIPT_STYLE'].includes(error.message)?error.message:'UNAVAILABLE';return respond({code},503);}
 });

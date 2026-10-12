@@ -14,7 +14,7 @@ describe('audience CTA edits',()=>{
  it('ignores metadata when editing a loaded profile',()=>{const loaded={...profile,id:crypto.randomUUID(),user_id:crypto.randomUUID()};expect(contentInputSchema.safeParse(applyProfileProposal(loaded,base)).success).toBe(true);});
  it('edits only requested fields',()=>{const next=applyProfileProposal(profile,{...base,changes:[{field:'tone',value:'Calm\nDirect'}]});expect(next.strategy.tone).toEqual(['Calm','Direct']);expect(next.primary_audience).toBe(profile.primary_audience);});
  it('rejects excessive campaign limits and unknown fields',()=>{expect(profileProposalSchema.safeParse({...base,scope:'next',count:101,cta}).success).toBe(false);expect(profileProposalSchema.safeParse({...base,changes:[{field:'user_id',value:'x'}]}).success).toBe(false);});
- it('empty historic CTA keeps existing instructions untouched',()=>{expect(ctaInstruction(undefined)).toBe('');expect(contentInputSchema.parse(profile).strategy.research_reference_urls).toEqual(['https://example.com']);});
+ it('empty historic CTA uses spoken guidance without inventing an offer',()=>{expect(ctaInstruction(undefined)).toContain('Do not invent an offer');expect(contentInputSchema.parse(profile).strategy.research_reference_urls).toEqual(['https://example.com']);});
  it('explicit CTA takes priority without implying delivery automation',()=>{const instruction=ctaInstruction({cta,scope:'campaign',campaign_id:crypto.randomUUID()});expect(instruction).toContain('sole promotional CTA');expect(instruction).toContain('Do not promise automatic delivery');expect(instruction).toContain('GUIDE');});
  it('rejects blank CTA',()=>{expect(ctaSchema.safeParse({...cta,text:''}).success).toBe(false);});
 });

@@ -16,7 +16,7 @@ export async function scriptAI(action: string, profileId: string, brief?: Script
       throw new Error(Number.isFinite(reset.getTime())?`AI testing/request limit reached. Retry after ${reset.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'})}. Your source is saved—retry the draft without importing again.`:'AI request limit reached. Your source is saved; please retry later.');
     }
     if(code.startsWith('SOURCE_'))throw new Error(code==='SOURCE_TOO_LONG'?'This article is too long to import. Paste the relevant excerpt instead.':'We couldn’t read this source. Try a public article link, or paste the article text below. Your perspective is not needed yet.');
-    if(code==='SCRIPT_STYLE')throw new Error('The draft did not meet Stephen’s reaction style after a rewrite. Your source and previous script are safe. Retry draft—no new import needed.');
+    if(code==='SCRIPT_STYLE')throw new Error('The draft did not meet your script or CTA requirements. Your source and previous script are safe. Retry draft—no new import needed.');
     throw new Error(code === 'NOT_CONFIGURED' ? 'AI is not connected yet. Your brief is safe—save it and add a server-side OpenAI key to enable transcription and writing.' : code === 'RATE_LIMIT' ? 'AI request limit reached. Try again in an hour.' : 'AI could not complete this request. Your inputs are still here; please retry.');
   }
   return data;

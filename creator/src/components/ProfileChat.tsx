@@ -1,6 +1,7 @@
 import {useRef,useState} from 'react';
 import {supabase} from '../lib/supabase';
 import {profileProposalSchema,type ProfileProposal} from '../domain/profile-edit';
+import {CtaWording} from './CtaWording';
 
 export function ProfileChat({profileId,allowVideo=false,onApply}:{profileId:string;allowVideo?:boolean;onApply:(proposal:ProfileProposal)=>Promise<void>}) {
  const [message,setMessage]=useState('');
@@ -43,6 +44,7 @@ export function ProfileChat({profileId,allowVideo=false,onApply}:{profileId:stri
    <h4>Review before saving</h4><p>{proposal.summary}</p>
    {proposal.changes.map((change,i)=><p key={`${change.field}-${i}`}><strong>{change.field.replaceAll('_',' ')}:</strong> {change.value}</p>)}
    {proposal.cta&&<><p><strong>Script CTA:</strong> {proposal.cta.text}</p><p><strong>Delivery:</strong> {proposal.cta.delivery||'Not specified'}</p></>}
+   {proposal.cta&&<CtaWording value={proposal.cta.wording} onChange={wording=>setProposal(old=>old?.cta?{...old,cta:{...old.cta,wording}}:old)}/>}
    <p>{proposal.scope==='next'?`Applies to the next ${proposal.count} distinct approved scripts for this audience. Your default stays unchanged.`:proposal.scope==='default'?'Becomes this audience’s default and ends its temporary CTA.':proposal.scope==='video'?'Applies only to this video; its script will need to be regenerated.':proposal.scope==='cancel'?'Stops this audience’s temporary CTA.':'Updates this audience profile.'}</p>
    <p className="muted">Vektiss writes the invitation. You or your existing delivery tool must send the offer.</p>
    <div className="profile-actions"><button type="button" className="button primary" disabled={busy} onClick={()=>void confirm()}>Confirm changes</button><button type="button" className="button secondary" disabled={busy} onClick={()=>{setProposal(null);setConversation('');}}>Discard</button></div>

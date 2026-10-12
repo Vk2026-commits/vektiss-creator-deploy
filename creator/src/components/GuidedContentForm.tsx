@@ -3,6 +3,7 @@ import {ZodError} from 'zod';
 import {contentInputSchema,emptyContent,explainError,type ContentInput} from '../domain/strategy';
 import {applyProfileProposal} from '../domain/profile-edit';
 import {ProfileChat} from './ProfileChat';
+import {CtaWording} from './CtaWording';
 
 const questions=[
  {key:'name',title:'What should we call this audience profile?',examples:['Credit education for first-time buyers','Money confidence for families','Safety with Steve']},
@@ -23,7 +24,7 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onboar
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const lock=useRef(false);
  const question=questions[step];
  function value(key:Key){if(key==='cta')return draft.cta_default?.text??draft.strategy.preferred_ctas.join('\n');if(key==='name'||key==='primary_audience')return draft[key];return draft.strategy[key].join('\n');}
- function change(key:Key,text:string){setDraft(old=>key==='cta'?{...old,cta_default:{text,keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??''}}:key==='name'||key==='primary_audience'?{...old,[key]:text}:{...old,strategy:{...old.strategy,[key]:text.split('\n')}});}
+ function change(key:Key,text:string){setDraft(old=>key==='cta'?{...old,cta_default:{...old.cta_default,text,keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??''}}:key==='name'||key==='primary_audience'?{...old,[key]:text}:{...old,strategy:{...old.strategy,[key]:text.split('\n')}});}
  async function save(next=draft){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{
   const cleaned={...next,strategy:Object.fromEntries(Object.entries(next.strategy).map(([k,v])=>[k,Array.isArray(v)?v.map(x=>x.trim()).filter(Boolean):v]))};
   if(cleaned.cta_default&&!cleaned.cta_default.text.trim())cleaned.cta_default=null;
@@ -38,8 +39,9 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onboar
    {question.key==='cta'&&<p>This becomes the audience’s default CTA. After saving, use chat to set a temporary CTA for your next posts.</p>}
    <label className="field"><span>{question.key==='name'||question.key==='primary_audience'?'Your answer':'Your answer (optional)'}</span><textarea key={question.key} autoFocus rows={3} value={value(question.key)} maxLength={question.key==='name'?100:question.key==='primary_audience'?1000:question.key==='cta'?500:3220} onChange={e=>change(question.key,e.target.value)} placeholder="Type your answer or choose an example below…" /></label>
    <div className="profile-examples" aria-label="Examples you can edit">{question.examples.map(example=><button type="button" key={example} onClick={()=>change(question.key,['name','primary_audience','cta'].includes(question.key)?example:[value(question.key),example].filter(Boolean).join('\n'))}>{example}</button>)}</div>
-   {question.key==='cta'&&<><p>For a comment-to-receive invitation, tell us the keyword, offer, and delivery method. Vektiss does not send DMs or fulfill offers.</p>{(['keyword','offer','delivery'] as const).map(key=><label className="field" key={key}><span>{key==='keyword'?'Comment keyword':key==='offer'?'What will they receive?':'How will you deliver it?'}</span><input value={draft.cta_default?.[key]??''} maxLength={key==='keyword'?60:key==='offer'?200:300} onChange={e=>setDraft(old=>({...old,cta_default:{text:old.cta_default?.text??'',keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??'',[key]:e.target.value}}))} /></label>)}</>}
+   {question.key==='cta'&&<><p>For a comment-to-receive invitation, tell us the keyword, offer, and delivery method. Vektiss does not send DMs or fulfill offers.</p>{(['keyword','offer','delivery'] as const).map(key=><label className="field" key={key}><span>{key==='keyword'?'Comment keyword':key==='offer'?'What will they receive?':'How will you deliver it?'}</span><input value={draft.cta_default?.[key]??''} maxLength={key==='keyword'?60:key==='offer'?200:300} onChange={e=>setDraft(old=>({...old,cta_default:{...old.cta_default,text:old.cta_default?.text??'',keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??'',[key]:e.target.value}}))} /></label>)}</>}
    <div className="profile-actions"><button type="button" className="button secondary" disabled={step===0} onClick={()=>setStep(s=>s-1)}>Back</button><button type="button" className="button primary" disabled={['name','primary_audience'].includes(question.key)&&!value(question.key).trim()} onClick={()=>setStep(s=>s+1)}>{step===questions.length-1?'Review profile':'Next'} →</button></div>
+   {question.key==='cta'&&<CtaWording value={draft.cta_default?.wording} onChange={wording=>setDraft(old=>({...old,cta_default:{text:value('cta'),keyword:'',offer:'',delivery:'',...old.cta_default,wording}}))}/>}
   </>:<>
    {profileId&&!preview&&<ProfileChat profileId={profileId} onApply={async proposal=>{await onSave(applyProfileProposal(draft,proposal));onClose();}} />}
    <details open={!profileId}><summary>{profileId?'Review or edit individual answers':'Your answers'}</summary>
