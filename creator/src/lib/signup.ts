@@ -4,6 +4,17 @@ export function signupValidation(password: string, confirmation: string): string
   return '';
 }
 
+export function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ');
+}
+
+export function nameValidation(firstName: string, lastName: string): string {
+  if (!normalizeName(firstName)) return 'Enter your first name.';
+  if (!normalizeName(lastName)) return 'Enter your last name.';
+  if (normalizeName(firstName).length > 100 || normalizeName(lastName).length > 100) return 'Names must be 100 characters or fewer.';
+  return '';
+}
+
 export function normalizePhone(phone: string): string {
   return phone.trim().replace(/[\s().-]/g, '');
 }

@@ -1,6 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {normalizePhone,phoneValidation,signupValidation,signupError,setupStep} from '../src/lib/signup';
+import {nameValidation,normalizeName,normalizePhone,phoneValidation,signupValidation,signupError,setupStep} from '../src/lib/signup';
 import {PasswordSignup} from '../src/components/PasswordSignup';
 import {SignIn} from '../src/App';
 vi.mock('../src/lib/supabase',()=>({supabase:{auth:{}},localPreviewAvailable:false}));
@@ -13,6 +13,12 @@ describe('password signup',()=>{
   expect(signupValidation('short','short')).toContain('12');
   expect(signupValidation('long-enough-password','different')).toContain('match');
   expect(signupValidation('long-enough-password','long-enough-password')).toBe('');
+ });
+ it('requires and normalizes first and last names',()=>{
+  expect(nameValidation('', 'Doe')).toContain('first name');
+  expect(nameValidation('Jane', '')).toContain('last name');
+  expect(nameValidation('  Jane  ', '  van   Doe ')).toBe('');
+  expect(normalizeName('  Jane   van Doe ')).toBe('Jane van Doe');
  });
  it('requires and normalizes an international contact phone number',()=>{
   expect(phoneValidation('')).toContain('international');
@@ -27,7 +33,7 @@ describe('password signup',()=>{
  it('provides labelled password-manager compatible signup fields',()=>{
   const html=renderToStaticMarkup(<PasswordSignup onSignIn={()=>{}}/>);
   expect(html).toContain('Create your account');expect(html.match(/autoComplete="new-password"/g)).toHaveLength(2);
-  expect(html).toContain('Phone number');expect(html).toContain('autoComplete="tel"');expect(html).toContain('Confirm password');expect(html).toContain('Show passwords');expect(html).toContain('Back to sign in');
+  expect(html).toContain('First name');expect(html).toContain('autoComplete="given-name"');expect(html).toContain('Last name');expect(html).toContain('autoComplete="family-name"');expect(html).toContain('Phone number');expect(html).toContain('autoComplete="tel"');expect(html).toContain('Confirm password');expect(html).toContain('Show passwords');expect(html).toContain('Back to sign in');
  });
  it('shows password sign-in without requiring a mode switch',()=>{
   const html=renderToStaticMarkup(<SignIn onPreview={async()=>{}} initialError=""/>);

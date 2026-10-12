@@ -1,17 +1,17 @@
 import {useRef,useState,type FormEvent} from 'react';
 import {supabase} from '../lib/supabase';
 import {authRedirectUrl} from '../lib/auth-redirect';
-import {normalizePhone,phoneValidation,signupValidation,signupError} from '../lib/signup';
+import {nameValidation,normalizeName,normalizePhone,phoneValidation,signupValidation,signupError} from '../lib/signup';
 
 export function PasswordSignup({onSignIn}:{onSignIn:()=>void}) {
- const [email,setEmail]=useState('');const [phone,setPhone]=useState('');const [password,setPassword]=useState('');const [confirmation,setConfirmation]=useState('');
+ const [email,setEmail]=useState('');const [firstName,setFirstName]=useState('');const [lastName,setLastName]=useState('');const [phone,setPhone]=useState('');const [password,setPassword]=useState('');const [confirmation,setConfirmation]=useState('');
  const [show,setShow]=useState(false);const [sent,setSent]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  const lock=useRef(false);const lastSent=useRef(0);
  async function submit(event:FormEvent){event.preventDefault();if(lock.current||!supabase)return;
-  const invalid=phoneValidation(phone)||signupValidation(password,confirmation);if(invalid){setError(invalid);return;}
+  const invalid=nameValidation(firstName,lastName)||phoneValidation(phone)||signupValidation(password,confirmation);if(invalid){setError(invalid);return;}
   lock.current=true;setBusy(true);setError('');
-  try{const result=await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:authRedirectUrl(window.location.origin),data:{contact_phone:normalizePhone(phone)}}});
-   if(result.error)throw result.error;setPhone('');setPassword('');setConfirmation('');setSent(true);lastSent.current=Date.now();
+  try{const result=await supabase.auth.signUp({email:email.trim(),password,options:{emailRedirectTo:authRedirectUrl(window.location.origin),data:{first_name:normalizeName(firstName),last_name:normalizeName(lastName),contact_phone:normalizePhone(phone)}}});
+   if(result.error)throw result.error;setFirstName('');setLastName('');setPhone('');setPassword('');setConfirmation('');setSent(true);lastSent.current=Date.now();
   }catch(e){setError(signupError(e));}finally{lock.current=false;setBusy(false);}
  }
  async function resend(){if(lock.current||!supabase)return;if(Date.now()-lastSent.current<60000){setError('Please wait a minute before requesting another email.');return;}
@@ -23,6 +23,8 @@ export function PasswordSignup({onSignIn}:{onSignIn:()=>void}) {
    <p>Your own workspace, profiles, and videos—all saved to your account.</p>
    <form onSubmit={submit}>
     <label className="field"><span>Email address</span><input required type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} disabled={busy}/></label>
+    <label className="field"><span>First name</span><input required type="text" autoComplete="given-name" maxLength={100} value={firstName} onChange={e=>setFirstName(e.target.value)} disabled={busy}/></label>
+    <label className="field"><span>Last name</span><input required type="text" autoComplete="family-name" maxLength={100} value={lastName} onChange={e=>setLastName(e.target.value)} disabled={busy}/></label>
     <label className="field"><span>Phone number</span><input required type="tel" inputMode="tel" autoComplete="tel" placeholder="+1 555 123 4567" value={phone} onChange={e=>setPhone(e.target.value)} disabled={busy} aria-describedby="signup-phone-help"/></label>
     <p id="signup-phone-help">Use international format, including country code. This is your account contact number and is not used to sign in.</p>
     <label className="field"><span>Password</span><input required type={show?'text':'password'} autoComplete="new-password" minLength={12} value={password} onChange={e=>setPassword(e.target.value)} disabled={busy} aria-describedby="signup-password-help"/></label>
