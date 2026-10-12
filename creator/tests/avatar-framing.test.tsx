@@ -26,7 +26,8 @@ it('trims only below the framing preset without changing person width',()=>{
 });
 
 it('renders head-and-shoulders as an actual top-of-source crop in the editor',()=>{
-	 expect(framingPreviewStyle('head-shoulders',undefined)).toMatchObject({height:'181.8181818181818%',objectFit:'fill',objectPosition:'center top'});
+ expect(framingPreviewStyle('head-shoulders',undefined)).toMatchObject({height:'auto',position:'absolute',top:0,left:0});
+ expect(framingPreviewStyle('head-shoulders',undefined)).not.toHaveProperty('objectFit','fill');
 });
 
 it('scales and anchors the framed person with the same layout math as export',()=>{
