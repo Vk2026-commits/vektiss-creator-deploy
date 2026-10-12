@@ -10,7 +10,7 @@ import {composeSchema} from './compose-video';
 import {publicResource} from './public-network';
 import {presenterCleanup,repairedCompositionId} from './presenter-cleanup';
 import {presenterLayout} from '../src/domain/presenter-layout';
-import {avatarFramingSchema,avatarFramingCrop,fixedPresenterCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
+import {avatarFramingSchema,avatarFramingCrop,fixedPresenterCrop,presenterBaseCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
 import {renderReactionSequence,REACTION_SEQUENCE_VERSION} from './reaction-sequence';
 import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type ScreenshotStory} from '../src/domain/screenshot-story';
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
@@ -45,7 +45,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
   for(const image of story.images)await readFile(resolve(root,'.local-captures',`${image.id}.png`));
  }
  if(job.script_id!==c.script_id||job.status!=='completed'||job.snapshot?.scope!=='full'||typeof job.video_url!=='string')throw Error('A completed full-script presenter is required.');
- const baseId=createHash('sha256').update(JSON.stringify({user:job.user_id,...c,...(story?{story,story_version:STORY_COMPOSITION_VERSION}:{}),...(c.video_id?{sequence:REACTION_SEQUENCE_VERSION}:{})})).digest('hex');
+ const baseId=createHash('sha256').update(JSON.stringify({user:job.user_id,framing_version:2,...c,...(story?{story,story_version:STORY_COMPOSITION_VERSION}:{}),...(c.video_id?{sequence:REACTION_SEQUENCE_VERSION}:{})})).digest('hex');
  const id=repairedCompositionId(baseId,c.job_id);
  const folder=resolve(root,'edit/compositions');await mkdir(folder,{recursive:true});
  const output=resolve(folder,`${id}.mp4`);const meta=resolve(folder,`${id}.json`);
@@ -71,7 +71,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const detected=alphaBounds(bounds.stderr,stream.width,stream.height,c.placement?0:8);
  const verified=job.snapshot?.verified_frame;
  if(verified&&(verified.source_width!==stream.width||verified.source_height!==stream.height))throw Error('The avatar framing changed. Your paid render is saved; contact support before retrying assembly.');
-	 const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??verified?.crop??detected,c.presenter_framing,c.presenter_framing_amount,c.presenter_framing_position);
+	 const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??presenterBaseCrop(detected,verified?.crop,stream.width,stream.height),c.presenter_framing,c.presenter_framing_amount,c.presenter_framing_position);
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
  const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;

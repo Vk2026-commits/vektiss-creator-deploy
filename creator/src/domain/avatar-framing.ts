@@ -24,6 +24,14 @@ export const customFramingBounds={min:CUSTOM_MIN_AMOUNT,max:CUSTOM_MAX_AMOUNT,de
 export const customFramingPositionBounds={min:0,max:100,default:0};
 
 export type PersonCrop={x:number;y:number;width:number;height:number};
+// Older approvals stored the full output canvas as a "verified" crop. That
+// proves neither subject bounds nor framing: scaling it shrinks the person,
+// and a head/shoulder crop cuts empty space instead of the lower body.
+export function presenterBaseCrop(detected:PersonCrop,verified:PersonCrop|undefined,sourceWidth:number,sourceHeight:number):PersonCrop{
+ if(!verified)return detected;
+ const fullCanvas=verified.x===0&&verified.y===0&&verified.width===sourceWidth&&verified.height===sourceHeight;
+ return fullCanvas?detected:verified;
+}
 export function framingAmount(framing:AvatarFraming|undefined,amount:number|undefined){
  if(!framing||framing==='original')return CUSTOM_MAX_AMOUNT;
  const value=framing==='custom'?Math.round(amount??DEFAULT_CUSTOM_AMOUNT):framePresetAmounts[framing];
