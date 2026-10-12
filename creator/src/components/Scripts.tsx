@@ -9,6 +9,7 @@ import { scriptAI } from '../lib/script-ai';
 import { VideoPlan } from './VideoPlan';
 import { newVideoPlan,renderStateFromJob,videoRenderProgress,type VideoPlan as Plan,type VideoRender } from '../domain/video-plan';
 import { FullScriptRender } from './FullScriptRender';
+import {mergeRenderPreview} from '../domain/render-preview-update';
 import { explainError, type ContentProfile } from '../domain/strategy';
 import { scriptRepository } from '../lib/script-repository';
 import './scripts.css';
@@ -91,6 +92,15 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     onResearchIntentHandled?.();
   },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
+  function updateRenderPreview(incoming:Plan){
+    const snapshot=latest.current;
+    const production=snapshot.brief.production;
+    if(!production)return;
+    const next=mergeRenderPreview(production,incoming);
+    if(next===production)return;
+    setDraft({...snapshot,brief:{...snapshot.brief,production:next}});
+    setDirty(true);
+  }
   useEffect(()=>{
     // Source preparation owns the next save; avoid racing its revision-checked handoff.
     if(!dirty||busy||sourceProcessing||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
@@ -318,7 +328,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         </fieldset>
 	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
         </>}
-	        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onRenderStateChange={render=>saveRender(current.id,render)} onViewLibrary={viewLibrary} onNewVideo={()=>open(null)} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+	        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={updateRenderPreview} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onRenderStateChange={render=>saveRender(current.id,render)} onViewLibrary={viewLibrary} onNewVideo={()=>open(null)} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
 	        </>}
       </section>
     </div>
