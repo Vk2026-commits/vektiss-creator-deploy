@@ -28,7 +28,8 @@ describe('password signup',()=>{
   expect(html).toContain('Sign in with your email and password.');
   expect(html).toContain('autoComplete="current-password"');
   expect(html).toContain('New to Creator? Create an account');
-  expect(html).toContain('Use an email sign-in link instead');
+  expect(html).not.toContain('Use an email sign-in link instead');
+  expect(html).not.toContain('Continue with email');
   expect(html).toContain('Forgot your password? Set or reset it');
  });
 });

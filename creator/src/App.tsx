@@ -7,7 +7,6 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { authRedirectUrl } from './lib/auth-redirect';
-import { signInError } from './lib/auth-errors';
 import {PasswordSignup} from './components/PasswordSignup';
 import {setupStep} from './lib/signup';
 import { AvatarLibrary } from "./components/AvatarLibrary";
@@ -71,7 +70,7 @@ export function App() {
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authError, setAuthError] = useState(() =>
     new URLSearchParams(window.location.hash.slice(1)).has("error")
-      ? "That sign-in link is invalid or expired. Request a new one below."
+      ? "That password reset link is invalid or expired. Request a new one below."
       : "",
   );
   const [preview, setPreview] = useState(false);
@@ -194,7 +193,7 @@ export function SignIn({
 }) {
   const [email, setEmail] = useState("");
   const [signup,setSignup]=useState(false);
-  const [mode,setMode]=useState<'link'|'password'|'reset'>('password');
+  const [mode,setMode]=useState<'password'|'reset'>('password');
   const [password,setPassword]=useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
@@ -215,14 +214,8 @@ export function SignIn({
         if(result.error)throw result.error;
         setSent(true);return;
       }
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: { emailRedirectTo: authRedirectUrl(window.location.origin) },
-      });
-      if (error) throw error;
-      setSent(true);
     } catch (error) {
-      setError(mode==='password'?'Could not sign in. Check your email and password, or use Set / reset password.':signInError(error));
+      setError(mode==='password'?'Could not sign in. Check your email and password, or use Set / reset password.':'Could not send a password setup link. Please try again in a moment.');
     } finally {
       setBusy(false);
     }
@@ -269,10 +262,7 @@ export function SignIn({
             sent ? (
               <>
                 <p>
-                  {mode==='reset'?<>If an account exists for <strong>{email}</strong>, a password setup link has been requested. Open it to choose your password.</>:<>We sent a sign-in link to <strong>{email}</strong>. Open it to
-                  enter your workspace. Open the link on this computer and
-                  continue in the browser where it opens. Signing in there
-                  does not sign in this browser automatically.</>}
+                  If an account exists for <strong>{email}</strong>, a password setup link has been requested. Open it to choose your password.
                 </p>
                 <button
                   className="button secondary"
@@ -283,7 +273,7 @@ export function SignIn({
               </>
             ) : (
               <>
-                <p>{mode==='password'?'Sign in with your email and password. New to Creator? Create an account below.':mode==='reset'?'We’ll email you a secure link to set or reset your password.':'Sign in with a secure email link.'}</p>
+                <p>{mode==='password'?'Sign in with your email and password. New to Creator? Create an account below.':'We’ll email you a secure link to set or reset your password.'}</p>
                 <form onSubmit={submit}>
                   <label className="field">
                     <span>Email address</span>
@@ -298,14 +288,13 @@ export function SignIn({
                   </label>
                   {mode==='password'&&<label className="field"><span>Password</span><input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>}
                   <button className="button primary" disabled={busy}>
-                    {busy ? "Please wait…" : mode==='password'?'Sign in':mode==='reset'?'Send password setup link':"Continue with email"}
+                    {busy ? "Please wait…" : mode==='password'?'Sign in':'Send password setup link'}
                     <ArrowRight size={17} />
                   </button>
                 </form>
                 <div className="auth-actions">
                   <button type="button" className="auth-account-link" disabled={busy} onClick={()=>setSignup(true)}>New to Creator? Create an account</button>
                   {mode!=='password'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('password');setError('');setPassword('');}}>Use email and password</button>}
-                  {mode!=='link'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('link');setError('');setPassword('');}}>Use an email sign-in link instead</button>}
                   {mode!=='reset'&&<button type="button" className="text-button" disabled={busy} onClick={()=>{setMode('reset');setError('');setPassword('');}}>Forgot your password? Set or reset it</button>}
                 </div>
               </>
