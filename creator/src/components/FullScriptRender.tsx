@@ -28,12 +28,17 @@ type Props={
 };
 
 function sameRender(a:VideoRender|undefined,b:VideoRender){return a?.job_id===b.job_id&&a.status===b.status&&a.export_id===b.export_id&&a.message===b.message;}
+export function savedExportJob(render:VideoRender|undefined){
+ if(render?.status!=='ready'||!render.export_id)return null;
+ return {id:render.job_id,status:'completed',video_url:null,message:null};
+}
 
 export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,sourceKind='article',sourceUrl='',onPlanChange,onRenderStateChange,onViewLibrary,onNewVideo}:Props){
+ const persistedJob=savedExportJob(plan.render);
  const [videoReady,setVideoReady]=useState(false);
  const [verificationEpoch,setVerificationEpoch]=useState(0);
  const [review,setReview]=useState<z.infer<typeof reviewSchema>|null>(null);
- const [job,setJob]=useState<z.infer<typeof jobSchema>|null>(null);
+ const [job,setJob]=useState<z.infer<typeof jobSchema>|null>(()=>persistedJob);
  const [submitted,setSubmitted]=useState(Boolean(plan.render));
  const submitting=useRef(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
  const backgroundReady=sourceKind==='video'?videoReady:sourceKind==='graphic'?Boolean(plan.article_capture):true;
@@ -45,14 +50,18 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
   const state=renderStateFromJob(next,plan.render?.job_id===next.id?plan.render:undefined);
   if(!sameRender(plan.render,state))onRenderStateChange?.(state);
  };
- useEffect(()=>{if(disabled)return;let live=true,reading=false;setReview(null);setJob(null);
+ useEffect(()=>{
+  // The durable export ID is the authority for an already finished video.
+  // Do not wait on a provider/catalog status recheck before opening it.
+  if(persistedJob){setReview(null);setJob(persistedJob);setError('');return;}
+  if(disabled)return;let live=true,reading=false;setReview(null);setJob(null);
   const read=()=>{if(reading||submitting.current)return;reading=true;setBusy(true);
    void avatarRepository.renderTest({action:'prepare_test',script_id:scriptId,scope:'full'}).then(value=>{if(live){const next=reviewSchema.parse(value);setReview(next);if(next.job)track(next.job);else setJob(null);setError('');
     if(next.verification&&plan.avatar_id&&(!next.job||next.job.status==='failed')){const avatar_preview={avatar_id:plan.avatar_id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:next.verification.crop.width/next.verification.crop.height};if(JSON.stringify(plan.avatar_preview)!==JSON.stringify(avatar_preview))onPlanChange({...plan,avatar_preview});}
    }}).catch(e=>{if(live)setError(e instanceof Error?e.message:'Could not load full-script render.');}).finally(()=>{reading=false;if(live)setBusy(false);});
   };
   read();const off=onResume(read);return()=>{live=false;off();};
- },[scriptId,revision,disabled,verificationEpoch]);
+ },[scriptId,revision,disabled,verificationEpoch,persistedJob?.id]);
  const jobId=job?.id;
  useEffect(()=>{if(!jobId||!active)return;return watchRender(async()=>jobSchema.parse(await avatarRepository.renderTest({action:'test_status',test_id:jobId})),value=>{track(value);setError('');},()=>setError('Reconnecting to your saved render… No new render will be submitted.'));},[jobId,active]);
  async function start(retry=false){

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { newVideoPlan,planReady,renderStateFromJob,videoPlanSchema,videoRenderProgress } from '../src/domain/video-plan';
 import { VideoPlan } from '../src/components/VideoPlan';
 import { completedExportId,FinishedVideo } from '../src/components/FinishedVideo';
+import { savedExportJob } from '../src/components/FullScriptRender';
 import { scriptSchema } from '../src/domain/scripts';
 const script=scriptSchema.parse({content_profile_id:'profile',title:'Test',hook:'A hook',body:'A clear message.',cta:'Save this.'});
 const props={script,preview:true,busy:false,onChange:()=>{},onSave:()=>{},onEdit:()=>{}};
@@ -38,7 +39,9 @@ it('reopens a completed export directly instead of queueing another assembly',()
  const exportId='a'.repeat(64);
  const ready={...newVideoPlan(),render:{job_id:'11111111-1111-4111-8111-111111111111',status:'ready' as const,submitted_at:'2026-10-12T18:00:00Z',updated_at:'2026-10-12T18:05:00Z',export_id:exportId,message:null}};
  expect(completedExportId(ready)).toBe(exportId);
+ expect(savedExportJob(ready.render)).toMatchObject({id:ready.render.job_id,status:'completed'});
  expect(completedExportId({...ready,render:{...ready.render,status:'assembling'}})).toBeUndefined();
+ expect(savedExportJob({...ready.render,status:'assembling'})).toBeNull();
 });
 it('starts with explicit script approval',()=>{
  const plan=newVideoPlan();expect(planReady(plan)).toBe(false);
