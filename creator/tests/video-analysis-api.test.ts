@@ -7,6 +7,22 @@ vi.mock('@supabase/supabase-js',()=>({createClient:()=>({
  from:(table:string)=>table==='creator_profiles'?{select:()=>({eq:(key:string,value:string)=>{mocks.owner(key,value);return {maybeSingle:mocks.creator};}})}:table==='content_profiles'?{select:()=>({eq:()=>({eq:()=>({single:async()=>({data:{name:'test'}})})})})}:{insert:async()=>({}),update:(value:unknown)=>{mocks.update(value);return {eq:async()=>({})};}}
 })}));
 let handler:(request:Request)=>Promise<Response>;
+it('repairs social openings for any creator and rejects an unrepaired draft without saving it',async()=>{
+ mocks.fetch.mockClear();mocks.update.mockClear();mocks.creator.mockResolvedValue({data:{context:emptyCreator.context}});
+ const bad={hook:'Still doing admin all weekend?',body:'Today, I want to talk about a revolutionary tool.',cta:'Check your workflow first.',review:'Commentary.'};
+ const good={...bad,body:'OpenAI announced agents for recurring work. Start with one task you can check.'};
+ const response=(draft:typeof bad)=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(draft)}}]});
+ const req=()=>new Request('https://test',{method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({action:'generate',profileId:'11111111-1111-4111-8111-111111111111',brief:{...emptyBrief(),source:'OpenAI announced agents for recurring work, with human review.'}})});
+ mocks.fetch.mockResolvedValueOnce(response(bad)).mockResolvedValueOnce(response(good));
+ expect(await (await handler(req())).json()).toMatchObject(good);
+ const repair=JSON.parse(mocks.fetch.mock.calls[1][1].body);
+ expect(repair.messages[0].content).toContain('SOCIAL REACTION FORMAT');
+ expect(repair.messages[0].content).not.toContain("Stephen's saved working playbook");
+ mocks.update.mockClear();
+ mocks.fetch.mockResolvedValueOnce(response(bad)).mockResolvedValueOnce(response(bad));
+ expect(await (await handler(req())).json()).toEqual({code:'SCRIPT_STYLE'});
+ expect(mocks.update).not.toHaveBeenCalledWith(expect.objectContaining({status:'complete'}));
+});
 it.each(['default','campaign','video'])('uses natural %s CTAs without a creator-style preference',async scope=>{
  mocks.fetch.mockClear();mocks.update.mockClear();mocks.creator.mockResolvedValue({data:{context:emptyCreator.context}});
  const draft={hook:'Too much admin?',body:'Start with one repeatable task.',cta:'Comment AUDIT for your free personalized AI Business Opportunity Plan to help you reduce manual work.',review:'Source-based.'};

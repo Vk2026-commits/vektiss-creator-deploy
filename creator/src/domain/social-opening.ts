@@ -1,0 +1,10 @@
+// Applies to every creator and source type, including explicit rewrites.
+export const socialOpeningInstruction = `SOCIAL REACTION FORMAT: Write speech for a short social reaction, not a presentation, article summary or product advertisement. Open with one short, specific audience question, relatable tension, or source-supported news takeaway. Do not force a question into every video. Avoid vague hooks such as "Have you ever felt overwhelmed by the sheer amount of work?"; name the actual task, consequence or change. The first body sentence must go straight into the specific event, person, company or situation (for OpenAI news, name OpenAI and the reported development immediately). Do not introduce the introduction or repeat the hook. Never use "Today I want to talk about", "Today we're going to discuss", "Let's dive into", "In this video", or "I'm going to tell you about". Follow the source with the creator's useful reaction: why it matters, a practical implication, distinction or caution. Use short conversational sentences and the creator's approved delivery preferences, without inventing personal experience. Do not call something revolutionary, game-changing, big news or a breakthrough unless the source warrants that significance; describe the concrete change instead. No Markdown emphasis or headings in spoken fields. Keep the natural, topic-relevant CTA and its offer commitments.`;
+
+export function socialOpeningIssues(draft:{hook:string;body:string}){
+ const opening=[draft.hook,draft.body].join(' ');
+ const issues:string[]=[];
+ if(/\b(?:today\s*,?\s*(?:I|we)\s+(?:(?:want|wanted)\s+to\s+(?:talk|discuss)|(?:are\s+going\s+to|will)\s+(?:talk|discuss))|(?:let['’]s|let us)\s+(?:dive into|talk about|discuss|explore)|in this video\s*,?\s*(?:I|we)|I['’]m going to (?:tell you|talk) about)\b/i.test(opening))issues.push('Remove presentation-style setup. Start with a specific social hook and move directly into the source in the first body sentence.');
+ if(/\*\*|__|^\s*#{1,6}\s/m.test(opening))issues.push('Remove Markdown formatting from spoken text.');
+ return issues;
+}
