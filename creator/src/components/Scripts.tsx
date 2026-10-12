@@ -7,7 +7,7 @@ import { emptyBrief, briefSchema, type ScriptBrief } from '../domain/script-brie
 import { ScriptIntake } from './ScriptIntake';
 import { scriptAI } from '../lib/script-ai';
 import { VideoPlan } from './VideoPlan';
-import { newVideoPlan, type VideoPlan as Plan } from '../domain/video-plan';
+import { newVideoPlan,renderStateFromJob,videoRenderProgress,type VideoPlan as Plan,type VideoRender } from '../domain/video-plan';
 import { FullScriptRender } from './FullScriptRender';
 import { explainError, type ContentProfile } from '../domain/strategy';
 import { scriptRepository } from '../lib/script-repository';
@@ -24,6 +24,9 @@ import {ProfileChat} from './ProfileChat';
 import {applyProfileProposal} from '../domain/profile-edit';
 import {createSupabaseRepository} from '../lib/repository';
 import {supabase} from '../lib/supabase';
+import {avatarRepository} from '../lib/avatar-repository';
+import {watchRender} from '../lib/watch-render';
+import {fullCompositionInput} from '../lib/full-composition-input';
 
 export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
@@ -37,6 +40,10 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const [draft, setDraft] = useState<ScriptInput>(empty);
   const [current, setCurrent] = useState<Script | null>(null);
   const [saved, setSaved] = useState<Script[]>([]);
+  const [renderStates,setRenderStates]=useState<Record<string,VideoRender|undefined>>({});
+  const [libraryView,setLibraryView]=useState(false);
+  const [queueEpoch,setQueueEpoch]=useState(0);
+  const compositionActive=useRef(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const generating = useRef(false);
@@ -134,8 +141,20 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
     if (dirty && !window.confirm('Some changes have not saved yet. Leave this video anyway?')) return;
     const nextWorkspace=item?.id??crypto.randomUUID();setWorkspaceId(nextWorkspace);
     const parsed = briefSchema.safeParse(item?.brief);
-    setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
+    setLibraryView(false);setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
   }
+  function sameRender(a:VideoRender|undefined,b:VideoRender){return a?.job_id===b.job_id&&a.status===b.status&&a.export_id===b.export_id&&a.message===b.message;}
+  function saveRender(scriptId:string,render:VideoRender){
+    const previous=renderStates[scriptId]??saved.find(item=>item.id===scriptId)?.brief.production?.render;
+    if(sameRender(previous,render))return;
+    setRenderStates(states=>({...states,[scriptId]:render}));
+    const previousScript=saved.find(item=>item.id===scriptId);if(!previousScript?.brief.production)return;
+    const next={...previousScript,brief:{...previousScript.brief,production:{...previousScript.brief.production,render}}};
+    setSaved(items=>[next,...items.filter(item=>item.id!==scriptId)]);
+    if(current?.id===scriptId){setCurrent(next);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render}}}));}
+    void repo.save(next,previousScript).then(item=>{setSaved(items=>[item,...items.filter(value=>value.id!==item.id)]);if(current?.id===item.id){setCurrent(item);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render:item.brief.production?.render}}}));}}).catch(e=>setError(`Could not save render progress: ${explainError(e)}`));
+  }
+  function viewLibrary(){if(busy||sourceProcessing)return;setLibraryView(true);setCurrent(null);setPlanning(false);setDirty(false);setMessage('Your submitted video continues in My videos.');setError('');}
   function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
   function viewStep(index:number){
     if(index===1){setPlanning(false);setEditingScript(false);}
@@ -216,14 +235,44 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
       if(item.brief.stage==='review')setPlanning(true);
     } catch (e) { setError(explainError(e)); } finally { savingPlan.current=false;setBusy(false); }
   }
+  useEffect(()=>{
+    if(preview)return;
+    const stops=saved.flatMap(item=>{
+      const tracked=renderStates[item.id]??item.brief.production?.render;
+      if(!tracked||!['submitting','pending','processing'].includes(tracked.status))return [];
+      return [watchRender(async()=>{
+        const value=await avatarRepository.renderTest({action:'test_status',test_id:tracked.job_id});
+        return {id:String(value.id),status:String(value.status),message:typeof value.message==='string'?value.message:null};
+      },job=>saveRender(item.id,renderStateFromJob(job,tracked)),()=>saveRender(item.id,{...tracked,status:'uncertain',updated_at:new Date().toISOString(),message:'Reconnecting to your saved render…'}),30000)];
+    });
+    return()=>stops.forEach(stop=>stop());
+  },[saved,renderStates,preview]);
+  useEffect(()=>{
+    if(preview||compositionActive.current)return;
+    const candidate=saved.find(item=>(renderStates[item.id]??item.brief.production?.render)?.status==='assembling');
+    if(!candidate?.brief.production)return;
+    const render=renderStates[candidate.id]??candidate.brief.production.render!;
+    compositionActive.current=true;
+    void (async()=>{
+      try{
+        const session=await supabase?.auth.getSession();const token=session?.data.session?.access_token;if(!token)throw Error('Sign in again to finish this video.');
+        const input=await fullCompositionInput({jobId:render.job_id,scriptId:candidate.id,plan:candidate.brief.production!,sourceKind:candidate.brief.kind});
+        const response=await mediaFetch('/api/local-capture/full-compose',{method:'POST',headers:{'Content-Type':'application/json','X-Creator-Capture':'1',Authorization:`Bearer ${token}`},body:JSON.stringify(input)});
+        const result=await response.json();if(!response.ok)throw Error(result.error??'Could not finish this video.');
+        saveRender(candidate.id,{...render,status:'ready',updated_at:new Date().toISOString(),export_id:result.id,message:null});
+      }catch(e){setError(e instanceof Error?e.message:'Could not finish your saved video. Retrying shortly.');window.setTimeout(()=>setQueueEpoch(value=>value+1),15000);}
+      finally{compositionActive.current=false;setQueueEpoch(value=>value+1);}
+    })();
+  },[saved,renderStates,preview,queueEpoch]);
   return <div className="scripts-workspace">
     <div className="page-heading"><h1>Create video</h1></div>
-    <VideoLibraryPicker items={saved} current={current} disabled={busy||loading||sourceProcessing} onSelect={open}/>
+    <VideoLibraryPicker items={saved} current={current} disabled={busy||loading||sourceProcessing} renderStates={renderStates} onSelect={open}/>
     <div className="scripts-grid">
       <aside className="scripts-list"><button className="button" disabled={busy} onClick={() => open(null)}>+ New video</button><h2>My videos</h2>
-        {loading ? <p>Loading videos…</p> : saved.length === 0 ? <p>Your videos will appear here.</p> : saved.map(item => <button disabled={busy} className={current?.id === item.id ? 'script-selected' : ''} key={item.id} onClick={() => open(item)}><strong>{item.title}</strong><small>Step {videoStep(item.brief,Boolean(item.brief.production))} of 4 · {new Date(item.updated_at).toLocaleDateString()}</small></button>)}
+        {loading ? <p>Loading videos…</p> : saved.length === 0 ? <p>Your videos will appear here.</p> : saved.map(item => {const progress=videoRenderProgress(renderStates[item.id]??item.brief.production?.render);const caption=progress?`${progress.label} · ${progress.percent}% estimated`:`Step ${videoStep(item.brief,Boolean(item.brief.production))} of 4 · ${new Date(item.updated_at).toLocaleDateString()}`;return <button disabled={busy} className={current?.id === item.id ? 'script-selected' : ''} key={item.id} onClick={() => open(item)}><strong>{item.title}</strong><small>{caption}</small>{progress&&<progress value={progress.percent} max="100" aria-label={caption}/>}</button>;})}
       </aside>
       <section ref={editorRef} tabIndex={-1} className="script-editor" aria-label="Script editor">
+        {libraryView?<section className="my-videos-overview"><span className="eyebrow">MY VIDEOS</span><h2>Your saved videos keep working in the background.</h2><p>Choose a video in the sidebar to review it, or start a new one while submitted videos finish.</p><button type="button" className="button" onClick={()=>open(null)}>Start another video</button></section>:<>
         <nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{videoSteps[step-1]}</h2></div></div><ol>{videoSteps.map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>
         <p className="save-status" role="status">{dirty?(busy?'Saving your progress…':'Saving shortly…'):current?(preview?'Saved on this device':'All changes saved'):'Your progress saves as you go.'}</p>
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
@@ -260,9 +309,10 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
           {!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
         </fieldset>
-{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
+	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
         </>}
-        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+	        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production:{...(d.brief.production??production),video_background:production.video_background}}}));setDirty(true);}} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onRenderStateChange={render=>saveRender(current.id,render)} onViewLibrary={viewLibrary} onNewVideo={()=>open(null)} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+	        </>}
       </section>
     </div>
   </div>;

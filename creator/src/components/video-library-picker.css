@@ -27,6 +27,7 @@
 .video-library-copy{flex:1;min-width:0}
 .video-library-copy strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:14px;font-weight:650;line-height:1.45}
 .video-library-copy small{display:block;margin-top:5px;font-size:11px;line-height:1.5;color:#6c8097}
+.video-library-copy progress{display:block;width:100%;height:4px;margin-top:7px;accent-color:#1686f5}
 .video-library-check{flex-shrink:0;color:#087af0}
 .video-library-open{flex-shrink:0;color:#9bacbe;transform:rotate(-90deg)}
 .video-library-empty{text-align:center;padding:32px 16px;color:#788ba1;display:grid;justify-items:center;gap:10px}

@@ -1,6 +1,6 @@
 import { expect,it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { newVideoPlan,planReady,videoPlanSchema } from '../src/domain/video-plan';
+import { newVideoPlan,planReady,renderStateFromJob,videoPlanSchema,videoRenderProgress } from '../src/domain/video-plan';
 import { VideoPlan } from '../src/components/VideoPlan';
 import { FinishedVideo } from '../src/components/FinishedVideo';
 import { scriptSchema } from '../src/domain/scripts';
@@ -54,4 +54,12 @@ it('makes the rendering boundary explicit on the next screen',()=>{
 });
 it('rejects oversized visual instructions',()=>{
  expect(videoPlanSchema.safeParse({...newVideoPlan(),visual_notes:'x'.repeat(4001)}).success).toBe(false);
+});
+it('persists an honest background render stage and progress estimate',()=>{
+ const queued=renderStateFromJob({id:'11111111-1111-4111-8111-111111111111',status:'processing',message:null});
+ expect(videoPlanSchema.parse({...newVideoPlan(),render:queued}).render).toEqual(queued);
+ expect(videoRenderProgress(queued)).toEqual({percent:65,label:'Creating your presenter'});
+ const finishing=renderStateFromJob({id:queued.job_id,status:'completed',message:null},queued);
+ expect(finishing.status).toBe('assembling');
+ expect(videoRenderProgress(finishing)).toEqual({percent:85,label:'Finishing your MP4'});
 });

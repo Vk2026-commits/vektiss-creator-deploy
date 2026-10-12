@@ -1,5 +1,6 @@
 import {expect,it} from 'vitest';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {readFileSync} from 'node:fs';
 import {filterVideoLibrary,VideoLibraryPicker} from '../src/components/VideoLibraryPicker';
 import {emptyBrief} from '../src/domain/script-brief';
 import type {Script} from '../src/domain/scripts';
@@ -18,4 +19,8 @@ it('replaces the native select with a clearly labelled dialog trigger',()=>{
 it('disables switching during processing and handles an empty library',()=>{
  const html=renderToStaticMarkup(<VideoLibraryPicker items={[]} current={null} disabled onSelect={()=>{}}/>);
  expect(html).toContain('disabled');expect(html).toContain('Start a new video');
+});
+it('shows the saved background render estimate for submitted videos',()=>{
+ const source=readFileSync(new URL('../src/components/VideoLibraryPicker.tsx',import.meta.url),'utf8');
+ expect(source).toContain('videoRenderProgress');expect(source).toContain('progress.percent}% estimated');expect(source).toContain('<progress');
 });
