@@ -153,10 +153,11 @@ Deno.serve(async (request) => {
       if(job.status==='cancelled')return reply(headers,{job});
       // A single long prompt allowed one marginal source cluster to dominate
       // the response. Screen bounded, independent groups and rank them together.
-      const batchSize = 18;
+      const batchSize = 22;
       const batches = Array.from({ length: Math.ceil(freshSources.length / batchSize) }, (_, index) => freshSources.slice(index * batchSize, (index + 1) * batchSize));
+      const batchTarget = Math.max(3, Math.ceil(Number(job.requested_count) / batches.length) + 2);
       const started = await Promise.allSettled(batches.map((sources) =>
-        startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job!.requested_count), sources })));
+        startNativeVideoScreening({ brief: brief.data, requestedCount: batchTarget, sources })));
       const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
         ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
       if (!screeningRuns.length) throw new Error("SCREENING_PROVIDER_UNAVAILABLE");
