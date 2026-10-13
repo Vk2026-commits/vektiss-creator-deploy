@@ -243,7 +243,12 @@ Deno.serve(async (request) => {
       const sources = z.array(z.object({ providerSourceId: z.number(), title: z.string(), url: z.string(), snippet: z.string(), publishedAt: z.string().nullable(), sourceType: z.string() })).safeParse(row.source_snapshot);
       return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data }] : [];
     });
-    const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
+    // A provider can occasionally emit a low-confidence item despite being
+    // asked to return only on-brief clips. Do not use it to pad Find 10.
+    const eligibleCandidates = brief.data.sourceMode === 'videos'
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 50)
+      : providerRun.candidates;
+    const ranked = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
     if (!ranked.length) {
 
       const phase=brief.data.sourceMode==='articles'
