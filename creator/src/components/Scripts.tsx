@@ -1,4 +1,7 @@
 import {ScriptProgress,type DraftProgress} from './ScriptProgress';
+import {VideoVersions,type VersionIntent} from './VideoVersions';
+import {FinishedVideo} from './FinishedVideo';
+import {finishedVersion,projectItems,reusablePresenter,revisedPlan,versionNumber} from '../domain/video-versions';
 import {VideoLibraryPicker} from './VideoLibraryPicker';
 import {StoryScriptReview} from './StoryScriptReview';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -42,7 +45,11 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const empty = (): ScriptInput => ({ content_profile_id: selectedId ?? profiles.find(p => !p.archived_at)?.id ?? '', title: '', hook: '', body: '', cta: '', brief:{...emptyBrief(),cost_project_id:workspaceId} });
   const [draft, setDraft] = useState<ScriptInput>(empty);
   const [current, setCurrent] = useState<Script | null>(null);
+  const [versionIntent,setVersionIntent]=useState<VersionIntent|null>(null);
+  const versionCreating=useRef(false);
   const [saved, setSaved] = useState<Script[]>([]);
+  const isFinished=Boolean(current&&finishedVersion(current));
+  const libraryItems=projectItems(saved,current);
   const [renderStates,setRenderStates]=useState<Record<string,VideoRender|undefined>>({});
   const [libraryView,setLibraryView]=useState(false);
   const [queueEpoch,setQueueEpoch]=useState(0);
@@ -70,12 +77,12 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   const appliedAudience=useRef<number|null>(null);
   const appliedResearchIntent=useRef<string|null>(null);
   useEffect(()=>{
-    if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing)return;
+    if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing||isFinished)return;
     appliedAudience.current=audienceChoice.version;
     if(latest.current.content_profile_id===audienceChoice.id)return;
     setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
     setPlanning(false);setDirty(true);setMessage('Audience selected. Your source is still here.');
-  },[audienceChoice,loading,busy,sourceProcessing]);
+  },[audienceChoice,loading,busy,sourceProcessing,isFinished]);
   useEffect(()=>{
     if(!researchIntent||appliedResearchIntent.current===researchIntent.id||busy||sourceProcessing)return;
     const targetProfileId=profiles.some(profile=>profile.id===researchIntent.content_profile_id&&!profile.archived_at)
@@ -93,6 +100,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
   function updateRenderPreview(incoming:Plan){
+    if(isFinished)return;
     const snapshot=latest.current;
     const production=snapshot.brief.production;
     if(!production)return;
@@ -103,7 +111,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   }
   useEffect(()=>{
     // Source preparation owns the next save; avoid racing its revision-checked handoff.
-    if(!dirty||busy||sourceProcessing||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
+    if(isFinished||!dirty||busy||sourceProcessing||!draft.content_profile_id||lastAutoAttempt.current===draft||!scriptSchema.safeParse({...draft,title:draft.title.trim()||'Untitled video'}).success)return;
     const timer=setTimeout(()=>{
       const snapshot=draft;lastAutoAttempt.current=snapshot;setBusy(true);
       const input={...snapshot,title:snapshot.title.trim()||'Untitled video'};
@@ -113,7 +121,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
       }).catch(e=>setError(`Could not save progress: ${explainError(e)}`)).finally(()=>setBusy(false));
     },1200);
     return()=>clearTimeout(timer);
-  },[draft,current,dirty,busy,sourceProcessing,repo]);
+  },[draft,current,dirty,busy,sourceProcessing,repo,isFinished]);
   const step=videoStep(draft.brief,planning);
   useEffect(()=>{
     const create=()=>{if(busy){setMessage('Please wait for saving to finish, then choose New video.');return;}open(null);};
@@ -155,12 +163,27 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   function open(item: Script | null) {
     if(busy||sourceProcessing||generating.current)return;
     setEditingScript(false);
+    setVersionIntent(null);
     if (dirty && !window.confirm('Some changes have not saved yet. Leave this video anyway?')) return;
     const nextWorkspace=item?.id??crypto.randomUUID();setWorkspaceId(nextWorkspace);
     const parsed = briefSchema.safeParse(item?.brief);
     setLibraryView(false);setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
   }
   function sameRender(a:VideoRender|undefined,b:VideoRender){return a?.job_id===b.job_id&&a.status===b.status&&a.export_id===b.export_id&&a.message===b.message;}
+  async function createVersion(intent:VersionIntent){
+    if(!current||!isFinished||busy||versionCreating.current)return;
+    versionCreating.current=true;setBusy(true);setError('');
+    const key=`${recoveryKey}:version-request:${current.id}`;
+    const request=recoveryRead(key)??crypto.randomUUID();recoveryWrite(key,request);
+    try{
+      const item=await repo.createVersion(current,request);
+      recoveryWrite(key,null);
+      setWorkspaceId(item.id);
+      setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setCurrent(item);setDraft(item);setPlanning(true);setLibraryView(false);setDirty(false);setVersionIntent(intent);
+      setMessage(`Version ${versionNumber(item)} is ready to edit. Your original video and screenshot are preserved.`);
+    }catch(e){setError(e instanceof Error?e.message:'Could not open a new version. Retry safely; no render was started.');}
+    finally{versionCreating.current=false;setBusy(false);}
+  }
   function saveRender(scriptId:string,render:VideoRender){
     const previous=renderStates[scriptId]??saved.find(item=>item.id===scriptId)?.brief.production?.render;
     if(sameRender(previous,render))return;
@@ -231,9 +254,9 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         if(result.questions.length===0){
           setMessage('Your point of view is clear. Writing your script…');
           result=await scriptAI('generate',draft.content_profile_id,brief);
-          next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...brief,production:undefined,review:result.review,stage:'review'}};
+          next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...brief,production:revisedPlan(input.brief.production),review:result.review,stage:'review'}};
         }
-      } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:undefined,review:result.review,stage:'review'}};
+      } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:revisedPlan(input.brief.production),review:result.review,stage:'review'}};
       if(result.screenshot_story&&next.brief.stage==='review')next={...next,brief:{...next.brief,screenshot_story:result.screenshot_story}}; setDraftProgress({percent:95,label:'Saving your draft…'});
       const item=await persist(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
       if(action==='generate'&&next.brief.research_opportunity_id&&!preview)void researchFeedback(next.brief.research_opportunity_id,'script_created').catch(()=>{/* Conversion tracking must not interrupt a completed draft. */});
@@ -283,18 +306,20 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   },[saved,renderStates,preview,queueEpoch]);
   return <div className="scripts-workspace">
     <div className="page-heading"><h1>Create video</h1></div>
-    <VideoLibraryPicker items={saved} current={current} disabled={busy||loading||sourceProcessing} renderStates={renderStates} onSelect={open}/>
+    <VideoLibraryPicker items={libraryItems} current={current} disabled={busy||loading||sourceProcessing} renderStates={renderStates} onSelect={open}/>
     <div className="scripts-grid">
       <aside className="scripts-list"><button className="button" disabled={busy} onClick={() => open(null)}>+ New video</button><h2>My videos</h2>
-        {loading ? <p>Loading videos…</p> : saved.length === 0 ? <p>Your videos will appear here.</p> : saved.map(item => {const progress=videoRenderProgress(renderStates[item.id]??item.brief.production?.render);const caption=progress?`${progress.label} · ${progress.percent}% estimated`:`Step ${videoStep(item.brief,Boolean(item.brief.production))} of 4 · ${new Date(item.updated_at).toLocaleDateString()}`;return <button disabled={busy} className={current?.id === item.id ? 'script-selected' : ''} key={item.id} onClick={() => open(item)}><strong>{item.title}</strong><small>{caption}</small>{progress&&<progress value={progress.percent} max="100" aria-label={caption}/>}</button>;})}
+        {loading ? <p>Loading videos…</p> : saved.length === 0 ? <p>Your videos will appear here.</p> : libraryItems.map(item => {const progress=videoRenderProgress(renderStates[item.id]??item.brief.production?.render);const caption=progress?`${progress.label} · ${progress.percent}% estimated`:`Step ${videoStep(item.brief,Boolean(item.brief.production))} of 4 · ${new Date(item.updated_at).toLocaleDateString()}`;return <button disabled={busy} className={current?.id === item.id ? 'script-selected' : ''} key={item.id} onClick={() => open(item)}><strong>{item.title}</strong><small>Version {versionNumber(item)} · {caption}</small>{progress&&<progress value={progress.percent} max="100" aria-label={caption}/>}</button>;})}
       </aside>
       <section ref={editorRef} tabIndex={-1} className="script-editor" aria-label="Script editor">
         {libraryView?<section className="my-videos-overview"><span className="eyebrow">MY VIDEOS</span><h2>Your saved videos keep working in the background.</h2><p>Choose a video in the sidebar to review it, or start a new one while submitted videos finish.</p><button type="button" className="button" onClick={()=>open(null)}>Start another video</button></section>:<>
+        {current&&<VideoVersions current={current} items={saved} busy={busy||dirty||sourceProcessing} onSelect={open} onCreate={intent=>void createVersion(intent)}/>}
+        {isFinished&&current?.brief.production?.render?<><p role="status">{message}</p>{error&&<p role="alert">{error}</p>}<FinishedVideo scriptId={current.id} jobId={current.brief.production.render.job_id} plan={current.brief.production} sourceKind={current.brief.kind}/></>:<>
         <nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{videoSteps[step-1]}</h2></div></div><ol>{videoSteps.map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>
         <p className="save-status" role="status">{dirty?(busy?'Saving your progress…':'Saving shortly…'):current?(preview?'Saved on this device':'All changes saved'):'Your progress saves as you go.'}</p>
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
         {!planning&&draftProgress&&!draftProgress.failed&&draftProgress.percent<100&&<ScriptProgress progress={draftProgress}/>}
-        {planning&&draft.brief.production?<VideoPlan script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
+        {planning&&draft.brief.production?<VideoPlan editFocus={versionIntent} script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
         <fieldset disabled={loading||busy||sourceProcessing}>
           {draft.brief.stage==='review'&&<section className="review-script-first" aria-label="Your script">
             {draft.brief.screenshot_story?.sections.length?<StoryScriptReview story={draft.brief.screenshot_story} editing={editingScript} onChange={screenshot_story=>{setDraft(d=>({...d,hook:'',body:screenshot_story.sections.map(s=>s.text).join('\n\n'),cta:'',brief:{...d.brief,screenshot_story,production:d.brief.production?{...d.brief.production,screenshot_story,approved_at:null,step:'approve'}:undefined}}));setDirty(true);}}/>:!editingScript?<div className="ai-script-preview"><p>{draft.hook}</p><p>{draft.body}</p><p>{draft.cta}</p></div>:<><label>Hook<textarea rows={3} maxLength={2000} value={draft.hook} onChange={e=>change('hook',e.target.value)}/></label><label>Main message<textarea rows={10} maxLength={15000} value={draft.body} onChange={e=>change('body',e.target.value)}/></label><label>Call to action<textarea rows={3} maxLength={2000} value={draft.cta} onChange={e=>change('cta',e.target.value)}/></label></>}
@@ -328,7 +353,8 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
         </fieldset>
 	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose avatar →</button></div>}
         </>}
-	        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender sourceUrl={draft.brief.url} onPlanChange={updateRenderPreview} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onRenderStateChange={render=>saveRender(current.id,render)} onViewLibrary={viewLibrary} onNewVideo={()=>open(null)} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+	        {planning&&current&&draft.brief.production?.step==='saved'&&draft.brief.production.presenter==='avatar'&&!preview&&(draft.brief.research_opportunity_id&&!draft.brief.prepared_source&&!draft.brief.production.video_background&&!draft.brief.production.article_capture?<DiscoverySourceRepair brief={draft.brief} profileId={draft.content_profile_id} scope={current.id} onRepair={brief=>{setDraft(d=>({...d,brief}));setDirty(true);setMessage('Background restored. Your existing script and presenter settings are unchanged.');}}/>:<><FullScriptRender reusableJobId={reusablePresenter(saved.find(s=>s.id===current.parent_version_id),draft)} sourceUrl={draft.brief.url} onPlanChange={updateRenderPreview} sourceKind={draft.brief.kind} key={current.id} scriptId={current.id} revision={current.updated_at} disabled={dirty||busy} plan={draft.brief.production} onRenderStateChange={render=>saveRender(current.id,render)} onViewLibrary={viewLibrary} onNewVideo={()=>open(null)} onEditLayout={()=>{setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,step:'visuals'}}}));setDirty(true);}}/></>)}
+              </>}
 	        </>}
       </section>
     </div>

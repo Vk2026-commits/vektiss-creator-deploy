@@ -16,6 +16,7 @@ import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type Screen
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
 import {backgroundFilter} from '../src/domain/background-framing';
+import {reusablePresenter} from '../src/domain/video-versions';
 const exec=promisify(execFile);
 export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional(),presenter_framing_position:z.number().int().min(0).max(100).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
@@ -44,7 +45,17 @@ export async function fullComposition(root:string,input:unknown,authorization:st
   if(c.story_revision!==createHash('sha256').update(storyRevisionInput(story)).digest('hex'))throw Error('The screenshot story changed. Reopen it before exporting.');
   for(const image of story.images)await readFile(resolve(root,'.local-captures',`${image.id}.png`));
  }
- if(job.script_id!==c.script_id||job.status!=='completed'||job.snapshot?.scope!=='full'||typeof job.video_url!=='string')throw Error('A completed full-script presenter is required.');
+ if(job.script_id!==c.script_id){
+  const headers={Authorization:authorization,apikey:env.VITE_SUPABASE_PUBLISHABLE_KEY};
+  const saved=await fetch(`${env.VITE_SUPABASE_URL}/rest/v1/creator_scripts?id=eq.${c.script_id}&select=*`,{headers,signal:AbortSignal.timeout(30000)});
+  if(!saved.ok)throw Error('Could not verify version ownership.');
+  const [target]=await saved.json();
+  if(!target?.parent_version_id||!z.string().uuid().safeParse(target.parent_version_id).success)throw Error('Version parent is missing.');
+  const parents=await fetch(`${env.VITE_SUPABASE_URL}/rest/v1/creator_scripts?id=eq.${target.parent_version_id}&select=*`,{headers,signal:AbortSignal.timeout(30000)});
+  if(!parents.ok)throw Error('Could not verify original version.');const [parent]=await parents.json();
+  if(!parent||target.project_id!==parent.project_id||target.user_id!==parent.user_id||target.user_id!==job.user_id||reusablePresenter(parent,target)!==c.job_id)throw Error('Saved footage does not match this version. Review the current voice and script before generating.');
+ }
+ if(job.status!=='completed'||job.snapshot?.scope!=='full'||typeof job.video_url!=='string')throw Error('A completed full-script presenter is required.');
  const baseId=createHash('sha256').update(JSON.stringify({user:job.user_id,framing_version:2,...c,...(story?{story,story_version:STORY_COMPOSITION_VERSION}:{}),...(c.video_id?{sequence:REACTION_SEQUENCE_VERSION}:{})})).digest('hex');
  const id=repairedCompositionId(baseId,c.job_id);
  const folder=resolve(root,'edit/compositions');await mkdir(folder,{recursive:true});

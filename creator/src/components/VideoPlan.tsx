@@ -6,7 +6,7 @@ import {AvatarEnginePicker} from './AvatarEnginePicker';
 import {VoicePicker} from './VoicePicker';
 import {closingPreview} from '../domain/voice-excerpt';
 import {voiceEngineNames} from '../domain/voice-settings';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AvatarPicture } from './AvatarPicture';
 import { ArticleLayout } from './ArticleLayout';
 import { avatarRepository } from '../lib/avatar-repository';
@@ -15,7 +15,14 @@ import { usableAvatar, type Avatar } from '../../supabase/functions/_shared/avat
 import { planReady, type VideoPlan as Plan } from '../domain/video-plan';
 import { scriptText, type ScriptInput } from '../domain/scripts';
 
-export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void}) {
+export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit,editFocus}:{script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void;editFocus?:'voice'|'avatar'|'framing'|null}) {
+ const section=useRef<HTMLElement>(null);
+ useEffect(()=>{
+  if(!editFocus)return;
+  const selector=editFocus==='framing'?'.avatar-framing-controls':editFocus==='avatar'?'.saved-choice':'.saved-choice:has(.voice-picker)';
+  const details=section.current?.querySelector<HTMLDetailsElement>(selector);
+  if(details){details.open=true;details.scrollIntoView({block:'center'});}
+ },[editFocus]);
  const [engineValid,setEngineValid]=useState(plan.avatar_engine===undefined);
  const [avatars,setAvatars]=useState<Avatar[]>([]);
  const [loading,setLoading]=useState(!preview);
@@ -45,7 +52,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
 	 const graphicSource=script.brief.kind==='graphic';
 	 const backgroundReady=Boolean(plan.article_capture&&plan.article_capture.source_url===script.brief.url);
  if(plan.step==='saved'&&plan.presenter==='avatar'&&!preview)return null;
- return <section className="video-plan">
+ return <section ref={section} className="video-plan">
  {choosing&&<div className="placement-first">{videoSource?<PresenterPlacement plan={plan} onChange={onChange}/>:<ArticleLayout plan={plan} graphic={graphicSource} sourceUrl={script.brief.url} onChange={onChange}/>}</div>}
  
  {(plan.step==='review'||(plan.step==='saved'&&plan.presenter!=='avatar'))&&<p>Presenter position: {plan.presenter_position.replace('-',' ')}</p>}
@@ -56,7 +63,7 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit}:{scr
  </details>
  {error&&<p role="alert">{error}</p>}
  {selectedAvatar&&<AvatarEnginePicker key={`engine:${selectedAvatar.id}`} onValidity={setEngineValid} plan={plan} onChange={onChange} disabled={busy||preview} seconds={Math.ceil(words/2.5)}/>}
- {selectedAvatar&&<details className="saved-choice"><summary><span>Voice<strong>{plan.voice?.name??selectedAvatar.voice_name??'Avatar default'} · {voiceEngineNames[plan.voice_engine??'auto']} · {(plan.voice_speed??1).toFixed(2)}×</strong></span><span className="change-choice">Change</span></summary><VoicePicker previewText={closingPreview(script)} key={selectedAvatar.id} avatar={selectedAvatar} plan={plan} onChange={onChange} disabled={busy||preview}/></details>}
+ {selectedAvatar&&<details className="saved-choice" open={editFocus==='voice'||undefined}><summary><span>Voice<strong>{plan.voice?.name??selectedAvatar.voice_name??'Avatar default'} · {voiceEngineNames[plan.voice_engine??'auto']} · {(plan.voice_speed??1).toFixed(2)}×</strong></span><span className="change-choice">Change</span></summary><VoicePicker previewText={closingPreview(script)} key={selectedAvatar.id} avatar={selectedAvatar} plan={plan} onChange={onChange} disabled={busy||preview}/></details>}
  </div></>}
 	 {choosing&&<><details><summary>More options</summary><label>Video shape<select value={plan.format} onChange={e=>update({format:e.target.value as Plan['format']})}><option value="portrait">Tall · phone video</option><option value="landscape">Wide · landscape</option><option value="square">Square</option></select></label>{videoSource&&<PlacementShortcuts plan={plan} onChange={onChange}/>}</details><div className="layout-next workflow-action-bar">{!presenterReady&&<p role="status">Choose an available avatar and engine to continue.</p>}{graphicSource&&!backgroundReady&&<p role="status">Choose your graphic to continue.</p>}{!videoSource&&!graphicSource&&!backgroundReady&&<p role="status">No background selected. This will be an avatar-only video.</p>}<button className="button" disabled={busy||loading||!presenterReady||(graphicSource&&!backgroundReady)} onClick={onSave}>{busy?'Saving…':'Next: review video →'}</button></div></>}
 	 {(plan.step==='review'||(plan.step==='saved'&&plan.presenter!=='avatar'))&&<><h2>{script.title}</h2><details><summary>Video settings & script</summary><dl className="plan-summary"><dt>Presenter</dt><dd>{plan.presenter==='self'?'You · record yourself':plan.avatar_name}</dd><dt>Format</dt><dd>{plan.format}</dd><dt>Presenter size</dt><dd>{plan.presenter_size}%</dd><dt>Background</dt><dd>{videoSource?'Source video':plan.article_capture?'Saved article screenshot':'Presenter-only'}</dd><dt>Captions</dt><dd>Not available in this export yet</dd><dt>Estimated duration</dt><dd>~{Math.ceil(words/150*60)} seconds</dd></dl>{plan.visual_notes&&<p>{plan.visual_notes}</p>}<div className="plan-script">{scriptText(script)}</div></details><button disabled={busy} onClick={()=>update({step:'visuals'})}>Edit layout</button>{plan.step!=='saved'&&<button className="button" disabled={busy||!planReady(plan)||!presenterReady} onClick={onSave}>{busy?'Saving…':'Save layout & continue'}</button>}<button disabled={busy} onClick={onEdit}>Edit script (requires reapproval)</button><small>Saving does not start a paid render.</small></>}

@@ -1,5 +1,6 @@
 import type {Script,ScriptInput} from '../domain/scripts';
 import type {VideoRender} from '../domain/video-plan';
+import {speechIdentity} from '../domain/video-versions';
 
 export type ScriptStore={
  list:()=>Promise<Script[]>;
@@ -17,6 +18,7 @@ function isStale(error:unknown){
 export function rebaseScriptEdit(latest:Script,input:ScriptInput):ScriptInput{
  const brief={...latest.brief,...input.brief};
  if(input.brief.production&&latest.brief.production?.render){
+  if(speechIdentity(latest)!==speechIdentity(input))throw Error('This version started rendering in another tab. Reopen it before changing its voice or script.');
   brief.production={...input.brief.production,render:latest.brief.production.render};
  }
  return {...latest,...input,brief};

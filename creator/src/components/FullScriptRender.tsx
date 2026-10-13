@@ -1,4 +1,5 @@
 import {VideoBackground} from './VideoBackground';
+import {checkBackground} from '../lib/check-background';
 import {sameAvatarPreview} from '../domain/render-preview-update';
 import {GraphicPreview} from './GraphicPreview';
 import {RenderProgress} from './RenderProgress';
@@ -26,6 +27,7 @@ type Props={
  onRenderStateChange?:(render:VideoRender)=>void;
  onViewLibrary?:()=>void;
  onNewVideo?:()=>void;
+ reusableJobId?:string;
 };
 
 function sameRender(a:VideoRender|undefined,b:VideoRender){return a?.job_id===b.job_id&&a.status===b.status&&a.export_id===b.export_id&&a.message===b.message;}
@@ -34,15 +36,20 @@ export function savedExportJob(render:VideoRender|undefined){
  return {id:render.job_id,status:'completed',video_url:null,message:null};
 }
 
-export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,sourceKind='article',sourceUrl='',onPlanChange,onRenderStateChange,onViewLibrary,onNewVideo}:Props){
+export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,sourceKind='article',sourceUrl='',onPlanChange,onRenderStateChange,onViewLibrary,onNewVideo,reusableJobId}:Props){
  const persistedJob=savedExportJob(plan.render);
  const [videoReady,setVideoReady]=useState(false);
+ const [assetsReady,setAssetsReady]=useState(false),[assetError,setAssetError]=useState(''),[assetRetry,setAssetRetry]=useState(0);
+ const assetKey=JSON.stringify([sourceKind,plan.article_capture?.id,plan.video_background?.id,plan.screenshot_story?.images.map(i=>i.id)]);
+ useEffect(()=>{const abort=new AbortController();setAssetsReady(false);setAssetError('');
+  void checkBackground(plan,sourceKind,abort.signal).then(()=>{if(!abort.signal.aborted)setAssetsReady(true);}).catch(e=>{if(!abort.signal.aborted)setAssetError(e instanceof Error?e.message:'Could not load the saved background.');});return()=>abort.abort();
+ },[assetKey,assetRetry]);
  const [verificationEpoch,setVerificationEpoch]=useState(0);
  const [review,setReview]=useState<z.infer<typeof reviewSchema>|null>(null);
  const [job,setJob]=useState<z.infer<typeof jobSchema>|null>(()=>persistedJob);
  const [submitted,setSubmitted]=useState(Boolean(plan.render));
  const submitting=useRef(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
- const backgroundReady=sourceKind==='video'?videoReady:sourceKind==='graphic'?Boolean(plan.article_capture):true;
+ const backgroundReady=assetsReady&&(sourceKind==='video'?videoReady:sourceKind==='graphic'?Boolean(plan.article_capture):true);
  const tracked=job&&plan.render?.job_id===job.id?plan.render:undefined;
  const active=Boolean(job&&['submitting','pending','processing'].includes(job.status));
  const progress=videoRenderProgress(tracked);
@@ -55,6 +62,7 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
   // The durable export ID is the authority for an already finished video.
   // Do not wait on a provider/catalog status recheck before opening it.
   if(persistedJob){setReview(null);setJob(persistedJob);setError('');return;}
+  if(plan.render?.status==='assembling'&&plan.render.job_id===reusableJobId){setReview(null);setJob({id:reusableJobId,status:'completed',video_url:null,message:null});return;}
   if(disabled)return;let live=true,reading=false;setReview(null);setJob(null);
   const read=()=>{if(reading||submitting.current)return;reading=true;setBusy(true);
    void avatarRepository.renderTest({action:'prepare_test',script_id:scriptId,scope:'full'}).then(value=>{if(live){const next=reviewSchema.parse(value);setReview(next);if(next.job)track(next.job);else setJob(null);setError('');
@@ -78,6 +86,10 @@ export function FullScriptRender({scriptId,revision,disabled,plan,onEditLayout,s
  const waitingForExport=job?.status==='completed'&&trackedJob&&tracked?.status!=='ready';
  const showFinished=job?.status==='completed'&&!waitingForExport;
  return <section className="script-direction render-workspace" aria-label="Full-script presenter">
+  {assetError&&<p role="alert">{assetError} <button type="button" onClick={()=>setAssetRetry(n=>n+1)}>Retry background</button></p>}
+  {reusableJobId&&!plan.render&&<div className="render-confirmation"><p>Your speech settings are unchanged. Update only the layout using the existing presenter footage.</p><button type="button" className="button" disabled={disabled||busy||!backgroundReady} onClick={()=>{const now=new Date().toISOString();onRenderStateChange?.({job_id:reusableJobId,status:'assembling',submitted_at:now,updated_at:now});setSubmitted(true);setJob({id:reusableJobId,status:'completed',video_url:null,message:null});}}>Update layout · no new HeyGen render</button></div>}
+  {!review&&waitingForExport&&<p role="status">Finishing this version with your existing presenter footage. Your original download is unchanged.</p>}
+  {review&&!plan.render&&<p>{review.snapshot.avatar_name} · {review.snapshot.voice_name??'Default voice'} · {plan.voice_engine??'Auto'} · {(plan.voice_speed??1).toFixed(2)}× speed</p>}
   {disabled?<p>Saving your selection…</p>:busy&&!review?<RenderProgress value={0} indeterminate label="Opening your video…"/>:null}
   {showFinished?<FinishedVideo sourceKind={sourceKind} jobId={job!.id} scriptId={scriptId} plan={plan} rawVideoUrl={job?.video_url??undefined}/>:review&&sourceKind==='video'&&<VideoBackground plan={plan} sourceUrl={sourceUrl} onChange={onPlanChange} onReady={setVideoReady}/>}
   {job?.status!=='completed'&&sourceKind==='graphic'&&plan.article_capture&&<GraphicPreview plan={plan}/>}

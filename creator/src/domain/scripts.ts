@@ -11,7 +11,7 @@ export const scriptSchema = z.object({
   brief: briefSchema.default(emptyBrief),
 });
 export type ScriptInput = z.infer<typeof scriptSchema>;
-export type Script = ScriptInput & { id: string; updated_at: string };
+export type Script = ScriptInput & { id: string; updated_at: string; project_id?:string;parent_version_id?:string|null;version_number?:number;finalized_at?:string|null;version_request_id?:string|null };
 export function guidedDraft(topic: string, profile: ContentProfile): ScriptInput {
   return scriptSchema.parse({
     content_profile_id: profile.id,

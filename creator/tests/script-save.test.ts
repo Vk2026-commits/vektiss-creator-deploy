@@ -11,12 +11,8 @@ const original:Script={id,updated_at:'revision-1',content_profile_id:id,title:'V
 const edited:ScriptInput={...original,hook:'New hook',body:'New body',brief:{...original.brief,production:{...original.brief.production!,approved_at:null,step:'approve'}}};
 const latest:Script={...original,updated_at:'revision-2',brief:{...original.brief,production:{...original.brief.production!,render}}};
 
-it('rebases an editor save onto a newer render-state save without losing either update',()=>{
- const result=rebaseScriptEdit(latest,edited);
- expect(result.hook).toBe('New hook');
- expect(result.body).toBe('New body');
- expect(result.brief.production?.step).toBe('approve');
- expect(result.brief.production?.render).toEqual(render);
+it('rejects a changed script instead of attaching an incompatible completed render',()=>{
+ expect(()=>rebaseScriptEdit(latest,edited)).toThrow(/Reopen/);
 });
 
 it('retries one stale script save with the newest record revision',async()=>{
@@ -31,9 +27,9 @@ it('retries one stale script save with the newest record revision',async()=>{
    return saved;
   },
  };
- const saved=await saveScriptWithRebase(store,edited,original);
+ const saved=await saveScriptWithRebase(store,original,original);
  expect(calls).toHaveLength(1);
- expect(saved.hook).toBe('New hook');
+ expect(saved.hook).toBe('Old hook');
  expect(saved.brief.production?.render).toEqual(render);
 });
 

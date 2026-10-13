@@ -1,0 +1,12 @@
+import {describe,it,expect} from 'vitest';
+import {finishedVersion,versionDraft,reusablePresenter,projectItems,invalidateVoiceApproval} from '../src/domain/video-versions';
+import {emptyBrief} from '../src/domain/script-brief';
+import {newVideoPlan} from '../src/domain/video-plan';
+import type {Script} from '../src/domain/scripts';
+const original=():Script=>({id:'original',updated_at:'now',title:'VantageScore',hook:'Hook',body:'Body',cta:'CTA',content_profile_id:'profile',brief:{...emptyBrief(),production:{...newVideoPlan(),voice_engine:'fish',article_capture:{id:'image',title:'Source',source_url:'https://example.com'},render:{job_id:'job',status:'ready',export_id:'export',submitted_at:'now',updated_at:'now'}}}});
+describe('safe versions',()=>{
+ it('copies sources and settings without changing the original or inheriting the export',()=>{const source=original(),copy=versionDraft(source);expect(copy.brief.production?.article_capture).toEqual(source.brief.production?.article_capture);expect(copy.body).toBe(source.body);expect(copy.brief.production?.render).toBeUndefined();expect(source.brief.production?.render?.export_id).toBe('export');expect(finishedVersion(source)).toBe(true);});
+ it('reuses layout-only speech but never a different voice, speed, avatar, or script',()=>{const source=original(),draft=versionDraft(source);draft.brief.production!.presenter_size=40;expect(reusablePresenter(source,draft)).toBe('job');for(const field of ['voice_engine','voice_speed','avatar_id'] as const){const changed=structuredClone(draft);Object.assign(changed.brief.production!,{[field]:field==='voice_speed'?1.2:'changed'});expect(reusablePresenter(source,changed)).toBeUndefined();}expect(reusablePresenter(source,{...draft,body:'Changed'})).toBeUndefined();});
+ it('groups versions without hiding the selected original',()=>{const a=original(),b={...original(),id:'v2',project_id:a.id,version_number:2,finalized_at:null,brief:versionDraft(a).brief};expect(projectItems([a,b],null)).toEqual([b]);expect(projectItems([a,b],a)).toEqual([a]);});
+ it('invalidates speech approval without discarding the screenshot',()=>{const a=original();Object.assign(a.brief.production!,{voice_preview_approval:{approved:true}});const b=structuredClone(a);b.body='different';const next=invalidateVoiceApproval(a,b);expect(next.brief.production?.voice_preview_approval).toBeUndefined();expect(next.brief.production?.article_capture?.id).toBe('image');});
+});
