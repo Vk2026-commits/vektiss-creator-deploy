@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startNativeVideoScreening } from "../_shared/research-provider.ts";
-import { getNativeDiscoveryRun, renumberNativeSources } from "../_shared/platform-discovery.ts";
+import { getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
   rankResearchCandidates,
@@ -88,13 +88,27 @@ Deno.serve(async (request) => {
     const brief = researchBriefSchema.safeParse(job.input_snapshot);
     if (!brief.success) throw new Error("RESEARCH_INPUT");
     const providerMetadata = metadata(job);
-    if (providerMetadata.stage === "native_discovery") {
+    if (providerMetadata.stage === "native_discovery" || providerMetadata.stage === "multi_discovery") {
       if (job.status !== "researching") return reply(headers, { job }, 202);
-      const discovery = await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
+      const multi = providerMetadata.stage === "multi_discovery";
+      const runs = multi && Array.isArray(providerMetadata.discoveryRuns) ? providerMetadata.discoveryRuns as Array<Record<string, unknown>> : [];
+      const checkedRuns = multi ? await Promise.all(runs.map(async (run) => {
+        if (run.state === "completed" || run.state === "failed") return run;
+        const platform: NativePlatform = run.platform === "YouTube" || run.platform === "Instagram" ? run.platform : "TikTok";
+        try {
+          const result = await getNativeDiscoveryRun(String(run.id), Number(job!.requested_count), brief.data, platform);
+          return { ...run, ...result, sources: result.state === "completed" ? result.sources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) })) : [] };
+        } catch { return { ...run, state: "failed", status: "PROVIDER_ERROR", sources: [] }; }
+      })) : [];
+      const discovery: NativeDiscoveryResult = multi
+        ? checkedRuns.some((run) => run.state === "pending")
+          ? { state: "pending", status: "MULTI" }
+          : { state: "completed", status: "MULTI", sources: checkedRuns.flatMap((run) => run.state === "completed" && Array.isArray(run.sources) ? nativeSources(run.sources) : []) }
+        : await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
       if (discovery.state === "pending") {
         const updated = await db.from("creator_research_jobs").update({
-          status: "researching", phase: "Finding direct TikTok videos…",
-          provider_metadata: { ...providerMetadata, apifyStatus: discovery.status }, updated_at: new Date().toISOString(),
+          status: "researching", phase: multi ? "Finding direct social videos…" : "Finding direct TikTok videos…",
+          provider_metadata: { ...providerMetadata, apifyStatus: discovery.status, ...(multi ? { discoveryRuns: checkedRuns } : {}) }, updated_at: new Date().toISOString(),
         }).eq("id", job.id).select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
@@ -106,7 +120,9 @@ Deno.serve(async (request) => {
         await markFailed(job, "NATIVE_DISCOVERY_EMPTY");
         return reply(headers, { code: "NATIVE_DISCOVERY_EMPTY" }, 503);
       }
-      const discoveredUrls = discovery.sources
+      const uniqueSources = [...new Map(discovery.sources.map((source) => [canonicalResearchUrl(source.url), source])).values()]
+        .slice(0, Math.min(90, Math.max(45, Number(job.requested_count) * 7)));
+      const discoveredUrls = uniqueSources
         .map((source) => canonicalResearchUrl(source.url))
         .filter((url): url is string => Boolean(url));
       const known = discoveredUrls.length
@@ -114,7 +130,7 @@ Deno.serve(async (request) => {
         : { data: [], error: null };
       if (known.error) throw new Error("PERSISTENCE");
       const knownUrls = new Set((known.data ?? []).map((source) => String(source.canonical_url)));
-      const freshSources = renumberNativeSources(discovery.sources.filter((source) => {
+      const freshSources = renumberNativeSources(uniqueSources.filter((source) => {
         const canonical = canonicalResearchUrl(source.url);
         return canonical && !knownUrls.has(canonical);
       }));
@@ -138,8 +154,8 @@ Deno.serve(async (request) => {
         provider_response_id: screening.id, status: "researching", phase: "Ranking direct video leads…",
         provider_metadata: {
           ...providerMetadata, stage: "perplexity_screening", apifyStatus: discovery.status,
-          nativeSources: compactSources, discoveredSourceCount: discovery.sources.length, freshSourceCount: freshSources.length,
-          duplicateSourceCount: discovery.sources.length - freshSources.length, screeningModel: screening.model ?? null, screeningStatus: screening.status,
+          discoveryRuns: undefined, nativeSources: compactSources, discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length,
+          duplicateSourceCount: uniqueSources.length - freshSources.length, screeningModel: screening.model ?? null, screeningStatus: screening.status,
         }, updated_at: new Date().toISOString(),
       }).eq("id", job.id).select("*").maybeSingle();
       if (updated.error || !updated.data) throw new Error("PERSISTENCE");

@@ -8,7 +8,7 @@ import {
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../src/domain/research";
-import { automaticTikTokRejectReason, buildTikTokQueryPack, renumberNativeSources } from "../supabase/functions/_shared/platform-discovery";
+import { automaticTikTokRejectReason, buildCrossPlatformQueryPack, buildTikTokQueryPack, renumberNativeSources, sourceFromCrossPlatformItem } from "../supabase/functions/_shared/platform-discovery";
 
 const source = (id: number, url: string, title = "Evidence") => ({
   providerSourceId: id,
@@ -106,6 +106,21 @@ describe("research contracts", () => {
     const fresh = [source(2, "https://www.tiktok.com/@one/video/123"), source(9, "https://www.tiktok.com/@two/video/456")];
     expect(renumberNativeSources(fresh).map((item) => item.providerSourceId)).toEqual([1, 2]);
     expect(fresh.map((item) => item.providerSourceId)).toEqual([2, 9]);
+  });
+
+  it("uses platform-specific searches and accepts only direct Shorts and Reels", () => {
+    const brief = researchBriefSchema.parse({
+      expertise: "", experience: "", industries: [], communicationStyle: "", creatorTone: [], phrasesToAvoid: [], preferredCtaStyle: "",
+      creatorContext: "", audienceName: "Steve", primaryAudience: "", audienceProblems: [], audienceInterests: ["situational awareness"], contentPillars: [],
+      sourceTopics: ["women safety"], reactionAngles: [], desiredOutcomes: [], profileTone: [], thingsToAvoid: [], profileContext: "",
+      researchSourcePlatforms: ["TikTok", "Instagram", "YouTube"], researchScreeningCriteria: "", researchReferenceUrls: [],
+    });
+    expect(buildCrossPlatformQueryPack(brief, "seed")).toHaveLength(3);
+    expect(sourceFromCrossPlatformItem({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", type: "shorts", title: "Store worker helps woman get to safety" }, 0, "YouTube")?.url)
+      .toBe("https://www.youtube.com/shorts/dQw4w9WgXcQ");
+    expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/p/ABC123/", type: "Video", shortCode: "ABC123", caption: "Store worker helps woman get to safety" }, 0, "Instagram")?.url)
+      .toBe("https://www.instagram.com/reel/ABC123/");
+    expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/example/", type: "Profile", caption: "Store worker helps woman get to safety" }, 0, "Instagram")).toBeNull();
   });
 
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {

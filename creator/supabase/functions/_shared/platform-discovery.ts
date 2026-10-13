@@ -4,13 +4,16 @@ declare const Deno: { env: { get(key: string): string | undefined } };
 
 const APIFY_API = "https://api.apify.com/v2";
 const TIKTOK_ACTOR = "clockworks~tiktok-scraper";
+const YOUTUBE_ACTOR = "streamers~youtube-scraper";
+const INSTAGRAM_ACTOR = "apify~instagram-search-scraper";
+export type NativePlatform = "TikTok" | "YouTube" | "Instagram";
 const activeStatuses = new Set(["READY", "RUNNING"]);
 const failedStatuses = new Set(["FAILED", "ABORTED", "TIMED-OUT"]);
 
 export type NativeDiscoveryRun = {
   id: string;
   status: string;
-  platform: "TikTok";
+  platform: NativePlatform;
   queryPack: string[];
 };
 
@@ -80,6 +83,22 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] 
   // run deterministic while exposing a different three-scenario slice.
   const start = queryRotation(`${brief.profileContext}:${seed}`) % scenarios.length;
   return Array.from({ length: 5 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
+}
+
+export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = ""): string[] {
+  // Use shorter, incident-oriented phrases for Shorts and Reels search. Long
+  // TikTok-style phrases tend to return unrelated keyword coincidences there.
+  const safety = /women.?s? safety|personal safety|situational awareness/i.test(
+    [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
+  );
+  if (!safety) return buildTikTokQueryPack(brief, seed).slice(0, 3);
+  const scenarios = [
+    "woman followed parking lot help", "store staff helps woman safety",
+    "doorbell camera stranger driveway", "woman escapes harassment store",
+    "security guard helps woman", "woman asks for help public place",
+  ];
+  const start = queryRotation(`${brief.profileContext}:${seed}:cross-platform`) % scenarios.length;
+  return Array.from({ length: 3 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
 }
 
 // Removing clips already shown to a creator leaves gaps in the native ids.
@@ -168,6 +187,39 @@ function sourceFromTiktokItem(item: unknown, index: number, safetyProfile = true
   });
 }
 
+export function sourceFromCrossPlatformItem(item: unknown, index: number, platform: Exclude<NativePlatform, "TikTok">): ResearchSource | null {
+  const record = asRecord(item);
+  if (!record) return null;
+  const rawUrl = stringValue(record, ["url", "videoUrl", "webVideoUrl", "shortCodeUrl", "permalink"]);
+  let url = canonicalResearchUrl(rawUrl);
+  if (!url) return null;
+  const parsed = new URL(url);
+  if (platform === "YouTube") {
+    if (record.type && record.type !== "shorts") return null;
+    if (!/(^|\.)youtube\.com$/.test(parsed.hostname) && parsed.hostname !== "youtu.be") return null;
+    const id = parsed.pathname.startsWith("/shorts/") ? parsed.pathname.split("/")[2]
+      : parsed.searchParams.get("v") || (parsed.hostname === "youtu.be" ? parsed.pathname.slice(1) : "");
+    if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+    url = `https://www.youtube.com/shorts/${id}`;
+  } else {
+    if (!/(^|\.)instagram\.com$/.test(parsed.hostname)) return null;
+    const shortCode = stringValue(record, ["shortCode", "shortcode"]);
+    if (record.type !== "Video" && !parsed.pathname.startsWith("/reel/")) return null;
+    if (shortCode && /^[A-Za-z0-9_-]+$/.test(shortCode)) url = `https://www.instagram.com/reel/${shortCode}/`;
+    else if (!/^\/reel\/[A-Za-z0-9_-]+\/?$/.test(parsed.pathname)) return null;
+  }
+  const title = stringValue(record, ["title", "caption", "description", "text"]);
+  const description = stringValue(record, ["description", "caption", "text"]);
+  const author = stringValue(record, ["channelName", "ownerUsername", "username"]);
+  const snippet = [title, description, author].filter(Boolean).join("\n").slice(0, 5000);
+  if (snippet.replace(/[^a-z0-9]/gi, "").length < 25) return null;
+  return researchSourceSchema.parse({
+    providerSourceId: index + 1, title: (title || `${platform} short video`).replace(/\s+/g, " ").slice(0, 300),
+    url, snippet, publishedAt: dateValue(record.date ?? record.timestamp ?? record.takenAt ?? record.publishedAt),
+    sourceType: platform === "YouTube" ? "youtube-shorts-native" : "instagram-reels-native",
+  });
+}
+
 export async function startNativeDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string }): Promise<NativeDiscoveryRun> {
   const queryPack = buildTikTokQueryPack(input.brief, input.seed);
   const payload = await apify(`/acts/${encodeURIComponent(TIKTOK_ACTOR)}/runs`, {
@@ -195,7 +247,20 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
   return { id: run.id, status: run.status, platform: "TikTok", queryPack };
 }
 
-export async function getNativeDiscoveryRun(runId: string, requestedCount: number, brief?: ResearchBrief): Promise<NativeDiscoveryResult> {
+export async function startPlatformDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string; platform: NativePlatform }): Promise<NativeDiscoveryRun> {
+  if (input.platform === "TikTok") return startNativeDiscovery(input);
+  const queryPack = buildCrossPlatformQueryPack(input.brief, input.seed);
+  const actor = input.platform === "YouTube" ? YOUTUBE_ACTOR : INSTAGRAM_ACTOR;
+  const actorInput = input.platform === "YouTube"
+    ? { searchQueries: queryPack, maxResults: 0, maxResultsShorts: Math.min(12, Math.max(8, input.requestedCount)), maxResultStreams: 0, transcriptionAndSubtitle: "NONE" }
+    : { search: queryPack.join(", "), searchType: "popular", searchLimit: Math.min(12, Math.max(8, input.requestedCount)), liveSearch: false };
+  const payload = await apify(`/acts/${encodeURIComponent(actor)}/runs`, { method: "POST", body: JSON.stringify(actorInput) });
+  const run = asRecord(payload.data);
+  if (!run || typeof run.id !== "string" || typeof run.status !== "string") throw new Error("APIFY_PROVIDER");
+  return { id: run.id, status: run.status, platform: input.platform, queryPack };
+}
+
+export async function getNativeDiscoveryRun(runId: string, requestedCount: number, brief?: ResearchBrief, platform: NativePlatform = "TikTok"): Promise<NativeDiscoveryResult> {
   const payload = await apify(`/actor-runs/${encodeURIComponent(runId)}`);
   const run = asRecord(payload.data);
   const status = typeof run?.status === "string" ? run.status : "UNKNOWN";
@@ -209,7 +274,8 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
   const sources: ResearchSource[] = [];
   for (const item of items) {
     const safetyProfile = !brief || /women.?s? safety|personal safety|situational awareness/i.test([...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(' '));
-    const parsed = sourceFromTiktokItem(item, sources.length, safetyProfile);
+    const parsed = platform === "TikTok" ? sourceFromTiktokItem(item, sources.length, safetyProfile)
+      : sourceFromCrossPlatformItem(item, sources.length, platform);
     if (!parsed || seen.has(parsed.url)) continue;
     seen.add(parsed.url);
     sources.push(parsed);

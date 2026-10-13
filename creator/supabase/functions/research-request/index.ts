@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { startNativeDiscovery } from "../_shared/platform-discovery.ts";
+import { startPlatformDiscovery, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {startDeepResearch} from '../_shared/research-provider.ts';
 import {resolveArticleWindow} from '../../../src/domain/research-window.ts';
 import { researchBriefSchema, researchRequestSchema, type ResearchBrief } from "../../../src/domain/research.ts";
@@ -145,16 +145,23 @@ Deno.serve(async (request) => {
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{requestedCount:input.requestedCount,sourceMode:'articles',articleWindow:brief.articleWindow}});
       reservation=0;return reply(headers,{job:updated.data,reused:false},202);
     }
-    const providerRun = await startNativeDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId });
+    const requestedPlatforms = brief.researchSourcePlatforms.filter((platform): platform is NativePlatform =>
+      platform === "TikTok" || platform === "YouTube" || platform === "Instagram");
+    const platformsToSearch: NativePlatform[] = [...new Set<NativePlatform>(requestedPlatforms.length ? requestedPlatforms : ["TikTok"])];
+    const launches = await Promise.allSettled(platformsToSearch.map((platform) =>
+      startPlatformDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId ?? undefined, platform })));
+    const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
+    if (!discoveryRuns.length) throw new Error("APIFY_PROVIDER");
+    const providerRun = discoveryRuns[0];
     const updated = await db.from("creator_research_jobs").update({
-      provider_response_id: providerRun.id, status: "researching", phase: "Finding direct TikTok videos…", started_at: new Date().toISOString(),
-      provider_metadata: { stage: "native_discovery", platform: providerRun.platform, apifyStatus: providerRun.status, queryPack: providerRun.queryPack },
+      provider_response_id: providerRun.id, status: "researching", phase: "Finding direct social videos…", started_at: new Date().toISOString(),
+      provider_metadata: { stage: "multi_discovery", discoveryRuns, launchFailures: launches.filter((result) => result.status === "rejected").length },
       updated_at: new Date().toISOString(),
     }).eq("id", jobId).select("*").maybeSingle();
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");
     await db.from("creator_research_usage").insert({
       id: crypto.randomUUID(), job_id: jobId, user_id: userId, operation: "deep_research_start", provider_response_id: providerRun.id,
-      model: "apify-tiktok-discovery", status: "started", request_metadata: { requestedCount: input.requestedCount, queryPack: providerRun.queryPack },
+      model: "apify-multi-platform-discovery", status: "started", request_metadata: { requestedCount: input.requestedCount, platforms: discoveryRuns.map((run) => run.platform) },
     });
     reservation = 0;
     return reply(headers, { job: updated.data, reused: false }, 202);
