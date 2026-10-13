@@ -98,7 +98,18 @@ export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = ""): st
     "security guard helps woman", "woman asks for help public place",
   ];
   const start = queryRotation(`${brief.profileContext}:${seed}:cross-platform`) % scenarios.length;
-  return Array.from({ length: 3 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
+  return Array.from({ length: 5 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
+}
+
+export function buildInstagramQueryPack(brief: ResearchBrief, seed = ""): string[] {
+  const safety = /women.?s? safety|personal safety|situational awareness/i.test(
+    [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
+  );
+  if (!safety) return buildCrossPlatformQueryPack(brief, seed).map((query) => query.replace(/\s+/g, "")).slice(0, 5);
+  // Instagram's "popular" search uses short keyword paths, not sentence search.
+  const terms = ["womensafety", "parkinglotsafety", "doorbellcamera", "stalkingawareness", "storesafety", "ridesharesafety"];
+  const start = queryRotation(`${brief.profileContext}:${seed}:instagram`) % terms.length;
+  return Array.from({ length: 5 }, (_, offset) => terms[(start + offset) % terms.length]);
 }
 
 // Removing clips already shown to a creator leaves gaps in the native ids.
@@ -249,7 +260,7 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
 
 export async function startPlatformDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string; platform: NativePlatform }): Promise<NativeDiscoveryRun> {
   if (input.platform === "TikTok") return startNativeDiscovery(input);
-  const queryPack = buildCrossPlatformQueryPack(input.brief, input.seed);
+  const queryPack = input.platform === "Instagram" ? buildInstagramQueryPack(input.brief, input.seed) : buildCrossPlatformQueryPack(input.brief, input.seed);
   const actor = input.platform === "YouTube" ? YOUTUBE_ACTOR : INSTAGRAM_ACTOR;
   const actorInput = input.platform === "YouTube"
     ? { searchQueries: queryPack, maxResults: 0, maxResultsShorts: Math.min(12, Math.max(8, input.requestedCount)), maxResultStreams: 0, transcriptionAndSubtitle: "NONE" }

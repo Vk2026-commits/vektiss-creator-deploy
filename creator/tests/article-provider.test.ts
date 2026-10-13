@@ -20,16 +20,17 @@ it('propagates provider failures',async()=>{
  vi.stubGlobal('Deno',{env:{get:()=> 'test'}});vi.stubGlobal('fetch',async()=>new Response('{}',{status:503}));
  await expect(startDeepResearch({brief,requestedCount:10,candidateMultiplier:1})).rejects.toThrow();
 });
-it('bounds screening to requested results and concise explanations',async()=>{
+it('bounds each screening batch with a ranking buffer and concise explanations',async()=>{
  const fetcher=mock({id:'test',status:'queued'});
  const sources=Array.from({length:30},(_,i)=>({providerSourceId:i+1,title:'Credit report story',url:`https://www.tiktok.com/@credit/video/${i+100}`,snippet:'A consumer explains a credit reporting error.',publishedAt:null,sourceType:'tiktok-native'}));
  for(const requestedCount of [10,20,30]){
   await startNativeVideoScreening({brief:{...brief,sourceMode:'videos'},requestedCount,sources});
   const body=JSON.parse((fetcher.mock.calls.at(-1) as unknown as [string,RequestInit])[1].body as string);
-  expect(body.response_format.json_schema.schema.properties.opportunities.maxItems).toBe(requestedCount);
+  const target=Math.min(sources.length,requestedCount*2,20);
+  expect(body.response_format.json_schema.schema.properties.opportunities.maxItems).toBe(target);
   expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.factualSummary.maxLength).toBe(240);
   expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.sourceIds.items.enum).toEqual(sources.map(source=>source.providerSourceId));
-  expect(body.max_output_tokens).toBeGreaterThanOrEqual(requestedCount*400);
+  expect(body.max_output_tokens).toBeGreaterThanOrEqual(target*400);
   expect(body.reasoning).toEqual({effort:'low'});
   expect(body.max_steps).toBe(1);
   expect(body.input).toContain('fewer when relevance is insufficient');

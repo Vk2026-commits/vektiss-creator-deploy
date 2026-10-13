@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { getDeepResearchRun, startNativeVideoScreening } from "../_shared/research-provider.ts";
+import { getDeepResearchRun, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
@@ -100,10 +100,13 @@ Deno.serve(async (request) => {
           return { ...run, ...result, sources: result.state === "completed" ? result.sources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) })) : [] };
         } catch { return { ...run, state: "failed", status: "PROVIDER_ERROR", sources: [] }; }
       })) : [];
+      const sourceGroups = checkedRuns.map((run) => run.state === "completed" && Array.isArray(run.sources) ? nativeSources(run.sources) : []);
+      const balancedSources = Array.from({ length: Math.max(0, ...sourceGroups.map((group) => group.length)) }, (_, index) =>
+        sourceGroups.flatMap((group) => group[index] ? [group[index]] : [])).flat();
       const discovery: NativeDiscoveryResult = multi
         ? checkedRuns.some((run) => run.state === "pending")
           ? { state: "pending", status: "MULTI" }
-          : { state: "completed", status: "MULTI", sources: checkedRuns.flatMap((run) => run.state === "completed" && Array.isArray(run.sources) ? nativeSources(run.sources) : []) }
+          : { state: "completed", status: "MULTI", sources: balancedSources }
         : await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
       if (discovery.state === "pending") {
         const updated = await db.from("creator_research_jobs").update({
@@ -148,22 +151,50 @@ Deno.serve(async (request) => {
       }
       job = claimed.data as Record<string, unknown>;
       if(job.status==='cancelled')return reply(headers,{job});
-      const screening = await startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job.requested_count), sources: freshSources });
+      // A single long prompt allowed one marginal source cluster to dominate
+      // the response. Screen bounded, independent groups and rank them together.
+      const batchSize = 18;
+      const batches = Array.from({ length: Math.ceil(freshSources.length / batchSize) }, (_, index) => freshSources.slice(index * batchSize, (index + 1) * batchSize));
+      const started = await Promise.allSettled(batches.map((sources) =>
+        startNativeVideoScreening({ brief: brief.data, requestedCount: Number(job!.requested_count), sources })));
+      const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
+        ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
+      if (!screeningRuns.length) throw new Error("SCREENING_PROVIDER_UNAVAILABLE");
       const compactSources = freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
       const updated = await db.from("creator_research_jobs").update({
-        provider_response_id: screening.id, status: "researching", phase: "Ranking direct video leads…",
+        provider_response_id: screeningRuns[0].id, status: "researching", phase: "Ranking direct video leads…",
         provider_metadata: {
-          ...providerMetadata, stage: "perplexity_screening", apifyStatus: discovery.status,
-          discoveryRuns: undefined, nativeSources: compactSources, discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length,
-          duplicateSourceCount: uniqueSources.length - freshSources.length, screeningModel: screening.model ?? null, screeningStatus: screening.status,
+          ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
+          discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map((run) => ({ platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [{ platform: "TikTok", status: discovery.status, sourceCount: discovery.sources.length }],
+          screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
+          nativeSources: compactSources, discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length,
+          duplicateSourceCount: uniqueSources.length - freshSources.length,
         }, updated_at: new Date().toISOString(),
       }).eq("id", job.id).select("*").maybeSingle();
       if (updated.error || !updated.data) throw new Error("PERSISTENCE");
       return reply(headers, { job: updated.data }, 202);
     }
-    const suppliedSources = providerMetadata.stage === "perplexity_screening" ? nativeSources(providerMetadata.nativeSources) : undefined;
-    if (providerMetadata.stage === "perplexity_screening" && !suppliedSources?.length) throw new Error("NATIVE_SOURCES_MISSING");
-    const providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data, suppliedSources);
+    const screeningStage = providerMetadata.stage === "perplexity_screening" || providerMetadata.stage === "multi_screening";
+    const suppliedSources = screeningStage ? nativeSources(providerMetadata.nativeSources) : undefined;
+    if (screeningStage && !suppliedSources?.length) throw new Error("NATIVE_SOURCES_MISSING");
+    let providerRun: ProviderRun | CompletedResearchRun;
+    if (providerMetadata.stage === "multi_screening") {
+      const runs = Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string; sourceIds: number[] }> : [];
+      if (!runs.length) throw new Error("SCREENING_RUNS_MISSING");
+      const results = await Promise.all(runs.map(async (run) => {
+        const ids = new Set(run.sourceIds);
+        try { return await getDeepResearchRun(run.id, brief.data, suppliedSources!.filter((source) => ids.has(source.providerSourceId))); }
+        catch { return { id: run.id, status: "failed", usage: {} } as ProviderRun; }
+      }));
+      if (results.some((result) => result.status === "queued" || result.status === "in_progress")) {
+        const updated = await db.from("creator_research_jobs").update({ phase: "Checking clip quality across platforms…", updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
+        return reply(headers, { job: updated.data ?? job }, 202);
+      }
+      const complete = results.filter((result): result is CompletedResearchRun => result.status === "completed" && "candidates" in result);
+      if (!complete.length) throw new Error("SCREENING_PROVIDER_UNAVAILABLE");
+      providerRun = { ...complete[0], sources: suppliedSources!, candidates: complete.flatMap((result) => result.candidates),
+        usage: { cost: { total_cost: complete.reduce((sum, result) => sum + (providerCost(result.usage) ?? 0), 0) } } };
+    } else providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data, suppliedSources);
     if (["queued", "in_progress"].includes(providerRun.status)) {
       const phase = providerMetadata.stage === "perplexity_screening" ? "Checking clip quality…" : "Researching…";
       const updated = await db.from("creator_research_jobs").update({ status: "researching", phase, updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();

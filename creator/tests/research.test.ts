@@ -8,7 +8,7 @@ import {
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../src/domain/research";
-import { automaticTikTokRejectReason, buildCrossPlatformQueryPack, buildTikTokQueryPack, renumberNativeSources, sourceFromCrossPlatformItem } from "../supabase/functions/_shared/platform-discovery";
+import { automaticTikTokRejectReason, buildCrossPlatformQueryPack, buildInstagramQueryPack, buildTikTokQueryPack, renumberNativeSources, sourceFromCrossPlatformItem } from "../supabase/functions/_shared/platform-discovery";
 
 const source = (id: number, url: string, title = "Evidence") => ({
   providerSourceId: id,
@@ -115,7 +115,9 @@ describe("research contracts", () => {
       sourceTopics: ["women safety"], reactionAngles: [], desiredOutcomes: [], profileTone: [], thingsToAvoid: [], profileContext: "",
       researchSourcePlatforms: ["TikTok", "Instagram", "YouTube"], researchScreeningCriteria: "", researchReferenceUrls: [],
     });
-    expect(buildCrossPlatformQueryPack(brief, "seed")).toHaveLength(3);
+    expect(buildCrossPlatformQueryPack(brief, "seed")).toHaveLength(5);
+    expect(buildInstagramQueryPack(brief, "seed")).toHaveLength(5);
+    expect(buildInstagramQueryPack(brief, "seed").every((query) => !query.includes(" "))).toBe(true);
     expect(sourceFromCrossPlatformItem({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", type: "shorts", title: "Store worker helps woman get to safety" }, 0, "YouTube")?.url)
       .toBe("https://www.youtube.com/shorts/dQw4w9WgXcQ");
     expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/p/ABC123/", type: "Video", shortCode: "ABC123", caption: "Store worker helps woman get to safety" }, 0, "Instagram")?.url)
