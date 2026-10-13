@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { testCommand } from './presenter-test.ts';
+import {voiceEngineSchema,voiceSpeedSchema,voicePreviewTextSchema} from '../../../src/domain/voice-settings.ts';
 
 export const providerId = z.enum(["heygen"]);
 const opaqueId = z.string().trim().min(1).max(300);
@@ -45,6 +46,9 @@ export const voiceSchema = z.object({
   provider_voice_id: opaqueId,
   name: z.string(),
   language: z.string().nullable(),
+  preview_audio_url:z.string().nullable().optional(),
+  default_engine:z.string().nullable().optional(),
+  available_engines:z.array(z.string()).optional(),
 });
 export const librarySchema = z.object({
   connections: z.array(connectionSchema),
@@ -62,6 +66,8 @@ const connection = { connection_id: z.string().uuid() };
 const cursor = z.string().max(2048).nullable().optional();
 const managementCommandSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("library") }).strict(),
+  z.object({action:z.literal('voice_details'),avatar_id:z.string().uuid(),voice_id:opaqueId.optional()}).strict(),
+  z.object({action:z.literal('preview_voice'),avatar_id:z.string().uuid(),voice_id:opaqueId.optional(),engine:voiceEngineSchema,speed:voiceSpeedSchema,text:voicePreviewTextSchema.optional(),paid_consent:z.literal(true)}).strict(),
   z.object({action:z.literal('verify_avatar_test'),test_id:z.string().uuid(),visual_approved:z.literal(true)}).strict(),
   z.object({ action: z.literal("engine_capabilities"), avatar_id:z.string().uuid() }).strict(),
   z.object({ action: z.literal("balance"), avatar_id:z.string().uuid() }).strict(),
