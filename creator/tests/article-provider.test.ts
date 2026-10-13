@@ -28,11 +28,18 @@ it('bounds screening to requested results and concise explanations',async()=>{
   const body=JSON.parse((fetcher.mock.calls.at(-1) as unknown as [string,RequestInit])[1].body as string);
   expect(body.response_format.json_schema.schema.properties.opportunities.maxItems).toBe(requestedCount);
   expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.factualSummary.maxLength).toBe(240);
+  expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.sourceIds.items.enum).toEqual(sources.map(source=>source.providerSourceId));
   expect(body.max_output_tokens).toBeGreaterThanOrEqual(requestedCount*400);
   expect(body.reasoning).toEqual({effort:'low'});
   expect(body.max_steps).toBe(1);
   expect(body.input).toContain('fewer when relevance is insufficient');
  }
+});
+it('accepts zero qualifying native clips without turning a completed search into a provider failure',async()=>{
+ const source={providerSourceId:1,title:'Unclear clip',url:'https://www.tiktok.com/@clip/video/123',snippet:'Context cannot be confirmed.',publishedAt:null,sourceType:'tiktok-native'};
+ mock({id:'test',status:'completed',output_text:JSON.stringify({opportunities:[]}),output:[]});
+ const result=await getDeepResearchRun('test',{...brief,sourceMode:'videos'},[source]);
+ expect('candidates' in result&&result.candidates).toEqual([]);
 });
 it('preserves incomplete reason and billed usage without parsing partial JSON',async()=>{
  mock({id:'test',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage:{output_tokens:8000},output_text:'{"opportunities":['});

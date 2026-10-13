@@ -250,6 +250,9 @@ export async function startNativeVideoScreening(input: {
   const candidateTarget = Math.min(sources.length, input.requestedCount);
   const compactSchema = structuredClone(candidateJsonSchema);
   compactSchema.properties.opportunities.maxItems = candidateTarget;
+  Object.assign(compactSchema.properties.opportunities.items.properties.sourceIds.items, {
+    enum: sources.map((source) => source.providerSourceId),
+  });
   for (const key of ['factualSummary','whyAudienceCares','creatorConnection','recommendedAngle'] as const) {
     compactSchema.properties.opportunities.items.properties[key].maxLength = 240;
   }
@@ -287,7 +290,7 @@ export async function getDeepResearchRun(providerResponseId: string, brief?: Res
   const sourceIds = new Set(sources.map((source) => source.providerSourceId));
   const candidates = envelope.opportunities.filter((candidate) => candidate.sourceIds.every((id) => sourceIds.has(id)));
   if(brief?.sourceMode==='articles')for(const candidate of candidates)candidate.publishedAt=sources.find(source=>source.providerSourceId===candidate.sourceIds[0])!.publishedAt;
-  if (brief?.sourceMode!=='articles'&&(!candidates.length || !sources.length)) throw new Error("RESEARCH_EVIDENCE_MISSING");
+  if (brief?.sourceMode!=='articles'&&!sources.length) throw new Error("RESEARCH_EVIDENCE_MISSING");
   return {
     ...run,
     completedAt: response.completed_at,

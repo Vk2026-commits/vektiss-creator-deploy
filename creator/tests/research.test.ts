@@ -8,7 +8,7 @@ import {
   type ResearchHistorySignal,
   type ResearchSource,
 } from "../src/domain/research";
-import { automaticTikTokRejectReason, buildTikTokQueryPack } from "../supabase/functions/_shared/platform-discovery";
+import { automaticTikTokRejectReason, buildTikTokQueryPack, renumberNativeSources } from "../supabase/functions/_shared/platform-discovery";
 
 const source = (id: number, url: string, title = "Evidence") => ({
   providerSourceId: id,
@@ -86,7 +86,7 @@ describe("research contracts", () => {
       researchSourcePlatforms: ["TikTok"], researchScreeningCriteria: "", researchReferenceUrls: [],
     });
     const pack = buildTikTokQueryPack(brief);
-    expect(pack).toHaveLength(3);
+    expect(pack).toHaveLength(5);
     expect(pack.some((query) => query.includes("parking lot") || query.includes("store"))).toBe(true);
     expect(pack.every((query) => query.length > 10)).toBe(true);
     const rose={...brief,audienceName:'Fix Your Own Credit',sourceTopics:['credit reports, car financing, collections'],contentPillars:['credit rebuilding'],audienceProblems:['credit score']};
@@ -100,6 +100,12 @@ describe("research contracts", () => {
       expect(queries).toEqual(expect.arrayContaining(['consumer protection issues','common credit mistakes']));
       expect(queries.join(' ')).not.toMatch(/Prioritize|check|real life|opportunity/);
     }
+  });
+
+  it("renumbers fresh native clips after previously shown links are removed", () => {
+    const fresh = [source(2, "https://www.tiktok.com/@one/video/123"), source(9, "https://www.tiktok.com/@two/video/456")];
+    expect(renumberNativeSources(fresh).map((item) => item.providerSourceId)).toEqual([1, 2]);
+    expect(fresh.map((item) => item.providerSourceId)).toEqual([2, 9]);
   });
 
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {

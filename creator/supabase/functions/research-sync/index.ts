@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startNativeVideoScreening } from "../_shared/research-provider.ts";
-import { getNativeDiscoveryRun } from "../_shared/platform-discovery.ts";
+import { getNativeDiscoveryRun, renumberNativeSources } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
   rankResearchCandidates,
@@ -114,10 +114,10 @@ Deno.serve(async (request) => {
         : { data: [], error: null };
       if (known.error) throw new Error("PERSISTENCE");
       const knownUrls = new Set((known.data ?? []).map((source) => String(source.canonical_url)));
-      const freshSources = discovery.sources.filter((source) => {
+      const freshSources = renumberNativeSources(discovery.sources.filter((source) => {
         const canonical = canonicalResearchUrl(source.url);
         return canonical && !knownUrls.has(canonical);
-      });
+      }));
       if (!freshSources.length) {
         await markFailed(job, "NATIVE_DISCOVERY_NO_NEW_LEADS");
         return reply(headers, { code: "NATIVE_DISCOVERY_NO_NEW_LEADS" }, 503);
@@ -196,14 +196,16 @@ Deno.serve(async (request) => {
       return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data }] : [];
     });
     const ranked = rankResearchCandidates(providerRun.candidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
-    if (!ranked.length && brief.data.sourceMode==='articles') {
+    if (!ranked.length) {
 
-      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase:'No new relevant articles with verified dates were found in this window. Try a wider date range.',delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
+      const phase=brief.data.sourceMode==='articles'
+        ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
+        : 'No new clips met this profile’s safety and relevance checks. Try again later or broaden the profile’s research criteria.';
+      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
       if(result.error)throw Error('PERSISTENCE');
-      await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model,status:'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),accepted_count:0,request_metadata:{sourceMode:'articles',articleWindow:brief.data.articleWindow}});
+      await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model,status:'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),accepted_count:0,request_metadata:{sourceMode:brief.data.sourceMode,articleWindow:brief.data.articleWindow}});
       return reply(headers,{job:result.data,deliveredCount:0});
     }
-    if (!ranked.length) throw new Error("NO_NEW_OPPORTUNITIES");
     await db.from("creator_research_jobs").update({ status: "ranking", phase: "Ranking opportunities…", updated_at: new Date().toISOString() }).eq("id", job.id);
 
     const uniqueSources = new Map<string, ResearchSource>();
@@ -255,7 +257,7 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:"Your opportunities are ready.", delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} clips ready.${delivered<Number(job.requested_count)?' Fewer new clips met this profile’s checks.':''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).select("*").maybeSingle();
     if (finalJob.error || !finalJob.data) throw new Error("PERSISTENCE");

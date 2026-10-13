@@ -79,7 +79,14 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] 
   // repeatedly returned AI clips, animals, and news reposts; a seed keeps each
   // run deterministic while exposing a different three-scenario slice.
   const start = queryRotation(`${brief.profileContext}:${seed}`) % scenarios.length;
-  return Array.from({ length: 3 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
+  return Array.from({ length: 5 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
+}
+
+// Removing clips already shown to a creator leaves gaps in the native ids.
+// Give the screener a small, contiguous set of ids so its source references
+// can be validated without accidentally dropping the whole batch.
+export function renumberNativeSources(sources: ResearchSource[]): ResearchSource[] {
+  return sources.map((source, index) => ({ ...source, providerSourceId: index + 1 }));
 }
 
 function nativeTikTokUrl(value: string): string | null {
@@ -168,7 +175,7 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
     body: JSON.stringify({
       searchQueries: queryPack,
       searchSection: "/video",
-      resultsPerPage: Math.min(12, Math.max(8, input.requestedCount)),
+      resultsPerPage: Math.min(15, Math.max(10, input.requestedCount)),
       videoSearchSorting: "MOST_RELEVANT",
       videoSearchDateFilter: "ALL_TIME",
       scrapeRelatedSearchWords: false,
