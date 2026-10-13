@@ -149,13 +149,13 @@ Deno.serve(async (request) => {
       platform === "TikTok" || platform === "YouTube" || platform === "Instagram");
     const platformsToSearch: NativePlatform[] = [...new Set<NativePlatform>(requestedPlatforms.length ? requestedPlatforms : ["TikTok"])];
     const launches = await Promise.allSettled(platformsToSearch.map((platform) =>
-      startPlatformDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId ?? undefined, platform })));
+      startPlatformDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId ?? undefined, round: 1, platform })));
     const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
     if (!discoveryRuns.length) throw new Error("APIFY_PROVIDER");
     const providerRun = discoveryRuns[0];
     const updated = await db.from("creator_research_jobs").update({
       provider_response_id: providerRun.id, status: "researching", phase: "Finding direct social videos…", started_at: new Date().toISOString(),
-      provider_metadata: { stage: "multi_discovery", discoveryRuns, launchFailures: launches.filter((result) => result.status === "rejected").length },
+      provider_metadata: { stage: "multi_discovery", round: 1, discoveryRuns, roundReports: [], accumulatedSources: [], accumulatedCandidates: [], launchFailures: launches.filter((result) => result.status === "rejected").length },
       updated_at: new Date().toISOString(),
     }).eq("id", jobId).select("*").maybeSingle();
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");

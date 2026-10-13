@@ -118,6 +118,11 @@ describe("research contracts", () => {
     expect(buildCrossPlatformQueryPack(brief, "seed")).toHaveLength(5);
     expect(buildInstagramQueryPack(brief, "seed")).toHaveLength(5);
     expect(buildInstagramQueryPack(brief, "seed").every((query) => !query.includes(" "))).toBe(true);
+    for (const build of [buildTikTokQueryPack, buildCrossPlatformQueryPack, buildInstagramQueryPack]) {
+      const rounds = [1, 2, 3].map((round) => build(brief, "same-job", round));
+      expect(rounds.every((queries) => queries.length >= 3)).toBe(true);
+      expect(new Set(rounds.flat()).size).toBe(rounds.flat().length);
+    }
     expect(sourceFromCrossPlatformItem({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", type: "shorts", title: "Store worker helps woman get to safety" }, 0, "YouTube")?.url)
       .toBe("https://www.youtube.com/shorts/dQw4w9WgXcQ");
     expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/p/ABC123/", type: "Video", shortCode: "ABC123", caption: "Store worker helps woman get to safety" }, 0, "Instagram")?.url)
@@ -162,5 +167,22 @@ describe("research contracts", () => {
     );
     expect(ranked).toHaveLength(1);
     expect(ranked[0].sources[0].url).toBe("https://new.example.com/video");
+  });
+
+  it("combines distinct round candidates without padding with weak or already shown clips", () => {
+    const sources = [
+      source(1, "https://www.tiktok.com/@one/video/123", "Woman followed in a store"),
+      source(2, "https://www.youtube.com/shorts/abcdefghijk", "Unwanted visitor at a door"),
+      source(3, "https://www.instagram.com/reel/newclip/", "Parking lot help"),
+    ];
+    const candidates = [
+      candidate({ title: "Woman gets help after being followed in a store", sourceIds: [1], relevanceScore: 91 }),
+      candidate({ title: "An unwanted visitor appears at the front door", sourceIds: [2], relevanceScore: 86 }),
+      candidate({ title: "Parking lot rumor with no confirmed incident", sourceIds: [3], relevanceScore: 10 }),
+    ];
+    const eligible = candidates.filter((item) => item.relevanceScore >= 50);
+    expect(rankResearchCandidates(eligible, sources, [], 10)).toHaveLength(2);
+    expect(rankResearchCandidates(eligible, sources, [{ title: "Seen", category: "Home buying", status: "new", sourceSnapshot: [sources[0]] }], 10))
+      .toHaveLength(1);
   });
 });

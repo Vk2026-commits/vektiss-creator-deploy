@@ -51,7 +51,7 @@ function queryRotation(value: string): number {
   return [...value].reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 7);
 }
 
-export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] {
+export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
   const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
   const safetyProfile = /women.?s? safety|personal safety|situational awareness/i.test(topics.join(' '));
   if (!safetyProfile) {
@@ -69,15 +69,10 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] 
     return Array.from({length:Math.min(3,terms.length)},(_,offset)=>terms[(start+offset)%terms.length]);
   }
   const scenarios = [
-    "woman followed parking lot gets help original video",
-    "store employee walks woman to car safety original video",
-    "woman followed in store staff helps security camera",
-    "doorbell camera stranger approaches driveway woman safe",
-    "security guard removes aggressive man from store original video",
-    "woman asks for help parking lot gets to safety video",
-    "ring camera child yells stranger off driveway original video",
-    "staff helps harassed woman leave store safety video",
-  ];
+    ["woman followed parking lot gets help original video", "store employee walks woman to car safety original video", "woman followed in store staff helps security camera", "doorbell camera stranger approaches driveway woman safe", "security guard removes aggressive man from store original video", "woman asks for help parking lot gets to safety video"],
+    ["woman notices stranger following grocery store original video", "woman asks store employee escort to car original video", "ring doorbell unwanted man on porch woman original video", "woman confronted at gas station gets help original video", "bystanders help harassed woman on sidewalk original video", "woman avoids suspicious person parking garage original video"],
+    ["woman followed while shopping security guard intervenes original", "doorbell video stranger tries front door woman home original", "woman gets help after parking garage following original", "rideshare driver helps woman unsafe pickup original video", "customer helps woman leave aggressive encounter original", "woman calls staff after unwanted approach store original video"],
+  ][Math.max(0, Math.min(2, round - 1))];
   // Rotate concrete scenarios between searches. Generic "security footage" terms
   // repeatedly returned AI clips, animals, and news reposts; a seed keeps each
   // run deterministic while exposing a different three-scenario slice.
@@ -85,29 +80,33 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = ""): string[] 
   return Array.from({ length: 5 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
 }
 
-export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = ""): string[] {
+export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
   // Use shorter, incident-oriented phrases for Shorts and Reels search. Long
   // TikTok-style phrases tend to return unrelated keyword coincidences there.
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
     [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
   );
-  if (!safety) return buildTikTokQueryPack(brief, seed).slice(0, 3);
+  if (!safety) return buildTikTokQueryPack(brief, seed, round).slice(0, 3);
   const scenarios = [
-    "woman followed parking lot help", "store staff helps woman safety",
-    "doorbell camera stranger driveway", "woman escapes harassment store",
-    "security guard helps woman", "woman asks for help public place",
-  ];
+    ["woman followed parking lot help", "store staff helps woman safety", "doorbell camera stranger driveway", "woman escapes harassment store", "security guard helps woman", "woman asks for help public place"],
+    ["woman followed grocery store employee help", "woman escorted to car store staff", "unwanted visitor doorbell camera woman", "woman gets help gas station stranger", "bystanders help woman sidewalk harassment", "woman followed parking garage help"],
+    ["woman followed shopping security intervenes", "stranger tries front door ring camera", "woman seeks help parking garage follower", "rideshare unsafe pickup woman help", "customer helps woman escape aggressive man", "staff helps woman leave store confrontation"],
+  ][Math.max(0, Math.min(2, round - 1))];
   const start = queryRotation(`${brief.profileContext}:${seed}:cross-platform`) % scenarios.length;
   return Array.from({ length: 5 }, (_, offset) => scenarios[(start + offset) % scenarios.length]);
 }
 
-export function buildInstagramQueryPack(brief: ResearchBrief, seed = ""): string[] {
+export function buildInstagramQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
     [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
   );
-  if (!safety) return buildCrossPlatformQueryPack(brief, seed).map((query) => query.replace(/\s+/g, "")).slice(0, 5);
+  if (!safety) return buildCrossPlatformQueryPack(brief, seed, round).map((query) => query.replace(/\s+/g, "")).slice(0, 5);
   // Instagram's "popular" search uses short keyword paths, not sentence search.
-  const terms = ["womensafety", "parkinglotsafety", "doorbellcamera", "stalkingawareness", "storesafety", "ridesharesafety"];
+  const terms = [
+    ["womensafety", "parkinglotsafety", "doorbellcamera", "stalkingawareness", "storesafety", "ridesharesafety"],
+    ["followedinstore", "parkinglotincident", "ringdoorbell", "unwantedvisitor", "securityescort", "gasstationsafety"],
+    ["followedwhilewalking", "parkinggaragesafety", "doorbellfootage", "storesecurity", "unsafeencounter", "bystanderhelp"],
+  ][Math.max(0, Math.min(2, round - 1))];
   const start = queryRotation(`${brief.profileContext}:${seed}:instagram`) % terms.length;
   return Array.from({ length: 5 }, (_, offset) => terms[(start + offset) % terms.length]);
 }
@@ -231,8 +230,8 @@ export function sourceFromCrossPlatformItem(item: unknown, index: number, platfo
   });
 }
 
-export async function startNativeDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string }): Promise<NativeDiscoveryRun> {
-  const queryPack = buildTikTokQueryPack(input.brief, input.seed);
+export async function startNativeDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string; round?: number }): Promise<NativeDiscoveryRun> {
+  const queryPack = buildTikTokQueryPack(input.brief, input.seed, input.round);
   const payload = await apify(`/acts/${encodeURIComponent(TIKTOK_ACTOR)}/runs`, {
     method: "POST",
     body: JSON.stringify({
@@ -258,9 +257,9 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
   return { id: run.id, status: run.status, platform: "TikTok", queryPack };
 }
 
-export async function startPlatformDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string; platform: NativePlatform }): Promise<NativeDiscoveryRun> {
+export async function startPlatformDiscovery(input: { brief: ResearchBrief; requestedCount: number; seed?: string; round?: number; platform: NativePlatform }): Promise<NativeDiscoveryRun> {
   if (input.platform === "TikTok") return startNativeDiscovery(input);
-  const queryPack = input.platform === "Instagram" ? buildInstagramQueryPack(input.brief, input.seed) : buildCrossPlatformQueryPack(input.brief, input.seed);
+  const queryPack = input.platform === "Instagram" ? buildInstagramQueryPack(input.brief, input.seed, input.round) : buildCrossPlatformQueryPack(input.brief, input.seed, input.round);
   const actor = input.platform === "YouTube" ? YOUTUBE_ACTOR : INSTAGRAM_ACTOR;
   const actorInput = input.platform === "YouTube"
     ? { searchQueries: queryPack, maxResults: 0, maxResultsShorts: Math.min(12, Math.max(8, input.requestedCount)), maxResultStreams: 0, transcriptionAndSubtitle: "NONE" }

@@ -1,13 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
-import { getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
+import { getNativeDiscoveryRun, renumberNativeSources, startPlatformDiscovery, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
+  providerResearchCandidateSchema,
   rankResearchCandidates,
   researchBriefSchema,
   researchSourceSchema,
   type ResearchHistorySignal,
+  type ProviderResearchCandidate,
   type ResearchSource,
 } from "../../../src/domain/research.ts";
 import { z } from "zod";
@@ -57,6 +59,20 @@ function nativeSources(value: unknown): ResearchSource[] {
   return parsed.success ? parsed.data : [];
 }
 
+function retainedCandidates(value: unknown): ProviderResearchCandidate[] {
+  const parsed = z.array(providerResearchCandidateSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+function roundNumber(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) ? Math.max(1, Math.min(3, value)) : 1;
+}
+
+function sourcePlatform(source: ResearchSource): NativePlatform {
+  const host = new URL(source.url).hostname;
+  return host.endsWith("instagram.com") ? "Instagram" : host.endsWith("youtube.com") || host === "youtu.be" ? "YouTube" : "TikTok";
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   const headers = headersFor(origin);
@@ -88,6 +104,7 @@ Deno.serve(async (request) => {
     const brief = researchBriefSchema.safeParse(job.input_snapshot);
     if (!brief.success) throw new Error("RESEARCH_INPUT");
     const providerMetadata = metadata(job);
+    const currentRound = roundNumber(providerMetadata.round);
     if (providerMetadata.stage === "native_discovery" || providerMetadata.stage === "multi_discovery") {
       if (job.status !== "researching") return reply(headers, { job }, 202);
       const multi = providerMetadata.stage === "multi_discovery";
@@ -110,19 +127,19 @@ Deno.serve(async (request) => {
         : await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
       if (discovery.state === "pending") {
         const updated = await db.from("creator_research_jobs").update({
-          status: "researching", phase: multi ? "Finding direct social videos…" : "Finding direct TikTok videos…",
+          status: "researching", phase: multi && currentRound > 1
+            ? `${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips found; searching round ${currentRound} of 3…`
+            : multi ? "Finding direct social videos…" : "Finding direct TikTok videos…",
           provider_metadata: { ...providerMetadata, apifyStatus: discovery.status, ...(multi ? { discoveryRuns: checkedRuns } : {}) }, updated_at: new Date().toISOString(),
-        }).eq("id", job.id).select("*").maybeSingle();
+        }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
       if (discovery.state === "failed") {
         await markFailed(job, `APIFY_${discovery.status}`);
         return reply(headers, { code: `APIFY_${discovery.status}` }, 503);
       }
-      if (!discovery.sources.length) {
-        await markFailed(job, "NATIVE_DISCOVERY_EMPTY");
-        return reply(headers, { code: "NATIVE_DISCOVERY_EMPTY" }, 503);
-      }
+      const priorSources = nativeSources(providerMetadata.accumulatedSources);
+      const priorCandidates = retainedCandidates(providerMetadata.accumulatedCandidates);
       const uniqueSources = [...new Map(discovery.sources.map((source) => [canonicalResearchUrl(source.url), source])).values()]
         .slice(0, Math.min(90, Math.max(45, Number(job.requested_count) * 7)));
       const discoveredUrls = uniqueSources
@@ -133,13 +150,23 @@ Deno.serve(async (request) => {
         : { data: [], error: null };
       if (known.error) throw new Error("PERSISTENCE");
       const knownUrls = new Set((known.data ?? []).map((source) => String(source.canonical_url)));
+      const priorUrls = new Set(priorSources.map((source) => canonicalResearchUrl(source.url)));
+      const nextSourceId = Math.max(0, ...priorSources.map((source) => source.providerSourceId));
       const freshSources = renumberNativeSources(uniqueSources.filter((source) => {
         const canonical = canonicalResearchUrl(source.url);
-        return canonical && !knownUrls.has(canonical);
-      }));
+        return canonical && !knownUrls.has(canonical) && !priorUrls.has(canonical);
+      })).map((source) => ({ ...source, providerSourceId: source.providerSourceId + nextSourceId }));
+      const freshByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
+      for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
       if (!freshSources.length) {
-        await markFailed(job, "NATIVE_DISCOVERY_NO_NEW_LEADS");
-        return reply(headers, { code: "NATIVE_DISCOVERY_NO_NEW_LEADS" }, 503);
+        const updated = await db.from("creator_research_jobs").update({
+          status: "researching", phase: `Round ${currentRound} found no new clips; checking ${priorCandidates.length} candidates…`,
+          provider_metadata: { ...providerMetadata, stage: "multi_screening", discoveryRuns: undefined,
+            screeningRuns: [], nativeSources: priorSources, retainedCandidates: priorCandidates, freshSourceCount: 0, freshByPlatform,
+            discoverySummary: multi ? checkedRuns.map((run) => ({ platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [] },
+          updated_at: new Date().toISOString(),
+        }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
+        return reply(headers, { job: updated.data ?? job }, 202);
       }
       const claimed = await db.from("creator_research_jobs").update({
         status: "reviewing_sources", phase: "Checking clip quality…", updated_at: new Date().toISOString(),
@@ -160,41 +187,53 @@ Deno.serve(async (request) => {
         startNativeVideoScreening({ brief: brief.data, requestedCount: batchTarget, sources })));
       const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
         ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
-      if (!screeningRuns.length) throw new Error("SCREENING_PROVIDER_UNAVAILABLE");
-      const compactSources = freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }));
+      const compactSources = [...priorSources, ...freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }))];
       const updated = await db.from("creator_research_jobs").update({
-        provider_response_id: screeningRuns[0].id, status: "researching", phase: "Ranking direct video leads…",
+        provider_response_id: screeningRuns[0]?.id ?? job.provider_response_id, status: "researching",
+        phase: currentRound > 1 ? `Checking clip quality (round ${currentRound} of 3; ${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips so far)…` : "Ranking direct video leads…",
         provider_metadata: {
           ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
           discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map((run) => ({ platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [{ platform: "TikTok", status: discovery.status, sourceCount: discovery.sources.length }],
           screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
-          nativeSources: compactSources, discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length,
+          nativeSources: compactSources, retainedCandidates: priorCandidates,
+          accumulatedSources: undefined, accumulatedCandidates: undefined,
+          discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length, freshByPlatform,
           duplicateSourceCount: uniqueSources.length - freshSources.length,
         }, updated_at: new Date().toISOString(),
-      }).eq("id", job.id).select("*").maybeSingle();
-      if (updated.error || !updated.data) throw new Error("PERSISTENCE");
+      }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
+      if (updated.error) throw new Error("PERSISTENCE");
+      if (!updated.data) {
+        const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
+        return reply(headers, { job: current ?? job }, 202);
+      }
       return reply(headers, { job: updated.data }, 202);
     }
     const screeningStage = providerMetadata.stage === "perplexity_screening" || providerMetadata.stage === "multi_screening";
     const suppliedSources = screeningStage ? nativeSources(providerMetadata.nativeSources) : undefined;
-    if (screeningStage && !suppliedSources?.length) throw new Error("NATIVE_SOURCES_MISSING");
+    const previousCandidates = retainedCandidates(providerMetadata.retainedCandidates);
+    const noNewScreening = providerMetadata.stage === "multi_screening" && Array.isArray(providerMetadata.screeningRuns) && providerMetadata.screeningRuns.length === 0;
+    if (screeningStage && !suppliedSources?.length && !noNewScreening) throw new Error("NATIVE_SOURCES_MISSING");
     let providerRun: ProviderRun | CompletedResearchRun;
     if (providerMetadata.stage === "multi_screening") {
       const runs = Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string; sourceIds: number[] }> : [];
-      if (!runs.length) throw new Error("SCREENING_RUNS_MISSING");
       const results = await Promise.all(runs.map(async (run) => {
         const ids = new Set(run.sourceIds);
         try { return await getDeepResearchRun(run.id, brief.data, suppliedSources!.filter((source) => ids.has(source.providerSourceId))); }
         catch { return { id: run.id, status: "failed", usage: {} } as ProviderRun; }
       }));
       if (results.some((result) => result.status === "queued" || result.status === "in_progress")) {
-        const updated = await db.from("creator_research_jobs").update({ phase: "Checking clip quality across platforms…", updated_at: new Date().toISOString() }).eq("id", job.id).select("*").maybeSingle();
+        const updated = await db.from("creator_research_jobs").update({ phase: `Checking clip quality across platforms (round ${currentRound} of 3)…`, updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
       const complete = results.filter((result): result is CompletedResearchRun => result.status === "completed" && "candidates" in result);
-      if (!complete.length) throw new Error("SCREENING_PROVIDER_UNAVAILABLE");
-      providerRun = { ...complete[0], sources: suppliedSources!, candidates: complete.flatMap((result) => result.candidates),
-        usage: { cost: { total_cost: complete.reduce((sum, result) => sum + (providerCost(result.usage) ?? 0), 0) } } };
+      providerMetadata.screeningCompletedCount = complete.length;
+      providerMetadata.screeningFailedCount = results.length - complete.length;
+      const roundCost = complete.reduce((sum, result) => sum + (providerCost(result.usage) ?? 0), 0);
+      providerRun = {
+        id: complete[0]?.id ?? String(job.provider_response_id), status: "completed", model: complete[0]?.model,
+        sources: suppliedSources!, candidates: [...previousCandidates, ...complete.flatMap((result) => result.candidates)],
+        raw: {}, usage: { cost: { total_cost: Number(providerMetadata.accumulatedCost ?? 0) + roundCost } },
+      };
     } else providerRun = await getDeepResearchRun(String(job.provider_response_id), brief.data, suppliedSources);
     if (["queued", "in_progress"].includes(providerRun.status)) {
       const phase = providerMetadata.stage === "perplexity_screening" ? "Checking clip quality…" : "Researching…";
@@ -249,17 +288,70 @@ Deno.serve(async (request) => {
       ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 50)
       : providerRun.candidates;
     const ranked = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
+    const priorReports = Array.isArray(providerMetadata.roundReports) ? providerMetadata.roundReports : [];
+    const screenedIds = new Set((Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ sourceIds: number[] }> : [])
+      .flatMap((run) => Array.isArray(run.sourceIds) ? run.sourceIds : []));
+    const acceptedByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
+    for (const candidate of ranked) {
+      const primary = candidate.sources[0];
+      if (primary && screenedIds.has(primary.providerSourceId)) acceptedByPlatform[sourcePlatform(primary)] += 1;
+    }
+    const currentReport = brief.data.sourceMode === "videos" ? {
+      round: currentRound, discovery: providerMetadata.discoverySummary ?? [],
+      freshSourceCount: providerMetadata.freshSourceCount ?? 0, freshByPlatform: providerMetadata.freshByPlatform ?? {},
+      screenedCandidateCount: providerRun.candidates.length - previousCandidates.length,
+      acceptedCount: ranked.length, acceptedByPlatform,
+      screeningCompletedCount: providerMetadata.screeningCompletedCount ?? 0,
+      screeningFailedCount: providerMetadata.screeningFailedCount ?? 0,
+      screeningRunIds: (Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string }> : []).map((run) => run.id),
+    } : null;
+    const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
+    if (brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3) {
+      const platforms = [...new Set<NativePlatform>(brief.data.researchSourcePlatforms.filter((platform): platform is NativePlatform =>
+        platform === "TikTok" || platform === "YouTube" || platform === "Instagram"))];
+      if (!platforms.length) platforms.push("TikTok");
+      const nextRound = currentRound + 1;
+      const launches = await Promise.allSettled(platforms.map((platform) => startPlatformDiscovery({
+        brief: brief.data, requestedCount: Number(job!.requested_count), seed: `${job!.id}:round-${nextRound}`, round: nextRound, platform,
+      })));
+      const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
+      if (discoveryRuns.length) {
+        const updated = await db.from("creator_research_jobs").update({
+          provider_response_id: discoveryRuns[0].id, status: "researching",
+          phase: `${ranked.length} of ${job.requested_count} strong clips found; searching round ${nextRound} of 3…`,
+          provider_metadata: { stage: "multi_discovery", round: nextRound, discoveryRuns,
+            roundReports, acceptedCountSoFar: ranked.length, launchFailures: launches.length - discoveryRuns.length,
+            accumulatedSources: providerRun.sources, accumulatedCandidates: providerRun.candidates,
+            accumulatedCost: providerCost(providerRun.usage) ?? 0 }, updated_at: new Date().toISOString(),
+        }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
+        if (updated.error) throw new Error("PERSISTENCE");
+        if (!updated.data) {
+          const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
+          return reply(headers, { job: current ?? job }, 202);
+        }
+        return reply(headers, { job: updated.data }, 202);
+      }
+    }
     if (!ranked.length) {
 
       const phase=brief.data.sourceMode==='articles'
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
-        : 'No new clips met this profile’s safety and relevance checks. Try again later or broaden the profile’s research criteria.';
-      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).select('*').maybeSingle();
+        : `No strong, distinct clips found after ${currentRound} search round${currentRound === 1 ? '' : 's'}. Try again later or broaden this profile’s research criteria.`;
+      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
+        provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
+        completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
       if(result.error)throw Error('PERSISTENCE');
+      if(!result.data){const {data:current}=await db.from('creator_research_jobs').select('*').eq('id',job.id).maybeSingle();return reply(headers,{job:current??job},202);}
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model,status:'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),accepted_count:0,request_metadata:{sourceMode:brief.data.sourceMode,articleWindow:brief.data.articleWindow}});
       return reply(headers,{job:result.data,deliveredCount:0});
     }
-    await db.from("creator_research_jobs").update({ status: "ranking", phase: "Ranking opportunities…", updated_at: new Date().toISOString() }).eq("id", job.id);
+    const rankingClaim = await db.from("creator_research_jobs").update({ status: "ranking", phase: "Ranking opportunities…", updated_at: new Date().toISOString() })
+      .eq("id", job.id).eq("status", "reviewing_sources").select("id").maybeSingle();
+    if (rankingClaim.error) throw new Error("PERSISTENCE");
+    if (!rankingClaim.data) {
+      const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
+      return reply(headers, { job: current ?? job }, 202);
+    }
 
     const uniqueSources = new Map<string, ResearchSource>();
     for (const candidate of ranked) for (const source of candidate.sources) {
@@ -310,10 +402,15 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} clips ready.${delivered<Number(job.requested_count)?' Fewer new clips met this profile’s checks.':''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} clips ready.${delivered<Number(job.requested_count)?` Searched ${currentRound} round${currentRound === 1 ? '' : 's'}; no more strong, distinct matches were available.`:''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    }).eq("id", job.id).select("*").maybeSingle();
-    if (finalJob.error || !finalJob.data) throw new Error("PERSISTENCE");
+    }).eq("id", job.id).eq("status", "ranking").select("*").maybeSingle();
+    if (finalJob.error) throw new Error("PERSISTENCE");
+    if (!finalJob.data) {
+      const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
+      return reply(headers, { job: current ?? job }, 202);
+    }
     await db.from("creator_research_usage").insert({
       id: crypto.randomUUID(), job_id: job.id, user_id: auth.user.id, operation: "deep_research_complete",
       provider_response_id: providerRun.id, model: providerRun.model ?? null, status: "completed", usage,

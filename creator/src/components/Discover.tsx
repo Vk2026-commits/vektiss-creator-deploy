@@ -29,7 +29,10 @@ type ResearchProgress = { percent: number; title: string; timing: string };
 
 function progressForResearch(job: { status: string; phase: string }): ResearchProgress {
   const phase = job.phase.toLowerCase();
+  const round = Number(phase.match(/round (\d) of 3/)?.[1] ?? 0);
   if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
+  if (round > 1 && phase.includes("searching round")) return { percent: round === 2 ? 48 : 72, title: `Searching round ${round} of 3`, timing: "Looking for more strong matches" };
+  if (round > 1 && (phase.includes("checking clip") || phase.includes("round") && phase.includes("quality"))) return { percent: round === 2 ? 58 : 82, title: `Checking round ${round} clips`, timing: "Filtering weak and duplicate matches" };
   if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "Searching the source platform" };
   if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
   if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
@@ -98,7 +101,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
   async function stop(jobId:string){
     if(stopLock.current)return;
     stopLock.current=true;setStopping(jobId);setError('');
-    try{const result=await stopResearch(jobId);setStopConfirm(null);setNotice(result.job.status==='cancelled'?'Search stopped. Saved results are kept and unused allowance is returned.':'This search has already finished.');await load();}
+    try{const result=await stopResearch(jobId);setStopConfirm(null);setNotice(result.job.status==='cancelled'?'Search stopped. Previously saved ideas are unchanged; unused idea allowance is returned.':'This search has already finished.');await load();}
     catch{setError('Could not stop the search. Please try Stop search again.');}
     finally{stopLock.current=false;setStopping(null);}
   }
@@ -164,7 +167,7 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
           <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div></div>
           <div className="research-progress-track" role="progressbar" aria-label={progress.title}><i style={{ width: `${progress.percent}%` }} /></div>
           <p>{job.phase}</p>
-          {stopConfirm===job.id?<div className="research-stop-confirm"><strong>Keep the results found so far and stop searching?</strong><p>Work already sent to a search provider may still incur a cost.</p><div><button type="button" className="button secondary" disabled={stopping===job.id} onClick={()=>setStopConfirm(null)}>Keep searching</button><button type="button" className="button primary" disabled={stopping===job.id} onClick={()=>void stop(job.id)}>{stopping===job.id?'Stopping…':'Stop search'}</button></div></div>:<button type="button" className="button secondary" onClick={()=>setStopConfirm(job.id)}>Stop search</button>}
+          {stopConfirm===job.id?<div className="research-stop-confirm"><strong>Stop this search?</strong><p>Unfinished clips from this search will not be added. Previously saved ideas stay available, and work already sent to a provider may still incur a cost.</p><div><button type="button" className="button secondary" disabled={stopping===job.id} onClick={()=>setStopConfirm(null)}>Keep searching</button><button type="button" className="button primary" disabled={stopping===job.id} onClick={()=>void stop(job.id)}>{stopping===job.id?'Stopping…':'Stop search'}</button></div></div>:<button type="button" className="button secondary" onClick={()=>setStopConfirm(job.id)}>Stop search</button>}
         </section>;
       })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
