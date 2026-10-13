@@ -145,11 +145,16 @@ Deno.serve(async (request) => {
       const discoveredUrls = uniqueSources
         .map((source) => canonicalResearchUrl(source.url))
         .filter((url): url is string => Boolean(url));
-      const known = discoveredUrls.length
-        ? await db.from("creator_research_sources").select("canonical_url").eq("user_id", auth.user.id).in("canonical_url", discoveredUrls)
-        : { data: [], error: null };
-      if (known.error) throw new Error("PERSISTENCE");
-      const knownUrls = new Set((known.data ?? []).map((source) => String(source.canonical_url)));
+      // A 90-link discovery round can exceed PostgREST's URL limit when all
+      // canonical URLs are placed in one `in` filter. Query bounded groups so
+      // a later round cannot fail after earlier provider work has completed.
+      const knownUrls = new Set<string>();
+      for (let offset = 0; offset < discoveredUrls.length; offset += 12) {
+        const known = await db.from("creator_research_sources").select("canonical_url")
+          .eq("user_id", auth.user.id).in("canonical_url", discoveredUrls.slice(offset, offset + 12));
+        if (known.error) throw new Error(`SOURCE_LOOKUP: ${known.error.code ?? "UNKNOWN"}`);
+        for (const source of known.data ?? []) knownUrls.add(String(source.canonical_url));
+      }
       const priorUrls = new Set(priorSources.map((source) => canonicalResearchUrl(source.url)));
       const nextSourceId = Math.max(0, ...priorSources.map((source) => source.providerSourceId));
       const freshSources = renumberNativeSources(uniqueSources.filter((source) => {
