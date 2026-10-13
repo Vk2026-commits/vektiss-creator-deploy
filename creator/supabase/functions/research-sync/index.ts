@@ -320,12 +320,15 @@ Deno.serve(async (request) => {
         brief: brief.data, requestedCount: Number(job!.requested_count), seed: `${job!.id}:round-${nextRound}`, round: nextRound, platform,
       })));
       const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
+      const nextRoundLaunchErrors = launches.flatMap((result, index) => result.status === "rejected"
+        ? [{ platform: platforms[index], code: result.reason instanceof Error ? result.reason.message.slice(0, 60) : "APIFY_PROVIDER" }] : []);
       if (discoveryRuns.length) {
         const updated = await db.from("creator_research_jobs").update({
           provider_response_id: discoveryRuns[0].id, status: "researching",
           phase: `${ranked.length} of ${job.requested_count} strong clips found; searching round ${nextRound} of 3…`,
           provider_metadata: { stage: "multi_discovery", round: nextRound, discoveryRuns,
             roundReports, acceptedCountSoFar: ranked.length, launchFailures: launches.length - discoveryRuns.length,
+            nextRoundLaunchErrors,
             accumulatedSources: providerRun.sources, accumulatedCandidates: providerRun.candidates,
             accumulatedCost: providerCost(providerRun.usage) ?? 0 }, updated_at: new Date().toISOString(),
         }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
@@ -336,12 +339,16 @@ Deno.serve(async (request) => {
         }
         return reply(headers, { job: updated.data }, 202);
       }
+      providerMetadata.nextRoundLaunchErrors = nextRoundLaunchErrors;
+      providerMetadata.unavailableRound = nextRound;
     }
     if (!ranked.length) {
 
       const phase=brief.data.sourceMode==='articles'
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
-        : `No strong, distinct clips found after ${currentRound} search round${currentRound === 1 ? '' : 's'}. Try again later or broaden this profile’s research criteria.`;
+        : providerMetadata.unavailableRound
+          ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
+          : `No strong, distinct clips found after ${currentRound} search round${currentRound === 1 ? '' : 's'}. Try again later or broaden this profile’s research criteria.`;
       const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
@@ -407,7 +414,7 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} clips ready.${delivered<Number(job.requested_count)?` Searched ${currentRound} round${currentRound === 1 ? '' : 's'}; no more strong, distinct matches were available.`:''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} clips ready.${delivered<Number(job.requested_count)?` Searched ${currentRound} round${currentRound === 1 ? '' : 's'}; ${providerMetadata.unavailableRound ? `the provider could not start round ${providerMetadata.unavailableRound}.` : 'no more strong, distinct matches were available.'}`:''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
       provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).eq("status", "ranking").select("*").maybeSingle();

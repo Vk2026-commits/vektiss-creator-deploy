@@ -38,7 +38,8 @@ async function apify(path: string, init: RequestInit = {}): Promise<Record<strin
     },
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload || typeof payload !== "object") throw new Error("APIFY_PROVIDER");
+  if (!response.ok) throw new Error(`APIFY_HTTP_${response.status}`);
+  if (!payload || typeof payload !== "object") throw new Error("APIFY_PROVIDER");
   return payload as Record<string, unknown>;
 }
 
