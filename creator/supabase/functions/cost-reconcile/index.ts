@@ -38,18 +38,21 @@ Deno.serve(async request=>{
   const jobs=await db.from('creator_presenter_tests').select('id,user_id,connection_id,provider_video_id,snapshot').eq('status','completed').not('provider_video_id','is',null).order('created_at').limit(1000);
   if(jobs.error)throw Error('STORAGE');
   const vault=credentialVault(JSON.parse(env('PROVIDER_ENCRYPTION_KEYS')),env('PROVIDER_KEY_VERSION'));
-  await Promise.all((jobs.data??[]).filter(row=>!row.snapshot?.fixture&&!tried.has(`HeyGenEvidence:${row.id}`)&&(!row.snapshot?.provider_duration_seconds||!row.snapshot?.cost_reconciliation)).slice(0,20).map(async row=>{try{
+  await Promise.all((jobs.data??[]).filter(row=>!row.snapshot?.fixture&&!tried.has(`HeyGenScenes:${row.id}`)&&(!row.snapshot?.cost_reconciliation?.scene_checked)).slice(0,20).map(async row=>{try{
    const credential=await db.rpc('creator_read_credential',{p_user_id:row.user_id,p_connection_id:row.connection_id});if(credential.error||!credential.data?.[0])throw Error('CONNECTION');
    const key=await vault.open(credential.data[0],{userId:row.user_id,connectionId:row.connection_id,provider:'heygen'});
    const data=await providerVideo(key,`/${encodeURIComponent(row.provider_video_id)}`);
    const providerEngine=typeof data.engine==='string'?data.engine:typeof data.engine==='object'&&data.engine!==null?String((data.engine as Record<string,unknown>).type??''):'';
-   const engine=['avatar_iii','avatar_iv','avatar_v'].includes(providerEngine)?providerEngine:row.snapshot?.avatar_engine;
-   const avatarType=typeof data.avatar_type==='string'&&['digital_twin','photo_avatar','studio_avatar'].includes(data.avatar_type)?data.avatar_type:row.snapshot?.cost_estimate?.avatar_type;
-   const evidence={engine,avatar_type:avatarType,source:providerEngine?'HeyGen video metadata + saved settings':'Saved render settings; HeyGen duration lookup',checked_at:new Date().toISOString(),reason:!engine?'Engine was not saved and provider metadata did not identify it':!avatarType?'Avatar type was not saved and provider metadata did not identify it':undefined};
+   let engine=['avatar_iii','avatar_iv','avatar_v'].includes(providerEngine)?providerEngine:row.snapshot?.avatar_engine;
+   let avatarType=typeof data.avatar_type==='string'&&['digital_twin','photo_avatar','studio_avatar'].includes(data.avatar_type)?data.avatar_type:row.snapshot?.cost_estimate?.avatar_type;
+   let sceneEngine=false,lookVerified=false;
+   if(!engine){try{const scenes=await providerVideo(key,`/${encodeURIComponent(row.provider_video_id)}/scenes`);const elements=(Array.isArray(scenes.scenes)?scenes.scenes:[]).flatMap((s:any)=>s.elements??[]).filter((e:any)=>e.type==='avatar');const engines=[...new Set(elements.map((e:any)=>e.engine))];if(elements.length&&elements.every((e:any)=>e.avatar_id===row.snapshot?.avatar_id)&&engines.length===1&&['avatar_iii','avatar_iv','avatar_v'].includes(String(engines[0]))){engine=String(engines[0]);sceneEngine=true;}}catch{/* Retain unresolved historical engine; no guess. */}}
+   if(row.snapshot?.avatar_id){try{const r=await fetch(`https://api.heygen.com/v3/avatars/looks/${encodeURIComponent(row.snapshot.avatar_id)}`,{headers:{'X-Api-Key':key},signal:AbortSignal.timeout(15000)});if(r.ok){const look=(await r.json()).data;if(look?.id===row.snapshot.avatar_id&&['digital_twin','photo_avatar','studio_avatar'].includes(look.avatar_type)){avatarType=look.avatar_type;lookVerified=true;}}}catch{/* Saved type remains available, otherwise unresolved. */}}
+   const evidence={engine,avatar_type:avatarType,scene_checked:true,source:`${sceneEngine?'Current HeyGen scene engine (historical setting unconfirmed)':'Saved render engine'}; ${lookVerified?'HeyGen look type':'saved avatar type'}; HeyGen duration`,checked_at:new Date().toISOString(),reason:!engine?'Engine missing in saved request and available HeyGen scenes':!avatarType?'Avatar type could not be verified':undefined};
    const evidenceSaved=await db.rpc('creator_save_cost_evidence',{p_id:row.id,p_evidence:evidence});if(evidenceSaved.error)throw Error('STORAGE');
    const duration=Number(data.duration);if(!Number.isFinite(duration)||duration<=0)throw Error('NO_DURATION');
    const saved=await db.rpc('creator_save_cost_duration',{p_id:row.id,p_seconds:duration});if(saved.error)throw Error('STORAGE');counts.heygen++;
-  }catch{counts.unavailable++;}finally{await attempted('HeyGenEvidence',row.id);}}));
+  }catch{counts.unavailable++;}finally{await attempted('HeyGenScenes',row.id);}}));
   const researchUsage=await db.from('creator_research_usage').select('id,job_id,provider_response_id,provider_cost_usd,status,operation').neq('operation','deep_research_start');
   if(researchUsage.error)throw Error('STORAGE');
   // Completed job totals can already include earlier rounds; never add a second charge to them.
