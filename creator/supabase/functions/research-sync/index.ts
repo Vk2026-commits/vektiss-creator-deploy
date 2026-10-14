@@ -177,7 +177,7 @@ Deno.serve(async (request) => {
           status: "researching", phase: `Round ${currentRound} found no new clips; checking ${priorCandidates.length} candidates…`,
           provider_metadata: { ...providerMetadata, stage: "multi_screening", discoveryRuns: undefined,
             screeningRuns: [], nativeSources: priorSources, retainedCandidates: priorCandidates, freshSourceCount: 0, freshByPlatform,
-            discoverySummary: multi ? checkedRuns.map((run) => ({ platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [] },
+            discoverySummary: multi ? checkedRuns.map((run) => ({ id:run.id, platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [] },
           updated_at: new Date().toISOString(),
         }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
@@ -207,7 +207,7 @@ Deno.serve(async (request) => {
         phase: currentRound > 1 ? `Checking clip quality (round ${currentRound} of 3; ${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips so far)…` : "Ranking direct video leads…",
         provider_metadata: {
           ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
-          discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map((run) => ({ platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [{ platform: "TikTok", status: discovery.status, sourceCount: discovery.sources.length }],
+          discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map((run) => ({ id:run.id, platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [{ id:job.provider_response_id, platform: "TikTok", status: discovery.status, sourceCount: discovery.sources.length }],
           screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
           nativeSources: compactSources, retainedCandidates: priorCandidates,
           accumulatedSources: undefined, accumulatedCandidates: undefined,
