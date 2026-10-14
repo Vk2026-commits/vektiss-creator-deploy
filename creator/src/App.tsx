@@ -12,7 +12,7 @@ import {setupStep} from './lib/signup';
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
-import { ProjectCosts } from './components/ProjectCosts';
+import { UsageDashboard } from './components/UsageDashboard';
 import { AvatarCostHelp } from './components/AvatarCostHelp';
 import { Discover } from './components/Discover';
 import type { ResearchOpportunity } from './lib/research-client';
@@ -646,7 +646,7 @@ function CreatorWorkspace({
             <>
               {page === "avatars" && <AvatarLibrary preview={preview} />}
               {page === 'avatar-costs' && <AvatarCostHelp/>}
-              {page === 'costs' && costAdmin && <ProjectCosts/>}
+              {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === "discover" && <Discover profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
                 <>

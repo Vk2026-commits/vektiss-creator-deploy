@@ -17,10 +17,10 @@ export type NativeDiscoveryRun = {
   queryPack: string[];
 };
 
-export type NativeDiscoveryResult =
+export type NativeDiscoveryResult = { costUsd?: number | null } & (
   | { state: "pending"; status: string }
   | { state: "failed"; status: string }
-  | { state: "completed"; status: string; sources: ResearchSource[] };
+  | { state: "completed"; status: string; sources: ResearchSource[] });
 
 function apifyToken(): string {
   const token = Deno.env.get("CREATOR_APIFY_API_TOKEN");
@@ -275,9 +275,10 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
   const payload = await apify(`/actor-runs/${encodeURIComponent(runId)}`);
   const run = asRecord(payload.data);
   const status = typeof run?.status === "string" ? run.status : "UNKNOWN";
-  if (activeStatuses.has(status)) return { state: "pending", status };
-  if (failedStatuses.has(status)) return { state: "failed", status };
-  if (status !== "SUCCEEDED" || typeof run?.defaultDatasetId !== "string") return { state: "failed", status };
+  const costUsd = typeof run?.usageTotalUsd === 'number' && Number.isFinite(run.usageTotalUsd) && run.usageTotalUsd >= 0 ? run.usageTotalUsd : null;
+  if (activeStatuses.has(status)) return { state: "pending", status, costUsd };
+  if (failedStatuses.has(status)) return { state: "failed", status, costUsd };
+  if (status !== "SUCCEEDED" || typeof run?.defaultDatasetId !== "string") return { state: "failed", status, costUsd };
 
   const dataset = await apify(`/datasets/${encodeURIComponent(run.defaultDatasetId)}/items?clean=true&format=json`);
   const items = Array.isArray(dataset) ? dataset : Array.isArray((dataset as Record<string, unknown>).data) ? (dataset as Record<string, unknown>).data as unknown[] : [];
@@ -295,5 +296,5 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
     // a Find 10 request into a three-result search.
     if (sources.length >= Math.min(60, Math.max(requestedCount * 3, 30))) break;
   }
-  return { state: "completed", status, sources };
+  return { state: "completed", status, sources, costUsd };
 }

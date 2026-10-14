@@ -125,6 +125,15 @@ Deno.serve(async (request) => {
           ? { state: "pending", status: "MULTI" }
           : { state: "completed", status: "MULTI", sources: balancedSources }
         : await getNativeDiscoveryRun(String(job.provider_response_id), Number(job.requested_count), brief.data);
+      const costRuns = multi ? checkedRuns : [{ id: job.provider_response_id, platform: 'TikTok', ...discovery }];
+      for (const run of costRuns) {
+        if (typeof run.costUsd !== 'number') continue;
+        const { error: costError } = await db.from('creator_provider_costs').upsert({
+          provider: 'Apify', external_id: String(run.id), user_id: job.user_id, job_id: job.id,
+          operation: `${String(run.platform)} discovery`, status: String(run.status), cost_usd: run.costUsd,
+        }, { onConflict: 'provider,external_id' });
+        if (costError) console.error('PROVIDER_COST_RECORD_FAILED', costError.code);
+      }
       if (discovery.state === "pending") {
         const updated = await db.from("creator_research_jobs").update({
           status: "researching", phase: multi && currentRound > 1
