@@ -4,7 +4,7 @@ import {it,expect} from 'vitest';
 it('recovers checkpoint totals once, prices only supported speech and preserves unknowns',async()=>{
  const db=new PGlite();
  try{
- await db.exec(`create role anon;create role authenticated;
+ await db.exec(`create role anon;create role authenticated;create role service_role;
  create table creator_research_jobs(id uuid primary key,provider_metadata jsonb);
  create table creator_research_usage(id uuid primary key,job_id uuid,provider_cost_usd numeric,pricing_version text,request_metadata jsonb,provider_response_id text);
  create table creator_presenter_tests(id uuid primary key,script_id uuid,user_id uuid,snapshot jsonb,status text,provider_video_id text,message text);
@@ -20,5 +20,14 @@ it('recovers checkpoint totals once, prices only supported speech and preserves 
  const rows=(await db.query<{d:{events:Array<{id:string;estimate:number|null}>}}>("select creator_usage_dashboard_v3(now()-interval '1 day',now()) as d")).rows[0].d.events;
  expect(rows.find(e=>e.id.endsWith('1'))?.estimate).toBe(.06);
  expect(rows.find(e=>e.id.endsWith('2'))?.estimate).toBeNull();
+ await db.exec(`insert into creator_voice_previews values('14eb3e46-129f-4894-bf65-c070539a2729','completed','{"engine":"elevenlabs","duration":7.288}');
+ insert into creator_presenter_tests(id,snapshot) values('00000000-0000-4000-8000-000000000004','{"cost_reconciliation":{"reported_usd":2.08,"source":"ledger"}}');`);
+ const ledger=await readFile(new URL('../supabase/migrations/202610140006_voice_ledger.sql',import.meta.url),'utf8');
+ await db.exec(ledger);await db.exec(ledger);
+ const updated=(await db.query<{d:{events:Array<{id:string;reported?:number}>}}>("select creator_usage_dashboard_v3(now()-interval '1 day',now()) as d")).rows[0].d.events;
+ expect(updated.find(e=>e.id.endsWith('14eb3e46-129f-4894-bf65-c070539a2729'))?.reported).toBe(.02);
+ await db.exec(`select creator_save_cost_evidence('00000000-0000-4000-8000-000000000004','{"source":"metadata","engine":"avatar_v","reported_usd":null}');`);
+ const evidence=(await db.query<{snapshot:{cost_reconciliation:{reported_usd:number;source:string;engine:string}}}>('select snapshot from creator_presenter_tests')).rows[0].snapshot.cost_reconciliation;
+ expect(evidence).toMatchObject({reported_usd:2.08,source:'ledger',engine:'avatar_v'});
  }finally{await db.close();}
 },30000);
