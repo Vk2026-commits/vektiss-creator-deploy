@@ -38,6 +38,25 @@ Deno.serve(async request=>{
   const jobs=await db.from('creator_presenter_tests').select('id,user_id,connection_id,provider_video_id,snapshot').eq('status','completed').not('provider_video_id','is',null).order('created_at').limit(1000);
   if(jobs.error)throw Error('STORAGE');
   const vault=credentialVault(JSON.parse(env('PROVIDER_ENCRYPTION_KEYS')),env('PROVIDER_KEY_VERSION'));
+  // Failed renders can retain a provider ID. Inspect them without retrying a
+  // render or treating failure as proof of zero cost.
+  const failed=await db.from('creator_presenter_tests').select('id,user_id,connection_id,provider_video_id,snapshot').eq('status','failed').not('provider_video_id','is',null).limit(100);
+  if(failed.error)throw Error('STORAGE');
+  for(const row of (failed.data??[]).filter(r=>!tried.has(`HeyGenFailed:${r.id}`)).slice(0,5)){
+   try{
+    const credential=await db.rpc('creator_read_credential',{p_user_id:row.user_id,p_connection_id:row.connection_id});
+    if(credential.error||!credential.data?.[0])throw Error('CONNECTION');
+    const key=await vault.open(credential.data[0],{userId:row.user_id,connectionId:row.connection_id,provider:'heygen'});
+    const data=await providerVideo(key,`/${encodeURIComponent(row.provider_video_id)}`);
+    const saved=await db.rpc('creator_save_cost_evidence',{p_id:row.id,p_evidence:{
+     provider_status:data.status??null,provider_error:data.error??data.error_message??null,
+     provider_duration:data.duration??null,checked_at:new Date().toISOString(),
+     source:'Read-only HeyGen video-status lookup; failed status does not establish a charge or refund',
+     reason:'Failed render: provider charge or refund confirmation required'
+    }});
+    if(saved.error)throw Error('STORAGE');
+   }catch{counts.unavailable++;}finally{await attempted('HeyGenFailed',row.id);}
+  }
   await Promise.all((jobs.data??[]).filter(row=>!row.snapshot?.fixture&&!tried.has(`HeyGenScenes:${row.id}`)&&(!row.snapshot?.cost_reconciliation?.scene_checked)).slice(0,20).map(async row=>{try{
    const credential=await db.rpc('creator_read_credential',{p_user_id:row.user_id,p_connection_id:row.connection_id});if(credential.error||!credential.data?.[0])throw Error('CONNECTION');
    const key=await vault.open(credential.data[0],{userId:row.user_id,connectionId:row.connection_id,provider:'heygen'});
