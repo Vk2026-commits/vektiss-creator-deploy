@@ -1,6 +1,10 @@
 import {describe,it,expect} from 'vitest';
-import {costTotals,allocatedShared,priceForMargin,type CostEvent} from '../src/domain/usage-dashboard';
+import {costTotals,allocatedShared,priceForMargin,globalSpending,type CostEvent,type DashboardData} from '../src/domain/usage-dashboard';
 describe('cost accounting',()=>{
+ it('adds global recorded costs, estimates and shared bills exactly once',()=>{
+  const data={events:[{reported:2,estimate:5,status:'completed'},{reported:null,estimate:3,status:'completed'},{reported:null,estimate:null,status:'failed'}],shared:[{period_start:'2026-10-01',period_end:'2026-10-10',amount_usd:10}]} as DashboardData;
+  expect(globalSpending(data,'2026-10-01T00:00:00Z','2026-10-11T00:00:00Z')).toEqual({recorded:2,estimated:3,bills:10,total:15,missing:1});
+ });
  it('does not add an estimate to an already reported charge or treat unknown as free',()=>{
   const result=costTotals([{reported:2,estimate:3,status:'completed'},{reported:null,estimate:4,status:'completed'},{reported:null,estimate:null,status:'failed'},{reported:0,estimate:5,status:'completed'}] as CostEvent[]);
   expect(result).toEqual({reported:2,estimated:4,unknown:1,attempts:4,failed:1});

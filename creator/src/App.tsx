@@ -540,7 +540,7 @@ function CreatorWorkspace({
           </button>
           <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
         </nav>
-        {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Project costs</button></nav></>}
+        {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button></nav></>}
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
         <div className="upcoming">
           <span>
@@ -582,7 +582,7 @@ function CreatorWorkspace({
                 : page === "creator"
                   ? "Creator profile"
                   : page === "discover" ? "Discover"
-                  : page === "avatars" ? "Avatar library" : page === 'avatar-costs' ? 'Avatar costs' : page === 'costs' ? 'Project costs' : "Create video"}
+                  : page === "avatars" ? "Avatar library" : page === 'avatar-costs' ? 'Avatar costs' : page === 'costs' ? 'Global costs' : "Create video"}
             </strong>
           </div>
           <HeyGenBalanceBadge preview={preview}/>

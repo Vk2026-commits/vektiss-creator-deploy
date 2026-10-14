@@ -14,3 +14,8 @@ export function allocatedShared(cost:SharedCost,from:string,to:string){
  return Number(cost.amount_usd)*overlap/(end-start);
 }
 export function priceForMargin(cost:number,margin:number){return cost>=0&&margin>=0&&margin<100?cost/(1-margin/100):null;}
+export function globalSpending(data:DashboardData,from:string,to:string){
+ const usage=costTotals(data.events);
+ const bills=data.shared.reduce((sum,bill)=>sum+allocatedShared(bill,from,to),0);
+ return {recorded:usage.reported,estimated:usage.estimated,bills,total:usage.reported+usage.estimated+bills,missing:usage.unknown};
+}
