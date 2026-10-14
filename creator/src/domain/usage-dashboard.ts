@@ -1,4 +1,6 @@
-export type CostEvent={id:string;user_id:string;project_id:string|null;provider:string;operation:string;model:string|null;avatar:string|null;engine:string|null;voice:string|null;status:string;at:string;reported:number|null;estimate:number|null;seconds:number;bytes:number};
+import {heygenPrice} from './heygen-pricing';
+export type CostEvent={id:string;user_id:string;project_id:string|null;provider:string;operation:string;model:string|null;avatar:string|null;engine:string|null;voice:string|null;status:string;at:string;reported:number|null;estimate:number|null;seconds:number;bytes:number;avatar_type?:string;duration_basis?:string};
+export function priceHeygenEvents(data:DashboardData):DashboardData{return {...data,events:data.events.map(e=>e.provider==='HeyGen'&&e.avatar&&e.reported==null&&e.status==='completed'?{...e,estimate:heygenPrice(e.engine??'',e.avatar_type??'',e.seconds)??e.estimate}:e)};}
 export type SharedCost={id:string;provider:string;amount_usd:number;period_start:string;period_end:string;basis:'invoice'|'estimate';note:string};
 export type DashboardData={asOf:string;truncated:boolean;creators:{id:string;name:string}[];events:CostEvent[];shared:SharedCost[];researchJobs:{id:string;user_id:string;status:string;delivered:number}[]};
 export function costTotals(events:CostEvent[]){

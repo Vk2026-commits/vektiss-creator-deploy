@@ -63,7 +63,8 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
    if(typeof data.video_url==='string'){
     try{const url=new URL(data.video_url);if(url.protocol==='https:'&&!url.username&&!url.password)video_url=url.href;}catch{/* no unsafe media links */}
    }
-   const patch={status,video_url,message:creditFailure?creditErrorMessage:status==='failed'?'HeyGen could not complete this render. Review it in your HeyGen dashboard before another attempt.':job.message};
+   const duration=Number(data.duration);
+   const patch={status,video_url,...(status==='completed'&&Number.isFinite(duration)&&duration>0?{snapshot:{...job.snapshot,provider_duration_seconds:duration}}:{}),message:creditFailure?creditErrorMessage:status==='failed'?'HeyGen could not complete this render. Review it in your HeyGen dashboard before another attempt.':job.message};
    const saved=await db.from('creator_presenter_tests').update(patch).eq('id',job.id).eq('user_id',user).select('*').single();
    if(saved.error)throw Error('STORAGE');return displayJob(saved.data);
   }
