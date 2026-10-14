@@ -1,10 +1,29 @@
 import {heygenPrice} from './heygen-pricing';
-export type CostEvent={id:string;user_id:string;project_id:string|null;provider:string;operation:string;model:string|null;avatar:string|null;engine:string|null;voice:string|null;status:string;at:string;reported:number|null;estimate:number|null;seconds:number;bytes:number;avatar_type?:string;duration_basis?:string};
+export type CostEvent={id:string;user_id:string;project_id:string|null;provider:string;operation:string;model:string|null;avatar:string|null;engine:string|null;voice:string|null;status:string;at:string;reported:number|null;estimate:number|null;seconds:number;bytes:number;avatar_type?:string;duration_basis?:string;project_title?:string;cost_source?:string;cost_reason?:string;fixture?:boolean};
+export const engineName=(engine:string|null)=>({avatar_iii:'Avatar III',avatar_iv:'Avatar IV',avatar_v:'Avatar V'}[engine??'']??'Engine not recorded');
+export function costState(e:CostEvent):'known'|'review'|'running'|'hosting'|'fixture'{
+ if(e.fixture)return 'fixture';
+ if(e.provider==='Bunny processing')return 'hosting';
+ if(e.reported!=null||e.estimate!=null)return 'known';
+ if(['pending','processing','running','queued','started','RUNNING','READY'].includes(e.status))return 'running';
+ return 'review';
+}
+export function costReason(e:CostEvent){
+ const state=costState(e);
+ if(state==='fixture')return 'Internal test fixture — not a provider render';
+ if(state==='hosting')return 'Shared hosting activity — see hosting bills; no separate task charge recorded';
+ if(state==='running')return 'Request still running; final cost is not available';
+ if(state==='known')return e.reported!=null?'Recorded amount':`Estimated cost${e.duration_basis?` · ${e.duration_basis}`:''}`;
+ if(e.cost_reason)return e.cost_reason;
+ if(e.provider==='HeyGen'&&e.avatar){if(!e.engine)return 'Engine was not saved; provider evidence is needed';if(!e.avatar_type)return 'Avatar type needs verification';if(!heygenPrice(e.engine,e.avatar_type,e.seconds))return 'No verified rate or duration for this render';}
+ return e.provider==='OpenAI'?'Token usage was not saved; charge cannot be calculated': 'Provider has not supplied a charge; this does not mean free';
+}
+export function coverage(events:CostEvent[]){return {review:events.filter(e=>costState(e)==='review').length,running:events.filter(e=>costState(e)==='running').length,hosting:events.filter(e=>costState(e)==='hosting').length,fixtures:events.filter(e=>costState(e)==='fixture').length};}
 export function priceHeygenEvents(data:DashboardData):DashboardData{return {...data,events:data.events.map(e=>e.provider==='HeyGen'&&e.avatar&&e.reported==null&&e.status==='completed'?{...e,estimate:heygenPrice(e.engine??'',e.avatar_type??'',e.seconds)??e.estimate}:e)};}
 export type SharedCost={id:string;provider:string;amount_usd:number;period_start:string;period_end:string;basis:'invoice'|'estimate';note:string};
 export type DashboardData={asOf:string;truncated:boolean;creators:{id:string;name:string}[];events:CostEvent[];shared:SharedCost[];researchJobs:{id:string;user_id:string;status:string;delivered:number}[]};
 export function costTotals(events:CostEvent[]){
- return events.reduce((t,e)=>{t.reported+=Number(e.reported??0);t.estimated+=e.reported==null?Number(e.estimate??0):0;t.unknown+=e.reported==null&&e.estimate==null?1:0;t.attempts++;t.failed+=['failed','error','interrupted','uncertain','FAILED','ABORTED','TIMED-OUT'].includes(e.status)?1:0;return t;},{reported:0,estimated:0,unknown:0,attempts:0,failed:0});
+ return events.reduce((t,e)=>{if(e.fixture)return t;t.reported+=Number(e.reported??0);t.estimated+=e.reported==null?Number(e.estimate??0):0;t.unknown+=costState(e)==='review'?1:0;t.attempts++;t.failed+=['failed','error','interrupted','uncertain','FAILED','ABORTED','TIMED-OUT'].includes(e.status)?1:0;return t;},{reported:0,estimated:0,unknown:0,attempts:0,failed:0});
 }
 export function groupedCosts(events:CostEvent[],key:(e:CostEvent)=>string){
  const groups=new Map<string,CostEvent[]>();for(const e of events){const k=key(e);groups.set(k,[...(groups.get(k)??[]),e]);}

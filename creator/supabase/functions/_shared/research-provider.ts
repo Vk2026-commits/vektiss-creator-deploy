@@ -278,6 +278,11 @@ export async function startNativeVideoScreening(input: {
   return { id: response.id, status: response.status, model: response.model, createdAt: response.created_at };
 }
 
+// Billing-only lookup: malformed research output must not hide provider usage.
+export async function getResearchBilling(providerResponseId:string){
+ const response=await requestPerplexity(`/v1/agent/${encodeURIComponent(providerResponseId)}`,{method:'GET'});
+ return {model:response.model,usage:response.usage,status:response.status};
+}
 export async function getDeepResearchRun(providerResponseId: string, brief?: ResearchBrief, suppliedSources?: ResearchSource[]): Promise<ProviderRun | CompletedResearchRun> {
   const response = await requestPerplexity(`/v1/agent/${encodeURIComponent(providerResponseId)}`, { method: "GET" });
   const run: ProviderRun = { id: response.id, status: response.status, model: response.model, createdAt: response.created_at,

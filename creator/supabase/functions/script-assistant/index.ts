@@ -73,9 +73,13 @@ Deno.serve(async request=>{
   const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
   if(recordError)throw Error('PERSISTENCE');
   let providerUsage:unknown=null;
+  const providerRequests:unknown[]=[];
   async function trackedFetch(url:string,options:RequestInit){
    const response=await fetch(url,options);
    const data=await response.clone().json().catch(()=>null);
+   providerRequests.push({id:response.headers.get('x-request-id'),response_id:data?.id??null,status:response.status,at:new Date().toISOString()});
+   const requestSaved=await db.from('creator_ai_generations').update({provider_requests:providerRequests}).eq('id',generationId!);
+   if(requestSaved.error)throw Error('PERSISTENCE');
    if(data?.usage){
     providerUsage=providerUsage?{initial:providerUsage,rewrite:data.usage}:data.usage;
     const saved=await db.from('creator_ai_generations').update({usage:providerUsage,estimated_cost_usd:openAICost(usageModel,providerUsage),pricing_version:PRICING_VERSION}).eq('id',generationId!);
@@ -84,6 +88,7 @@ Deno.serve(async request=>{
    return response;
   }
   async function persist(result:unknown,usage:unknown){
+   usage=providerUsage??usage;
    const {error}=await db.from('creator_ai_generations').update({result,usage:usage??null,estimated_cost_usd:openAICost(usageModel,usage),pricing_version:PRICING_VERSION,status:'complete'}).eq('id',generationId!);
    if(error)throw Error('PERSISTENCE');
   }
