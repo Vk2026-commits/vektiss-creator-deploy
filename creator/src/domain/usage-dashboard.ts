@@ -40,3 +40,10 @@ export function globalSpending(data:DashboardData,from:string,to:string){
  const bills=data.shared.reduce((sum,bill)=>sum+allocatedShared(bill,from,to),0);
  return {recorded:usage.reported,estimated:usage.estimated,bills,total:usage.reported+usage.estimated+bills,missing:usage.unknown};
 }
+export function usageSplit(events:CostEvent[]){
+ const sum=(rows:CostEvent[])=>{const t=costTotals(rows);return t.reported+t.estimated;};
+ return {heygen:sum(events.filter(e=>e.provider==='HeyGen')),withoutHeygen:sum(events.filter(e=>e.provider!=='HeyGen')),iii:sum(events.filter(e=>e.provider==='HeyGen'&&e.engine==='avatar_iii')),iv:sum(events.filter(e=>e.provider==='HeyGen'&&e.engine==='avatar_iv')),v:sum(events.filter(e=>e.provider==='HeyGen'&&e.engine==='avatar_v'))};
+}
+export function globalWithoutHeygen(data:DashboardData,from:string,to:string){
+ return globalSpending({...data,events:data.events.filter(e=>e.provider!=='HeyGen'),shared:data.shared.filter(s=>!/heygen/i.test(s.provider))},from,to);
+}

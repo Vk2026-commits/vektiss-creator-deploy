@@ -1,6 +1,13 @@
 import {describe,it,expect} from 'vitest';
+import {usageSplit,globalWithoutHeygen} from '../src/domain/usage-dashboard';
 import {costTotals,allocatedShared,priceForMargin,globalSpending,coverage,costReason,priceHeygenEvents,engineName,type CostEvent,type DashboardData} from '../src/domain/usage-dashboard';
 describe('cost accounting',()=>{
+ it('separates engine costs and excludes HeyGen without losing shared balances',()=>{
+  const events=[{provider:'HeyGen',engine:'avatar_iii',reported:2,estimate:9},{provider:'HeyGen',engine:'avatar_v',reported:null,estimate:7},{provider:'OpenAI',reported:3,estimate:5},{provider:'OpenAI',reported:null,estimate:null,status:'failed'}] as unknown as CostEvent[];
+  expect(usageSplit(events)).toEqual({heygen:9,withoutHeygen:3,iii:2,iv:0,v:7});
+  const data={events,shared:[{provider:'OpenAI balance',period_start:'2026-10-01',period_end:'2026-10-10',amount_usd:1},{provider:'HeyGen adjustment',period_start:'2026-10-01',period_end:'2026-10-10',amount_usd:2}]} as DashboardData;
+  expect(globalWithoutHeygen(data,'2026-10-01T00:00:00Z','2026-10-11T00:00:00Z')).toEqual({recorded:3,estimated:0,bills:1,total:4,missing:1});
+ });
  it('keeps 113 hosting activities visible without counting them as missing charges',()=>{
   const rows=Array.from({length:113},()=>({provider:'Bunny processing',status:'done',reported:null,estimate:null} as CostEvent));
   expect(costTotals(rows).unknown).toBe(0);expect(costTotals(rows).attempts).toBe(113);expect(coverage(rows).hosting).toBe(113);
