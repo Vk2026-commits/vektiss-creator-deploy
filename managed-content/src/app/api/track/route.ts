@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recordMetric, redis } from '@/lib/redis';
+import { recordMetric, store } from '@/lib/store';
 import { createHash } from 'node:crypto';
 
 export const runtime = 'nodejs';
@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
     const ipHash = createHash('sha256').update(`${process.env.METRICS_SALT || 'development-only'}:${ip}`).digest('hex').slice(0, 20);
     const minute = Math.floor(Date.now() / 60000);
     const limiter = `managed:track-limit:${ipHash}:${minute}`;
-    const count = Number(await redis(['INCR', limiter]));
-    if (count === 1) await redis(['EXPIRE', limiter, 90]);
+    const count = Number(await store(['INCR', limiter]));
+    if (count === 1) await store(['EXPIRE', limiter, 90]);
     if (count > 60) return new NextResponse(null, { status: 429 });
     await recordMetric(name === 'sample_play' ? `${name}:${sampleId}` : name);
     return new NextResponse(null, { status: 204 });

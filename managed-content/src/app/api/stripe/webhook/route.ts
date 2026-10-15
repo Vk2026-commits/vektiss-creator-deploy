@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { fulfillPurchase } from '@/lib/onboarding';
-import { redis, recordMetric } from '@/lib/redis';
+import { store, recordMetric } from '@/lib/store';
 
 export const runtime = 'nodejs';
 
@@ -26,20 +26,20 @@ export async function POST(request: NextRequest) {
       const email = session.customer_details?.email || session.customer_email;
       const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
       if (!email || !subscriptionId) throw new Error('Paid checkout is missing email or subscription');
-      await redis(['SET', `managed:subscription:${subscriptionId}:managed`, session.id]);
+      await store(['SET', `managed:subscription:${subscriptionId}:managed`, session.id]);
       await fulfillPurchase({ sessionId: session.id, subscriptionId, email });
     }
     if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object as Stripe.Subscription;
-      if (await redis(['GET', `managed:subscription:${subscription.id}:managed`])) await redis(['SET', `managed:subscription:${subscription.id}:status`, subscription.status]);
+      if (await store(['GET', `managed:subscription:${subscription.id}:managed`])) await store(['SET', `managed:subscription:${subscription.id}:status`, subscription.status]);
     }
     if (event.type === 'invoice.paid' || event.type === 'invoice.payment_failed') {
       const invoice = event.data.object as Stripe.Invoice;
       const linked = invoice.parent?.subscription_details?.subscription;
       const subscriptionId = typeof linked === 'string' ? linked : linked?.id;
-      if (subscriptionId && await redis(['GET', `managed:subscription:${subscriptionId}:managed`])) {
+      if (subscriptionId && await store(['GET', `managed:subscription:${subscriptionId}:managed`])) {
         const keyName = `managed:invoice:event:${event.type}:${invoice.id}`;
-        if (await redis(['SET', keyName, event.id, 'NX']) === 'OK') await recordMetric(event.type.replaceAll('.', '_'));
+        if (await store(['SET', keyName, event.id, 'NX']) === 'OK') await recordMetric(event.type.replaceAll('.', '_'));
       }
     }
     return NextResponse.json({ received: true });

@@ -1,4 +1,4 @@
-import { redis } from './redis';
+import { store } from './store';
 
 export interface Purchase {
   sessionId: string;
@@ -26,21 +26,21 @@ export async function sendOnboardingEmail(purchase: Purchase) {
 export async function fulfillPurchase(purchase: Purchase) {
   const completedKey = `managed:onboarding:sent:${purchase.subscriptionId}`;
   const lockKey = `managed:onboarding:lock:${purchase.subscriptionId}`;
-  const recordPurchase = () => redis(['SADD', `managed:verified-purchases:${new Date().toISOString().slice(0, 10)}`, purchase.subscriptionId]);
-  if (await redis(['GET', completedKey])) { await recordPurchase(); return 'already-sent'; }
-  const lock = await redis(['SET', lockKey, purchase.sessionId, 'NX', 'EX', 120]);
+  const recordPurchase = () => store(['SADD', `managed:verified-purchases:${new Date().toISOString().slice(0, 10)}`, purchase.subscriptionId]);
+  if (await store(['GET', completedKey])) { await recordPurchase(); return 'already-sent'; }
+  const lock = await store(['SET', lockKey, purchase.sessionId, 'NX', 'EX', 120]);
   if (lock !== 'OK') {
     // Returning a non-2xx lets Stripe retry if an in-flight handler later fails.
     throw new Error('Onboarding delivery is in progress');
   }
   try {
-    if (await redis(['GET', completedKey])) { await recordPurchase(); return 'already-sent'; }
+    if (await store(['GET', completedKey])) { await recordPurchase(); return 'already-sent'; }
     await sendOnboardingEmail(purchase);
-    await redis(['SET', completedKey, purchase.sessionId]);
+    await store(['SET', completedKey, purchase.sessionId]);
     await recordPurchase();
     return 'sent';
   } finally {
     // The lock is short lived even if this cleanup fails.
-    await redis(['DEL', lockKey]).catch(() => undefined);
+    await store(['DEL', lockKey]).catch(() => undefined);
   }
 }
