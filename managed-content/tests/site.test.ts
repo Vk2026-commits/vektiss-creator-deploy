@@ -16,7 +16,7 @@ test('all three supplied samples and actual-frame posters are present', () => {
   assert.match(samples[2].label, /FINISHED VIDEO/);
 });
 
-test('checkout fails closed until recurring billing is verified', () => {
-  assert.equal(checkoutUrl, 'https://buy.stripe.com/aFa5kF9h0ddp2Ju5sB9EI0c');
+test('checkout fails closed until launch systems are configured', () => {
+  assert.equal(checkoutUrl, 'https://buy.stripe.com/4gM5kF8cW8X997S3kt9EI0d');
   assert.equal(safeCheckoutUrl(), null);
 });

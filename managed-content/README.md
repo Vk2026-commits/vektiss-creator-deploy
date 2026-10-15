@@ -13,7 +13,7 @@ Visit `http://localhost:3000`. Until recurring checkout is confirmed, purchase b
 
 ## Production configuration
 
-Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The supplied live Stripe link is recorded in `.env.example`, but its visible checkout currently says **Pay $750** rather than **Subscribe $750/month**. Do not set `NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED=true` or launch this monthly-offer site until Stripe confirms the link has a recurring monthly Price; replace the URL if it is a one-time Payment Link. Configure the verified recurring link's success redirect to `https://react.vektiss.com/thank-you`. Configure the webhook endpoint at `https://react.vektiss.com/api/stripe/webhook` for:
+Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The supplied Stripe link displays **$750 per month** and **Subscribe**. Keep `NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED=false` until the webhook, onboarding email, legal links, and support contact are configured and tested. Configure the recurring link's success redirect to `https://react.vektiss.com/thank-you`. Configure the webhook endpoint at `https://react.vektiss.com/api/stripe/webhook` for:
 
 - `checkout.session.completed`
 - `checkout.session.async_payment_succeeded`

@@ -1,7 +1,7 @@
 export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://react.vektiss.com';
-// Supplied live link is retained as the candidate checkout, but remains gated
-// until its recurring billing terms are verified against the monthly offer.
-export const checkoutUrl = process.env.NEXT_PUBLIC_CHECKOUT_URL || 'https://buy.stripe.com/aFa5kF9h0ddp2Ju5sB9EI0c';
+// The supplied link was verified to display a $750/month subscription.
+// Checkout remains gated until payment verification and onboarding are configured.
+export const checkoutUrl = process.env.NEXT_PUBLIC_CHECKOUT_URL || 'https://buy.stripe.com/4gM5kF8cW8X997S3kt9EI0d';
 export const checkoutRecurringConfirmed = process.env.NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED === 'true';
 export const termsUrl = process.env.NEXT_PUBLIC_TERMS_URL || '';
 export const privacyUrl = process.env.NEXT_PUBLIC_PRIVACY_URL || '';
