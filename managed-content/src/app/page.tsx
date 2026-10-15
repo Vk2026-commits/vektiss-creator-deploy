@@ -28,7 +28,7 @@ const faqs = [
   ['Can you guarantee followers or clients?', 'No. We provide production, not guaranteed views, engagement, or customer acquisition.'],
 ];
 
-function Wordmark() { return <a className="wordmark" href="#top" aria-label="Vektiss Managed Content home"><span className="mark" aria-hidden="true">V</span><span>VEKTISS<small>MANAGED CONTENT</small></span></a>; }
+function Wordmark() { return <a className="wordmark logo-lockup" href="#top" aria-label="Vektiss Managed Content home"><span className="logo-image-frame"><img src="/vektiss-logo.png" alt="Vektiss" /></span><small>MANAGED CONTENT</small></a>; }
 
 export default function HomePage() {
   return <><PageTracker /><main id="top">
@@ -48,7 +48,7 @@ export default function HomePage() {
 
     <section className="section section-cream" id="how-it-works"><div className="container"><div className="section-heading"><p className="eyebrow dark">THE PROCESS</p><h2>Four steps. <em>One less thing to do.</em></h2><p>Simple on your side. Thoughtful production on ours.</p></div><div className="step-list">{steps.map(([number,title,copy])=><article className="step" key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{copy}</p><span className="step-arrow" aria-hidden="true">↗</span></article>)}</div><p className="process-note">Initial avatar setup requires your approved likeness and voice materials. You also review content where your input is needed.</p></div></section>
 
-    <section className="section section-examples" id="examples"><div className="container"><div className="section-heading"><p className="eyebrow">THE OUTPUT</p><h2>Do not just imagine it.<br /><em>Watch it.</em></h2><p>Watch two finished Vektiss reactions and one example of the kind of source conversation that can inspire a response.</p></div><SampleGallery /><div className="example-bottom"><p>Not a repost. A reaction built around a real perspective.</p><a href="#pricing" className="text-link">Make yours next <span aria-hidden="true">↗</span></a></div></div></section>
+    <section className="section section-examples" id="examples"><div className="container"><div className="section-heading"><p className="eyebrow">THE OUTPUT</p><h2>Do not just imagine it.<br /><em>Watch it.</em></h2><p>Watch the managed-content introduction and two finished Vektiss reaction videos.</p></div><SampleGallery /><div className="example-bottom"><p>Not a repost. A reaction built around a real perspective.</p><a href="#pricing" className="text-link">Make yours next <span aria-hidden="true">↗</span></a></div></div></section>
 
     <section className="section section-light audience-section"><div className="container"><div className="section-intro split-intro"><p className="eyebrow dark">WHO IT IS FOR</p><div><h2>For people with something <em>worth saying.</em></h2><p>Built initially for credit repair professionals, and useful wherever knowledge deserves a clearer, more consistent presence.</p></div></div><div className="audience-row"><span>Credit repair professionals</span><span>Financial service experts</span><span>Coaches & consultants</span><span>Service business owners</span></div></div></section>
 

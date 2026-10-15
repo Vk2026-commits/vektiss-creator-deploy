@@ -9,11 +9,11 @@ npm install
 npm run dev
 ```
 
-Visit `http://localhost:3000`. Without configuration, purchase buttons visibly say **Checkout coming soon**. The public site must not launch in that state.
+Visit `http://localhost:3000`. Until recurring checkout is confirmed, purchase buttons visibly say **Checkout coming soon**. The public site must not launch in that state.
 
 ## Production configuration
 
-Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The checkout URL must be a real Stripe Payment Link for the $750/month recurring product; configure its success redirect to `https://managed.vektiss.com/thank-you`. Configure the webhook endpoint at `https://managed.vektiss.com/api/stripe/webhook` for:
+Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The supplied live Stripe link is recorded in `.env.example`, but its visible checkout currently says **Pay $750** rather than **Subscribe $750/month**. Do not set `NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED=true` or launch this monthly-offer site until Stripe confirms the link has a recurring monthly Price; replace the URL if it is a one-time Payment Link. Configure the verified recurring link's success redirect to `https://managed.vektiss.com/thank-you`. Configure the webhook endpoint at `https://managed.vektiss.com/api/stripe/webhook` for:
 
 - `checkout.session.completed`
 - `checkout.session.async_payment_succeeded`
@@ -28,9 +28,9 @@ Upstash Redis REST provides a durable onboarding sent marker, a short processing
 
 ## Content and media
 
-The gallery contains two finished Vektiss videos and one clearly labeled source-clip example from the three supplied files. Original MP4s are copied into `public/samples`; the page uses `preload="none"` so playback is requested only when a visitor clicks. PNG posters are derived from the actual footage. No transcript/caption file was supplied, so captions are not represented as available. Add accurate VTT captions before launch if they can be created and checked against the audio.
+The gallery now starts with the newly supplied managed-content video and follows it with two finished Vektiss reactions. The supplied Vektiss logo is displayed without altering its artwork. Original MP4s are copied into `public/samples`; the page uses `preload="none"` so playback is requested only when a visitor clicks. PNG posters are derived from the actual footage. No transcript/caption file was supplied, so captions are not represented as available. Add accurate VTT captions before launch if they can be created and checked against the audio.
 
-Before public release, confirm the team has the right to display the raw source clip and any third-party footage, likenesses, and trademarks appearing in all three videos. If not, remove or replace the affected sample before going live.
+The older raw source clip was removed from the public site rather than shown as a finished example. Before public release, confirm the team has the right to display any third-party footage, likenesses, and trademarks appearing in the three displayed videos.
 
 ## Release checklist
 
