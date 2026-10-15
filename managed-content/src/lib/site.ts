@@ -1,4 +1,4 @@
-export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://managed.vektiss.com';
+export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://react.vektiss.com';
 // Supplied live link is retained as the candidate checkout, but remains gated
 // until its recurring billing terms are verified against the monthly offer.
 export const checkoutUrl = process.env.NEXT_PUBLIC_CHECKOUT_URL || 'https://buy.stripe.com/aFa5kF9h0ddp2Ju5sB9EI0c';

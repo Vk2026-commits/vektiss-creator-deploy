@@ -13,7 +13,7 @@ Visit `http://localhost:3000`. Until recurring checkout is confirmed, purchase b
 
 ## Production configuration
 
-Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The supplied live Stripe link is recorded in `.env.example`, but its visible checkout currently says **Pay $750** rather than **Subscribe $750/month**. Do not set `NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED=true` or launch this monthly-offer site until Stripe confirms the link has a recurring monthly Price; replace the URL if it is a one-time Payment Link. Configure the verified recurring link's success redirect to `https://managed.vektiss.com/thank-you`. Configure the webhook endpoint at `https://managed.vektiss.com/api/stripe/webhook` for:
+Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The supplied live Stripe link is recorded in `.env.example`, but its visible checkout currently says **Pay $750** rather than **Subscribe $750/month**. Do not set `NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED=true` or launch this monthly-offer site until Stripe confirms the link has a recurring monthly Price; replace the URL if it is a one-time Payment Link. Configure the verified recurring link's success redirect to `https://react.vektiss.com/thank-you`. Configure the webhook endpoint at `https://react.vektiss.com/api/stripe/webhook` for:
 
 - `checkout.session.completed`
 - `checkout.session.async_payment_succeeded`
@@ -34,7 +34,7 @@ The older raw source clip was removed from the public site rather than shown as 
 
 ## Release checklist
 
-1. Configure Vercel project and `managed.vektiss.com` domain independently of the Creator app.
+1. Configure Vercel project and `react.vektiss.com` domain independently of the Creator app. The domain is reserved on this project, but DNS should not be enabled until the production launch requirements are met.
 2. Configure the real recurring Stripe Payment Link, its success URL, matching Payment Link ID, and webhook signing secret.
 3. Configure verified Resend sender, support mailbox, Redis REST credentials, real terms/privacy links, and accurate subscription/cancellation terms.
 4. Consider applicable sales-tax registrations and Stripe Tax setup before enabling tax collection.
