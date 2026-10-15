@@ -1,0 +1,45 @@
+# Vektiss Managed Content
+
+Standalone Next.js landing page for the managed **12 videos / $750 per month** offer. It is intentionally separate from Vektiss Creator.
+
+## Local preview
+
+```bash
+npm install
+npm run dev
+```
+
+Visit `http://localhost:3000`. Without configuration, purchase buttons visibly say **Checkout coming soon**. The public site must not launch in that state.
+
+## Production configuration
+
+Set the values in `.env.example` as Vercel environment variables. Keep server values sensitive and never place them in `NEXT_PUBLIC_` variables. A production build fails if checkout, policies, support, Stripe verification, Resend, or Redis settings are missing. The checkout URL must be a real Stripe Payment Link for the $750/month recurring product; configure its success redirect to `https://managed.vektiss.com/thank-you`. Configure the webhook endpoint at `https://managed.vektiss.com/api/stripe/webhook` for:
+
+- `checkout.session.completed`
+- `checkout.session.async_payment_succeeded`
+- `customer.subscription.created`, `.updated`, `.deleted`
+- `invoice.paid`, `invoice.payment_failed`
+
+Set `STRIPE_PAYMENT_LINK_ID` to that exact Payment Link's `plink_...` ID. The webhook sends onboarding email only for a paid subscription session from that link. A thank-you page visit cannot trigger fulfillment. Use a restricted Stripe API key; the webhook signing secret remains server-only. Use separate Stripe sandbox and live values. The same applies to Redis and Resend.
+
+Resend must use a verified sender. The support email is the reply-to address. Buyers are asked to reply with basic business context; approved likeness/voice material is handled separately through a secure process. Do not collect credentials by email.
+
+Upstash Redis REST provides a durable onboarding sent marker, a short processing lock, subscription status, and event counters. Stripe may retry failed webhook deliveries. A Resend idempotency key also prevents immediate duplicate emails. Metrics are aggregate counts, not a customer dashboard. Browser rate-limit keys use salted IP hashes that expire after 90 seconds. Daily keys are `managed:metrics:YYYY-MM-DD:<event>` for `page_view`, `sample_play:<sample-id>`, `checkout_click`, `invoice_paid`, and `invoice_payment_failed`. Verified purchases are unique subscription IDs in `managed:verified-purchases:YYYY-MM-DD`.
+
+## Content and media
+
+The gallery contains two finished Vektiss videos and one clearly labeled source-clip example from the three supplied files. Original MP4s are copied into `public/samples`; the page uses `preload="none"` so playback is requested only when a visitor clicks. PNG posters are derived from the actual footage. No transcript/caption file was supplied, so captions are not represented as available. Add accurate VTT captions before launch if they can be created and checked against the audio.
+
+Before public release, confirm the team has the right to display the raw source clip and any third-party footage, likenesses, and trademarks appearing in all three videos. If not, remove or replace the affected sample before going live.
+
+## Release checklist
+
+1. Configure Vercel project and `managed.vektiss.com` domain independently of the Creator app.
+2. Configure the real recurring Stripe Payment Link, its success URL, matching Payment Link ID, and webhook signing secret.
+3. Configure verified Resend sender, support mailbox, Redis REST credentials, real terms/privacy links, and accurate subscription/cancellation terms.
+4. Consider applicable sales-tax registrations and Stripe Tax setup before enabling tax collection.
+5. Run `npm run typecheck`, `npm test`, and `npm run build`; verify mobile/desktop layout and all three videos.
+6. Run a Stripe **sandbox** paid-checkout test; verify one onboarding email despite repeated webhook delivery and no email from a thank-you page visit.
+7. Review the actual delivered samples and their public display rights. Only then promote the production build and attach the domain.
+
+This site does not create Creator accounts, publish posts, promise results, or treat an outbound checkout click as a purchase.
