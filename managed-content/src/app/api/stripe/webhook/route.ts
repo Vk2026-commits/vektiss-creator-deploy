@@ -6,16 +6,14 @@ import { redis, recordMetric } from '@/lib/redis';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const key = process.env.STRIPE_RESTRICTED_KEY;
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   const paymentLinkId = process.env.STRIPE_PAYMENT_LINK_ID;
-  if (!key || !secret || !paymentLinkId) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+  if (!secret || !paymentLinkId) return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
   const signature = request.headers.get('stripe-signature');
   if (!signature) return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
   let event: Stripe.Event;
   try {
-    const stripe = new Stripe(key, { apiVersion: '2026-09-30.endive' });
-    event = stripe.webhooks.constructEvent(await request.text(), signature, secret);
+    event = Stripe.webhooks.constructEvent(await request.text(), signature, secret);
   } catch {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }

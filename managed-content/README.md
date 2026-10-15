@@ -20,7 +20,7 @@ Set the values in `.env.example` as Vercel environment variables. Keep server va
 - `customer.subscription.created`, `.updated`, `.deleted`
 - `invoice.paid`, `invoice.payment_failed`
 
-Set `STRIPE_PAYMENT_LINK_ID` to that exact Payment Link's `plink_...` ID. The webhook sends onboarding email only for a paid subscription session from that link. A thank-you page visit cannot trigger fulfillment. Use a restricted Stripe API key; the webhook signing secret remains server-only. Use separate Stripe sandbox and live values. The same applies to Redis and Resend.
+Set `STRIPE_PAYMENT_LINK_ID` to that exact Payment Link's `plink_...` ID. The webhook sends onboarding email only for a paid subscription session from that link. A thank-you page visit cannot trigger fulfillment. Its signing secret remains server-only; no Stripe API key is needed merely to verify the signed event. Use separate Stripe sandbox and live values. The same applies to Redis and Resend.
 
 Resend must use a verified sender. The support email is the reply-to address. Buyers are asked to reply with basic business context; approved likeness/voice material is handled separately through a secure process. Do not collect credentials by email.
 

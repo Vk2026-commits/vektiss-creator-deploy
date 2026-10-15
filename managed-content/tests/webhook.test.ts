@@ -18,7 +18,6 @@ function signedRequest(paymentLink: string, paid = true) {
 }
 
 test('webhook refuses invalid signatures and ignores unrelated payment links', async () => {
-  process.env.STRIPE_RESTRICTED_KEY = 'rk_test_not_real';
   process.env.STRIPE_WEBHOOK_SECRET = secret;
   process.env.STRIPE_PAYMENT_LINK_ID = 'plink_expected';
   const unsigned = new NextRequest('http://localhost:3000/api/stripe/webhook', { method: 'POST', body: '{}' });
