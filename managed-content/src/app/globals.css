@@ -11,3 +11,5 @@
 .logo-image-frame img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
 .logo-lockup small{display:block;margin:0;font-size:8px;letter-spacing:.25em;color:#a4b8d1;font-weight:800}
 @media(max-width:680px){.logo-image-frame{width:155px;height:42px}.logo-lockup small{font-size:6px}}
+
+.legal-page{min-height:100vh;background:radial-gradient(circle at 85% 0,#153764 0,transparent 35%),#08152a;padding:48px 20px 100px}.legal-wrap{width:min(780px,100%);margin:auto}.legal-back{display:inline-block;color:#a8c8ef;font-size:13px;font-weight:700;margin-bottom:70px}.legal-back:hover,.legal-wrap a:hover{color:#fff}.legal-page h1{font-size:clamp(40px,7vw,68px);letter-spacing:-.06em;line-height:1.04;max-width:720px;margin:20px 0}.legal-updated{color:#9fb6d1;font-size:13px;margin:0 0 50px}.legal-page section{border-top:1px solid #ffffff29;padding:25px 0 30px}.legal-page h2{font-size:20px;letter-spacing:-.03em;margin:0 0 12px}.legal-page section p{color:#bed0e2;font-size:15px;line-height:1.75;margin:0}.legal-page section a{color:#74b0ff;text-decoration:underline;text-underline-offset:3px}

@@ -3,8 +3,8 @@ export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://react.vektis
 // Checkout remains gated until payment verification and onboarding are configured.
 export const checkoutUrl = process.env.NEXT_PUBLIC_CHECKOUT_URL || 'https://buy.stripe.com/4gM5kF8cW8X997S3kt9EI0d';
 export const checkoutRecurringConfirmed = process.env.NEXT_PUBLIC_CHECKOUT_RECURRING_CONFIRMED === 'true';
-export const termsUrl = process.env.NEXT_PUBLIC_TERMS_URL || '';
-export const privacyUrl = process.env.NEXT_PUBLIC_PRIVACY_URL || '';
+export const termsUrl = process.env.NEXT_PUBLIC_TERMS_URL || `${siteUrl}/terms`;
+export const privacyUrl = process.env.NEXT_PUBLIC_PRIVACY_URL || `${siteUrl}/privacy`;
 export const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || '';
 
 export const samples = [
