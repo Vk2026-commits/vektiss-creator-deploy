@@ -114,7 +114,7 @@ export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 export const researchRequestSchema = z
   .object({
     profileId: z.string().uuid(),
-    requestedCount: z.union([z.literal(10), z.literal(20), z.literal(30)]),
+    requestedCount: z.number().int().min(1).max(10),
     idempotencyKey: z.string().uuid(),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleDate:articleDateSchema.optional(),
@@ -271,4 +271,23 @@ export function rankResearchCandidates(
   }
 
   return accepted.sort((left, right) => right.rankScore - left.rankScore).slice(0, maxResults);
+}
+
+/** Surface a qualified platform alternative without replacing a much stronger clip. */
+export function selectDiverseVideoCandidates(candidates: RankedResearchCandidate[], count: number): RankedResearchCandidate[] {
+  const chosen = candidates.slice(0, count);
+  if (count < 3 || !chosen.length) return chosen;
+  const platform = (item: RankedResearchCandidate) => item.sources[0]?.sourceType ?? "";
+  const cutoff = chosen[chosen.length - 1].rankScore;
+  for (const kind of ["instagram-reels-native", "youtube-shorts-native"]) {
+    if (chosen.some((item) => platform(item) === kind)) continue;
+    const alternative = candidates.find((item) => platform(item) === kind && item.rankScore >= cutoff - 8 && !chosen.includes(item));
+    if (!alternative) continue;
+    let replace = -1;
+    for (let index = chosen.length - 1; index >= 0; index--) {
+      if (chosen.filter((other) => platform(other) === platform(chosen[index])).length > 1) { replace = index; break; }
+    }
+    if (replace >= 0) chosen[replace] = alternative;
+  }
+  return chosen.sort((left, right) => right.rankScore - left.rankScore);
 }

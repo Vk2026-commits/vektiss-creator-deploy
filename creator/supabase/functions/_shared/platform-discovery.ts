@@ -206,6 +206,13 @@ export function sourceFromCrossPlatformItem(item: unknown, index: number, platfo
   if (!url) return null;
   const parsed = new URL(url);
   if (platform === "YouTube") {
+    const status = asRecord(record.status) ?? {};
+    const contentDetails = asRecord(record.contentDetails) ?? {};
+    const contentRating = asRecord(contentDetails.contentRating) ?? {};
+    if (record.isPrivate === true || record.isAgeRestricted === true || record.isMembersOnly === true ||
+      record.isAvailable === false || record.isEmbeddable === false || status.embeddable === false ||
+      (typeof status.privacyStatus === "string" && status.privacyStatus !== "public") ||
+      contentRating.ytRating === "ytAgeRestricted") return null;
     if (record.type && record.type !== "shorts") return null;
     if (!/(^|\.)youtube\.com$/.test(parsed.hostname) && parsed.hostname !== "youtu.be") return null;
     const id = parsed.pathname.startsWith("/shorts/") ? parsed.pathname.split("/")[2]
@@ -215,7 +222,9 @@ export function sourceFromCrossPlatformItem(item: unknown, index: number, platfo
   } else {
     if (!/(^|\.)instagram\.com$/.test(parsed.hostname)) return null;
     const shortCode = stringValue(record, ["shortCode", "shortcode"]);
-    if (record.type !== "Video" && !parsed.pathname.startsWith("/reel/")) return null;
+    // The popular-Reels actor returns Video records at /p/<shortcode>/.
+    // Requiring /reel/ before normalizing silently discarded most results.
+    if (record.type && record.type !== "Video" && !parsed.pathname.startsWith("/reel/")) return null;
     if (shortCode && /^[A-Za-z0-9_-]+$/.test(shortCode)) url = `https://www.instagram.com/reel/${shortCode}/`;
     else if (!/^\/reel\/[A-Za-z0-9_-]+\/?$/.test(parsed.pathname)) return null;
   }

@@ -3,6 +3,7 @@ import {
   canonicalResearchUrl,
   providerResearchEnvelopeSchema,
   rankResearchCandidates,
+  selectDiverseVideoCandidates,
   researchBriefSchema,
   type ProviderResearchCandidate,
   type ResearchHistorySignal,
@@ -125,9 +126,27 @@ describe("research contracts", () => {
     }
     expect(sourceFromCrossPlatformItem({ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", type: "shorts", title: "Store worker helps woman get to safety" }, 0, "YouTube")?.url)
       .toBe("https://www.youtube.com/shorts/dQw4w9WgXcQ");
+    for (const unavailable of [{isAgeRestricted:true},{isPrivate:true},{isMembersOnly:true},{status:{embeddable:false}},{status:{privacyStatus:'unlisted'}},{contentDetails:{contentRating:{ytRating:'ytAgeRestricted'}}}]) {
+      expect(sourceFromCrossPlatformItem({url:"https://www.youtube.com/shorts/dQw4w9WgXcQ",type:"shorts",title:"Store worker helps woman get to safety",...unavailable},0,"YouTube")).toBeNull();
+    }
     expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/p/ABC123/", type: "Video", shortCode: "ABC123", caption: "Store worker helps woman get to safety" }, 0, "Instagram")?.url)
       .toBe("https://www.instagram.com/reel/ABC123/");
     expect(sourceFromCrossPlatformItem({ url: "https://www.instagram.com/example/", type: "Profile", caption: "Store worker helps woman get to safety" }, 0, "Instagram")).toBeNull();
+  });
+
+  it("shows a similarly strong Instagram reel without padding with a weak one", () => {
+    const sources: ResearchSource[] = [
+      {...source(1,'https://www.tiktok.com/@a/video/111'),sourceType:'tiktok-native'},
+      {...source(2,'https://www.tiktok.com/@b/video/222'),sourceType:'tiktok-native'},
+      {...source(3,'https://www.tiktok.com/@c/video/333'),sourceType:'tiktok-native'},
+      {...source(4,'https://www.instagram.com/reel/GOOD/'),sourceType:'instagram-reels-native'},
+    ];
+    const titles = ['Store worker escorts woman to car','Bystander intervenes at a bus stop','Customer seeks help in parking garage','Doorbell shows an unwanted visitor'];
+    const candidates = sources.map((entry,index)=>candidate({sourceIds:[entry.providerSourceId],title:titles[index],relevanceScore:90-index}));
+    const ranked = rankResearchCandidates(candidates,sources,[],4);
+    expect(selectDiverseVideoCandidates(ranked,3).some((item)=>item.sources[0].sourceType==='instagram-reels-native')).toBe(true);
+    ranked[3].rankScore = 1;
+    expect(selectDiverseVideoCandidates(ranked,3).some((item)=>item.sources[0].sourceType==='instagram-reels-native')).toBe(false);
   });
 
   it("rejects self-declared fiction, news packaging, and staged formats before screening", () => {

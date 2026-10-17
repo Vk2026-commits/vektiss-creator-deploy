@@ -26,5 +26,7 @@ describe('article publication windows',()=>{
  });
  it('defaults old requests to videos',()=>{
   expect(researchRequestSchema.parse({profileId:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e',requestedCount:10,idempotencyKey:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e'}).sourceMode).toBe('videos');
+  for (const count of [1, 5, 10]) expect(researchRequestSchema.parse({profileId:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e',requestedCount:count,idempotencyKey:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e'}).requestedCount).toBe(count);
+  for (const count of [0, 11, 20, 30]) expect(researchRequestSchema.safeParse({profileId:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e',requestedCount:count,idempotencyKey:'a9a8ba79-f20c-4090-9c47-67d5c0d7132e'}).success).toBe(false);
  });
 });

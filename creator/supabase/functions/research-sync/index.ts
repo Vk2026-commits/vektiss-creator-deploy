@@ -6,6 +6,7 @@ import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
   rankResearchCandidates,
+  selectDiverseVideoCandidates,
   researchBriefSchema,
   researchSourceSchema,
   type ResearchHistorySignal,
@@ -296,12 +297,16 @@ Deno.serve(async (request) => {
       const sources = z.array(z.object({ providerSourceId: z.number(), title: z.string(), url: z.string(), snippet: z.string(), publishedAt: z.string().nullable(), sourceType: z.string() })).safeParse(row.source_snapshot);
       return sources.success ? [{ title: row.title, category: row.category, status: row.status, sourceSnapshot: sources.data }] : [];
     });
-    // A provider can occasionally emit a low-confidence item despite being
-    // asked to return only on-brief clips. Do not use it to pad Find 10.
+    // A provider can emit low-confidence items despite on-brief instructions.
+    // Keep the requested count a target, never a reason to pad weak clips.
     const eligibleCandidates = brief.data.sourceMode === 'videos'
-      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 50)
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70)
       : providerRun.candidates;
-    const ranked = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, Number(job.requested_count), duplicateHistory);
+    const requestedCount = Number(job.requested_count);
+    const rankedPool = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, eligibleCandidates.length, duplicateHistory);
+    const ranked = brief.data.sourceMode === 'videos'
+      ? selectDiverseVideoCandidates(rankedPool, requestedCount)
+      : rankedPool.slice(0, requestedCount);
     const priorReports = Array.isArray(providerMetadata.roundReports) ? providerMetadata.roundReports : [];
     const screenedIds = new Set((Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ sourceIds: number[] }> : [])
       .flatMap((run) => Array.isArray(run.sourceIds) ? run.sourceIds : []));
@@ -323,7 +328,7 @@ Deno.serve(async (request) => {
     if (brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3) {
       const platforms = [...new Set<NativePlatform>(brief.data.researchSourcePlatforms.filter((platform): platform is NativePlatform =>
         platform === "TikTok" || platform === "YouTube" || platform === "Instagram"))];
-      if (!platforms.length) platforms.push("TikTok");
+      if (!platforms.length) platforms.push("TikTok", "Instagram", "YouTube");
       const nextRound = currentRound + 1;
       const launches = await Promise.allSettled(platforms.map((platform) => startPlatformDiscovery({
         brief: brief.data, requestedCount: Number(job!.requested_count), seed: `${job!.id}:round-${nextRound}`, round: nextRound, platform,
