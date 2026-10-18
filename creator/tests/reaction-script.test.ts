@@ -1,5 +1,18 @@
 import {expect,it} from 'vitest';
-import {normalizeReactionDraft,reactionDirection,reactionIssues,reactionEvidence} from '../src/domain/reaction-script';
+import {normalizeReactionDraft,reactionDirection,reactionIssues,reactionEvidence,isSafetyReactionProfile,sharedVideoReactionDirection,safetyReactionDirection,videoReactionIssues} from '../src/domain/reaction-script';
+it('inherits safety reaction style across content profiles without the old offer',()=>{
+ const newProfile={name:'Practical safety tips with Stephen',primary_audience:'People who want practical safety advice',strategy:{content_pillars:['Situational awareness'],reaction_angles:[]}};
+ expect(isSafetyReactionProfile(newProfile)).toBe(true);
+ expect(isSafetyReactionProfile({name:'Credit education',primary_audience:'First-time homebuyers',strategy:{content_pillars:[],reaction_angles:[]}})).toBe(false);
+ expect(safetyReactionDirection).toContain('saved voice');
+ expect(safetyReactionDirection).not.toContain("Women's Safety Guide");
+ expect(sharedVideoReactionDirection).toContain('selected Content Profile');
+});
+it('rejects source-report language shown in the new safety draft',()=>{
+ const draft={hook:"Have you noticed someone following you while you're just trying to mind your own business?",body:'A video surfaced showing someone walking down a corridor absorbed in their phone, while another person trails closely behind.'};
+ expect(videoReactionIssues(draft)).toHaveLength(1);
+ expect(videoReactionIssues({hook:'Someone keeps closing the distance behind you. What would you do?',body:'Move toward people who can help and give yourself space.'})).toEqual([]);
+});
 it('spells emergency calls for Stephen without duplicating existing hyphens',()=>{
  const d=normalizeReactionDraft({hook:'I agree with calling 911.',body:'Call 911. Already 9-1-1. Reference 1911 stays.',cta:'',review:'Original says 911.'});
  expect(d.hook).toBe('I agree with calling 9-1-1.');expect(d.body).toBe('Call 9-1-1. Already 9-1-1. Reference 1911 stays.');expect(d.review).toBe('Original says 911.');expect(normalizeReactionDraft(d)).toEqual(d);
