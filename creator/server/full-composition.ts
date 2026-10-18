@@ -11,7 +11,7 @@ import {publicResource} from './public-network';
 import {presenterCleanup,repairedCompositionId} from './presenter-cleanup';
 import {presenterLayout} from '../src/domain/presenter-layout';
 import {avatarFramingSchema,avatarFramingCrop,fixedPresenterCrop,presenterBaseCrop,STEPHEN_FRAMING} from '../src/domain/avatar-framing';
-import {renderReactionSequence,REACTION_SEQUENCE_VERSION} from './reaction-sequence';
+import {renderReactionSequence,REACTION_SEQUENCE_VERSION,ENDING_HOLD_SECONDS} from './reaction-sequence';
 import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type ScreenshotStory} from '../src/domain/screenshot-story';
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
@@ -56,7 +56,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
   if(!parent||target.project_id!==parent.project_id||target.user_id!==parent.user_id||target.user_id!==job.user_id||reusablePresenter(parent,target)!==c.job_id)throw Error('Saved footage does not match this version. Review the current voice and script before generating.');
  }
  if(job.status!=='completed'||job.snapshot?.scope!=='full'||typeof job.video_url!=='string')throw Error('A completed full-script presenter is required.');
- const baseId=createHash('sha256').update(JSON.stringify({user:job.user_id,framing_version:2,...c,...(story?{story,story_version:STORY_COMPOSITION_VERSION}:{}),...(c.video_id?{sequence:REACTION_SEQUENCE_VERSION}:{})})).digest('hex');
+ const baseId=createHash('sha256').update(JSON.stringify({user:job.user_id,framing_version:2,ending_hold_version:1,...c,...(story?{story,story_version:STORY_COMPOSITION_VERSION}:{}),...(c.video_id?{sequence:REACTION_SEQUENCE_VERSION}:{})})).digest('hex');
  const id=repairedCompositionId(baseId,c.job_id);
  const folder=resolve(root,'edit/compositions');await mkdir(folder,{recursive:true});
  const output=resolve(folder,`${id}.mp4`);const meta=resolve(folder,`${id}.json`);
@@ -85,17 +85,17 @@ export async function fullComposition(root:string,input:unknown,authorization:st
 	 const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??presenterBaseCrop(detected,verified?.crop,stream.width,stream.height),c.presenter_framing,c.presenter_framing_amount,c.presenter_framing_position);
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
- const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
+ const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
  const temp=resolve(folder,`${id}.partial.mp4`);
  let background=resolve(root,'.local-captures',c.video_id?`${c.video_id}.video`:`${c.capture_id}.png`);
- let totalDuration=duration;
+ let totalDuration=duration+ENDING_HOLD_SECONDS;
  let storyTiming; if(story){const rendered=await storyBackground({root,folder,id,jobId:c.job_id,source,story,duration,w,h,profileId,projectId:c.script_id,authorization,env});background=rendered.path;storyTiming=rendered.timing;}
  if(c.video_id){
   const info=JSON.parse((await exec(ffprobe,['-v','error','-show_format','-show_streams','-of','json',background],{timeout:15000})).stdout);
   const sourceDuration=Number(info.format.duration);
   if(!info.streams.some((s:{codec_type:string})=>s.codec_type==='video')||!Number.isFinite(sourceDuration)||sourceDuration<=0||sourceDuration>600)throw Error('Unsupported presenter background video.');
   totalDuration=await renderReactionSequence({ffmpeg,background,source,output:temp,filter,w,h,sourceDuration,reactionDuration:duration,hasSourceAudio:info.streams.some((s:{codec_type:string})=>s.codec_type==='audio')});
- }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...(story?['-i',background]:c.presenter_only?['-f','lavfi','-i',`color=c=0xe8edf4:s=${w}x${h}:r=25`]:['-loop','1','-framerate','25','-i',background]),'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0','-t',String(duration),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart','-shortest',temp],{timeout:600000,maxBuffer:1024*1024});
+ }else await exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...(story?['-i',background]:c.presenter_only?['-f','lavfi','-i',`color=c=0xe8edf4:s=${w}x${h}:r=25`]:['-loop','1','-framerate','25','-i',background]),'-c:v','libvpx-vp9','-i',source,'-filter_complex',filter,'-map','[out]','-map','1:a:0','-af',`apad=pad_dur=${ENDING_HOLD_SECONDS}`,'-t',String(totalDuration),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart',temp],{timeout:600000,maxBuffer:1024*1024});
  await rename(temp,output);
  const result={id,...(storyTiming?{story_timing:storyTiming,story_version:STORY_COMPOSITION_VERSION}:{}),script_id:c.script_id,job_id:c.job_id,size:c.size,position:c.position,placement:c.placement,framing:c.framing,crop,format:c.format,created_at:new Date().toISOString(),duration:totalDuration,reaction_duration:duration,sequence:c.video_id?REACTION_SEQUENCE_VERSION:undefined};
  await writeFile(meta,JSON.stringify(result),{mode:0o600});return result;

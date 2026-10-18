@@ -1,8 +1,12 @@
 // Keep complete sentences: never cut the last word to meet a preview limit.
 export function closingPreview(script:{hook:string;body:string;cta:string}){
- const ending=(script.cta.trim()||script.body.trim()).match(/[^.!?]+[.!?]+[”"']*|[^.!?]+$/g)?.map(s=>s.trim()).filter(Boolean)??[];
- const last=ending.at(-1)??'';
- if(last.length>1200)return '';
- const hook=script.hook.trim().match(/^[\s\S]*?[.!?](?:\s|$)/)?.[0].trim()??script.hook.trim();
- return hook&&hook!==last&&hook.length+last.length+2<=1200?`${hook}\n\n${last}`:last;
+ const sentences=(text:string)=>text.match(/[^.!?]+[.!?]+[”"']*|[^.!?]+$/g)?.map(s=>s.trim()).filter(Boolean)??[];
+ const cta=script.cta.trim();
+ const lead=sentences(script.body.trim()).at(-1)??'';
+ const ending=cta||lead;
+ const contextual=lead&&cta?`${lead}\n\n${cta}`:ending;
+ if(contextual.length<=1200)return contextual;
+ if(ending.length<=1200)return ending;
+ const last=sentences(ending).at(-1)??'';
+ return last.length<=1200?last:'';
 }

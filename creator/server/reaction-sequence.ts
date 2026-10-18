@@ -2,13 +2,14 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {writeFile} from 'node:fs/promises';
 const exec=promisify(execFile);
-export const REACTION_SEQUENCE_VERSION='source-then-reaction-v1';
+export const REACTION_SEQUENCE_VERSION='source-then-reaction-v2-ending-hold';
+export const ENDING_HOLD_SECONDS=1;
 export function segmentAudio(duration:number){
  return `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.03,afade=t=out:st=${Math.max(0,duration-.03)}:d=0.03`;
 }
 export async function renderReactionSequence({ffmpeg,background,source,output,filter,w,h,sourceDuration,reactionDuration,hasSourceAudio}:{ffmpeg:string;background:string;source:string;output:string;filter:string;w:number;h:number;sourceDuration:number;reactionDuration:number;hasSourceAudio:boolean}){
  const introDuration=Math.ceil(sourceDuration*25)/25;
- const tailDuration=Math.ceil(reactionDuration*25)/25;
+ const tailDuration=Math.ceil(reactionDuration*25)/25+ENDING_HOLD_SECONDS;
  const intro=output.replace(/\.mp4$/,'.intro.mp4'),reaction=output.replace(/\.mp4$/,'.reaction.mp4');
  const codecs=['-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-r','25','-video_track_timescale','12800','-c:a','aac','-ar','48000','-ac','2'];
  const run=(args:string[])=>exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...args],{timeout:600000,maxBuffer:1024*1024});
