@@ -1,24 +1,25 @@
 import {useRef,useState} from 'react';
 import {ZodError} from 'zod';
-import {contentInputSchema,emptyContent,explainError,type ContentInput} from '../domain/strategy';
+import {contentInputSchema,emptyContent,explainError,type ContentInput,type CreatorInput} from '../domain/strategy';
+import {suggestedProfileExamples,type ProfileQuestionKey} from '../domain/profile-suggestions';
 import {applyProfileProposal} from '../domain/profile-edit';
 import {ProfileChat} from './ProfileChat';
 import {CtaWording} from './CtaWording';
 
 const questions=[
- {key:'name',title:'What should we call this audience profile?',examples:['Credit education for first-time buyers','Money confidence for families','Safety with Steve']},
- {key:'primary_audience',title:'Who are you speaking to?',examples:['First-time homebuyers learning about credit','Families who want to manage everyday spending','Women who want to feel safer in everyday situations']},
- {key:'content_pillars',title:'What subjects do you want to be known for?',examples:['Understanding credit reports','Budgeting basics','Situational awareness']},
- {key:'audience_problems',title:'What does your audience need help with?',examples:['Understanding unfamiliar terms','Knowing which questions to ask','Spotting misleading claims']},
- {key:'source_topics',title:'What should Discover look for?',examples:['Consumer protection news','Credit reporting updates','Real-life teachable moments']},
- {key:'reaction_angles',title:'What perspective do you bring?',examples:['Explain what this means in everyday life','Challenge a common misconception','Give one practical next step']},
- {key:'tone',title:'How should your content sound?',examples:['Calm and direct','Warm and encouraging','Clear and educational']},
- {key:'things_to_avoid',title:'What should we avoid saying?',examples:['Guaranteed results','Fear-based messaging','Unsupported claims']},
- {key:'desired_outcomes',title:'What should viewers walk away with?',examples:['A clearer understanding','One useful action','Questions to ask a professional']},
- {key:'cta',title:'What would you like viewers to do next?',examples:['Comment GUIDE to receive my free guide','Book a consultation through my profile','Follow for more practical tips']},
+ {key:'name',title:'What should we call this audience profile?'},
+ {key:'primary_audience',title:'Who are you speaking to?'},
+ {key:'content_pillars',title:'What subjects do you want to be known for?'},
+ {key:'audience_problems',title:'What does your audience need help with?'},
+ {key:'source_topics',title:'What should Discover look for?'},
+ {key:'reaction_angles',title:'What perspective do you bring?'},
+ {key:'tone',title:'How should your content sound?'},
+ {key:'things_to_avoid',title:'What should we avoid saying?'},
+ {key:'desired_outcomes',title:'What should viewers walk away with?'},
+ {key:'cta',title:'What would you like viewers to do next?'},
 ] as const;
 type Key=typeof questions[number]['key'];
-export function ContentForm({initial=emptyContent,profileId,preview=false,onboarding=false,onSave,onClose}:{initial?:ContentInput;profileId?:string;preview?:boolean;onboarding?:boolean;onSave:(value:ContentInput)=>Promise<void>;onClose:()=>void}){
+export function ContentForm({initial=emptyContent,creator,profileId,preview=false,onboarding=false,onSave,onClose}:{initial?:ContentInput;creator?:CreatorInput;profileId?:string;preview?:boolean;onboarding?:boolean;onSave:(value:ContentInput)=>Promise<void>;onClose:()=>void}){
  const [draft,setDraft]=useState<ContentInput>(()=>({name:initial.name,primary_audience:initial.primary_audience,strategy:{...initial.strategy},cta_default:initial.cta_default,cta_campaign:initial.cta_campaign}));
  const [step,setStep]=useState(profileId?questions.length:0);
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const lock=useRef(false);
@@ -38,7 +39,7 @@ export function ContentForm({initial=emptyContent,profileId,preview=false,onboar
    <h3>{question.title}</h3>
    {question.key==='cta'&&<p>This becomes the audience’s default CTA. After saving, use chat to set a temporary CTA for your next posts.</p>}
    <label className="field"><span>{question.key==='name'||question.key==='primary_audience'?'Your answer':'Your answer (optional)'}</span><textarea key={question.key} autoFocus rows={3} value={value(question.key)} maxLength={question.key==='name'?100:question.key==='primary_audience'?1000:question.key==='cta'?500:3220} onChange={e=>change(question.key,e.target.value)} placeholder="Type your answer or choose an example below…" /></label>
-   <div className="profile-examples" aria-label="Examples you can edit">{question.examples.map(example=><button type="button" key={example} onClick={()=>change(question.key,['name','primary_audience','cta'].includes(question.key)?example:[value(question.key),example].filter(Boolean).join('\n'))}>{example}</button>)}</div>
+   <div className="profile-examples" aria-label="Examples you can edit">{suggestedProfileExamples(question.key as ProfileQuestionKey,creator).map(example=><button type="button" key={example} onClick={()=>change(question.key,['name','primary_audience','cta'].includes(question.key)?example:[value(question.key),example].filter(Boolean).join('\n'))}>{example}</button>)}</div>
    {question.key==='cta'&&<><p>For a comment-to-receive invitation, tell us the keyword, offer, and delivery method. Vektiss does not send DMs or fulfill offers.</p>{(['keyword','offer','delivery'] as const).map(key=><label className="field" key={key}><span>{key==='keyword'?'Comment keyword':key==='offer'?'What will they receive?':'How will you deliver it?'}</span><input value={draft.cta_default?.[key]??''} maxLength={key==='keyword'?60:key==='offer'?200:300} onChange={e=>setDraft(old=>({...old,cta_default:{...old.cta_default,text:old.cta_default?.text??'',keyword:old.cta_default?.keyword??'',offer:old.cta_default?.offer??'',delivery:old.cta_default?.delivery??'',[key]:e.target.value}}))} /></label>)}</>}
    <div className="profile-actions"><button type="button" className="button secondary" disabled={step===0} onClick={()=>setStep(s=>s-1)}>Back</button><button type="button" className="button primary" disabled={['name','primary_audience'].includes(question.key)&&!value(question.key).trim()} onClick={()=>setStep(s=>s+1)}>{step===questions.length-1?'Review profile':'Next'} →</button></div>
    {question.key==='cta'&&<CtaWording value={draft.cta_default?.wording} onChange={wording=>setDraft(old=>({...old,cta_default:{text:value('cta'),keyword:'',offer:'',delivery:'',...old.cta_default,wording}}))}/>}

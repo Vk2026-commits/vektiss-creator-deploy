@@ -485,7 +485,7 @@ function CreatorWorkspace({
       {!creator?<CreatorForm onboarding onClose={()=>{}} onSave={async value=>{
         const saved=await repo.saveCreator(value,null);
         setData(current=>({creator:saved,profiles:current?.profiles??[]}));
-      }}/>:<ContentForm onboarding onClose={()=>{}} onSave={async value=>{
+      }}/>:<ContentForm creator={creator} onboarding onClose={()=>{}} onSave={async value=>{
         const saved=await repo.saveContent(value,creator.id);
         setData(current=>current?{...current,profiles:[...current.profiles,saved]}:current);
         select(saved);
@@ -1035,6 +1035,7 @@ function CreatorWorkspace({
           onClose={() => setContentEdit(null)}
         >
           <ContentForm
+            creator={creator}
             profileId={contentEdit === 'new' ? undefined : contentEdit.id}
             preview={preview}
             initial={contentEdit === "new" ? undefined : contentEdit}
