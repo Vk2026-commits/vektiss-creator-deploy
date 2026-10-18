@@ -450,13 +450,16 @@ function CreatorWorkspace({
           .toLowerCase()
           .includes(query.toLowerCase()),
     ) ?? [];
-  function select(profile: ContentProfile) {
+  function rememberSelection(profile: ContentProfile) {
     setSelectedId(profile.id);
     try {
       localStorage.setItem(selectionKey, profile.id);
     } catch {
       /* Selection remains available for this session. */
     }
+  }
+  function select(profile: ContentProfile) {
+    rememberSelection(profile);
     if(choosingAudience)setAudienceChoice(value=>({id:profile.id,version:(value?.version??0)+1}));
     setChoosingAudience(false);setPage("create");
   }
@@ -647,7 +650,7 @@ function CreatorWorkspace({
               {page === "avatars" && <AvatarLibrary preview={preview} />}
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
-              {page === "discover" && <Discover profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
+              {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
                   {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}

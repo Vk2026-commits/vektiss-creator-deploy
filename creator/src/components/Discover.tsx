@@ -62,8 +62,9 @@ function embeddedClip(url: string): EmbeddedClip | null {
   return null;
 }
 
-export function Discover({ profiles, selectedId, onCreate }: { profiles: ContentProfile[]; selectedId: string | null; onCreate: (opportunity: ResearchOpportunity) => void }) {
-  const profile = profiles.find((item) => item.id === selectedId && !item.archived_at) ?? profiles.find((item) => !item.archived_at) ?? null;
+export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { profiles: ContentProfile[]; selectedId: string | null; onSelectProfile: (id: string) => void; onCreate: (opportunity: ResearchOpportunity) => void }) {
+  const activeProfiles = profiles.filter(item => !item.archived_at);
+  const profile = activeProfiles.find(item => item.id === selectedId) ?? activeProfiles[0] ?? null;
   const [feed, setFeed] = useState<ResearchFeed | null>(null);
   const [busy, setBusy] = useState(false);
   const [searchCount, setSearchCount] = useState(10);
@@ -155,6 +156,15 @@ export function Discover({ profiles, selectedId, onCreate }: { profiles: Content
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
     {notice&&<p role="status">{notice}</p>}
+    <div className="discover-profile-choice">
+      <div><strong>Searching for this Content Profile</strong><span>New searches and the ideas below use this audience’s strategy.</span></div>
+      <label htmlFor="discover-profile-select">Content Profile
+        <select id="discover-profile-select" value={profile?.id ?? ''} disabled={busy || !activeProfiles.length} onChange={event=>onSelectProfile(event.target.value)}>
+          {!activeProfiles.length&&<option value="">Create a Content Profile first</option>}
+          {activeProfiles.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </label>
+    </div>
     {!activeJobs.length && latestJob?.status==='failed' && <div className="error-message" role="alert"><strong>Search couldn’t finish</strong><p>{latestJob.error_code==='PROVIDER_INCOMPLETE'?'The search provider returned an incomplete result.':'The search provider could not finish this run.'} Your saved ideas are safe. Unused idea allowance has been released. Choose 1–10 and try again.</p></div>}
     {!activeJobs.length && latestJob?.status==='ready' && latestJob.delivered_count<latestJob.requested_count && <p role="status">{latestJob.phase} Only delivered ideas count against your allowance.</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>{feed?'Discover is almost ready.':'Loading your ideas…'}</h2>{feed&&<p>This feature is available to selected Pro pilot accounts.</p>}</div> : <>
