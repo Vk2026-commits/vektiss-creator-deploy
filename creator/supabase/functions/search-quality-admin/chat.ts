@@ -41,7 +41,7 @@ export async function prepareSearchChat(db:SupabaseClient,actor:string,input:{re
    if(usage.error)throw Error('PERSISTENCE');
    if(!response.ok||data.choices?.[0]?.finish_reason!=='stop')throw Error('PROVIDER');
    const proposal=searchChatProposalSchema.parse(JSON.parse(data.choices[0].message.content));
-   const settings=proposal.question?null:applySearchProposal(before,proposal);
+   const settings=Object.keys(proposal.changes).length?applySearchProposal(before,proposal):null;
    const saved=await db.from('creator_search_chat').update({proposal,after_settings:settings,status:'ready'}).eq('id',input.requestId).select('*').single();
    if(saved.error)throw Error('PERSISTENCE');
    await db.from('creator_ai_generations').update({status:'complete',result:{purpose:'search-quality-proposal',requestId:input.requestId}}).eq('id',input.requestId);

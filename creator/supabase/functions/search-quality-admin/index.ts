@@ -4,6 +4,7 @@ import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { defaultSearchQuality, qualityFromRow, searchQualitySettingsSchema } from "../../../src/domain/search-quality.ts";
 import { creatorInputSchema, contentInputSchema } from "../../../src/domain/strategy.ts";
 import {prepareSearchChat} from './chat.ts';
+import {saveSearchInstructions} from '../../../src/domain/search-chat.ts';
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -11,6 +12,7 @@ const inputSchema = z.discriminatedUnion("action", [
   z.object({action:z.literal('chat_prepare'),requestId:z.string().uuid(),profileId:z.string().uuid(),scope:z.enum(['creator','profile']),message:z.string().trim().min(1).max(5000)}).strict(),
   z.object({action:z.literal('chat_history'),profileId:z.string().uuid(),scope:z.enum(['creator','profile'])}).strict(),
   z.object({action:z.literal('chat_apply'),requestId:z.string().uuid()}).strict(),
+  z.object({action:z.literal('chat_save_instructions'),requestId:z.string().uuid()}).strict(),
   z.object({action:z.literal('chat_undo'),requestId:z.string().uuid()}).strict(),
   z.object({ action: z.literal("creators"), offset: z.number().int().min(0).max(10000).default(0) }),
   z.object({ action: z.literal("creator_detail"), creatorId: z.string().uuid() }),
@@ -45,7 +47,16 @@ Deno.serve(async request => {
   const input = parsed.data;
   try {
     if(input.action==='chat_prepare')return reply(headers,{request:await prepareSearchChat(db,auth.user.id,input,Deno.env.get('CREATOR_OPENAI_API_KEY'))});
-    if(input.action==='chat_apply'||input.action==='chat_undo'){
+    if(input.action==='chat_save_instructions'){
+      const found=await db.from('creator_search_chat').select('*').eq('id',input.requestId).eq('actor',auth.user.id).single();
+      if(found.error)return reply(headers,{code:'PROFILE'},404);
+      if(found.data.status==='ready'&&!found.data.after_settings){
+        const settings=saveSearchInstructions(found.data.before_settings,found.data.message);
+        const prepared=await db.from('creator_search_chat').update({after_settings:settings,proposal:{summary:'Your exact instructions were added to the search rules.',question:'',changes:{screeningCriteria:settings.screeningCriteria}}}).eq('id',input.requestId).eq('actor',auth.user.id).eq('status','ready').is('after_settings',null);
+        if(prepared.error)throw prepared.error;
+      }
+    }
+    if(input.action==='chat_apply'||input.action==='chat_undo'||input.action==='chat_save_instructions'){
       const result=await db.rpc('creator_apply_search_chat',{p_id:input.requestId,p_actor:auth.user.id,p_undo:input.action==='chat_undo'});
       if(result.error)return reply(headers,{code:result.error.message.includes('VERSION_CONFLICT')?'VERSION_CONFLICT':'SAVE_FAILED'},409);
       return reply(headers,{version:result.data});

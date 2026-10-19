@@ -9,9 +9,11 @@ export const searchChatProposalSchema=z.object({
 export type SearchChatProposal=z.infer<typeof searchChatProposalSchema>;
 export const searchSettingLabels:Record<keyof SearchQualitySettings,string>={seekSituations:'Situations to seek',avoidTopics:'Topics and formats to avoid',screeningCriteria:'Search and screening instructions',platforms:'Platforms',goodExamples:'Good examples',badExamples:'Blocked examples'};
 export function applySearchProposal(current:SearchQualitySettings,proposal:SearchChatProposal){
- if(proposal.question)throw Error('CLARIFICATION_REQUIRED');
  if(!Object.keys(proposal.changes).length)throw Error('NO_CHANGES');
  return searchQualitySettingsSchema.parse({...current,...proposal.changes});
+}
+export function saveSearchInstructions(current:SearchQualitySettings,message:string){
+ return searchQualitySettingsSchema.parse({...current,screeningCriteria:[current.screeningCriteria,message.trim()].filter(Boolean).join('\n\n')});
 }
 export function initialSearchSettings(strategy:Record<string,unknown>):SearchQualitySettings{
  return searchQualitySettingsSchema.parse({...defaultSearchQuality,screeningCriteria:strategy.research_screening_criteria??'',platforms:Array.isArray(strategy.research_source_platforms)&&strategy.research_source_platforms.length?strategy.research_source_platforms:defaultSearchQuality.platforms});

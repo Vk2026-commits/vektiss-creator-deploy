@@ -41,7 +41,7 @@ export function SearchQualityChat({profileId,creatorName,profileName,disabled,on
   if(lock.current||disabled)return;
   lock.current=true;setBusy(true);setError('');
   try{
-   await invoke({action:undo?'chat_undo':'chat_apply',requestId:request.id});
+   await invoke({action:undo?'chat_undo':request.after_settings?'chat_apply':'chat_save_instructions',requestId:request.id});
    setMessage('');pending.current=null;onApplied();
   }catch(e){setError(e instanceof Error?e.message:'Could not save.');}
   finally{lock.current=false;setBusy(false);}
@@ -60,11 +60,14 @@ export function SearchQualityChat({profileId,creatorName,profileName,disabled,on
    <blockquote>{request.message}</blockquote>
    {request.status==='pending'&&<p>This request may still be processing. Use Check status; repeated clicks do not create another AI request.</p>}
    {request.status==='error'&&<p>No settings changed. Edit your message to prepare a new proposal, or keep your existing rules. No automatic paid retry was made.</p>}
-   {request.proposal&&<><p>{request.proposal.summary}</p>{request.proposal.question?<><p><strong>{request.proposal.question}</strong></p><button className="button secondary" disabled={busy||disabled} onClick={()=>{setMessage(`${request.message}\nClarification: ${request.proposal!.question}\nMy answer: `);pending.current=null;}}>Answer / refine</button></>:<>
+   {request.proposal&&<><p>{request.proposal.summary}</p>{request.proposal.question&&<p><strong>Optional refinement:</strong> {request.proposal.question}</p>}
+    {request.status==='ready'&&<div className="profile-actions"><p><strong>Not saved yet.</strong> {request.after_settings?'Save the proposed changes below.':'Save your exact message above as additional search instructions. Existing rules and platforms stay unchanged; the AI’s summary is not saved.'}</p><button className="button primary" disabled={busy||disabled} onClick={()=>void apply(request)}>{busy?'Saving…':request.after_settings?'Save changes':'Save my instructions'}</button></div>}
+    {request.after_settings&&<>
     {(Object.keys(request.proposal.changes) as Array<keyof SearchQualitySettings>).map(key=><div key={key} className="quality-chat-diff"><h4>{searchSettingLabels[key]}</h4><div><section><strong>Before</strong><pre>{display(request.before_settings[key])}</pre></section><section><strong>Proposed</strong><pre>{display(request.after_settings?.[key])}</pre></section></div></div>)}
-    {request.status==='ready'&&<div className="profile-actions"><button className="button primary" disabled={busy||disabled} onClick={()=>void apply(request)}>Approve and save</button><button className="button secondary" disabled={busy||disabled} onClick={()=>{setMessage(`${request.message}\nRefinement: `);pending.current=null;}}>Refine request</button></div>}
+    </>}
+    {request.status==='ready'&&<button className="button secondary" disabled={busy||disabled} onClick={()=>{setMessage(`${request.message}\nRefinement: `);pending.current=null;}}>Refine request (optional)</button>}
     {request.status==='applied'&&<><p>Saved for future searches. Existing results and videos are unchanged.</p><button className="button secondary" disabled={busy||disabled} onClick={()=>void apply(request,true)}>Undo these changes</button></>}
-   </>}</>}
+   </>}
   </details>)}</div>
  </section>;
 }
