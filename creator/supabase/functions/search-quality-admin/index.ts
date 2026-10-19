@@ -3,10 +3,15 @@ import { z } from "zod";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { defaultSearchQuality, qualityFromRow, searchQualitySettingsSchema } from "../../../src/domain/search-quality.ts";
 import { creatorInputSchema, contentInputSchema } from "../../../src/domain/strategy.ts";
+import {prepareSearchChat} from './chat.ts';
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const inputSchema = z.discriminatedUnion("action", [
+  z.object({action:z.literal('chat_prepare'),requestId:z.string().uuid(),profileId:z.string().uuid(),scope:z.enum(['creator','profile']),message:z.string().trim().min(1).max(5000)}).strict(),
+  z.object({action:z.literal('chat_history'),profileId:z.string().uuid(),scope:z.enum(['creator','profile'])}).strict(),
+  z.object({action:z.literal('chat_apply'),requestId:z.string().uuid()}).strict(),
+  z.object({action:z.literal('chat_undo'),requestId:z.string().uuid()}).strict(),
   z.object({ action: z.literal("creators"), offset: z.number().int().min(0).max(10000).default(0) }),
   z.object({ action: z.literal("creator_detail"), creatorId: z.string().uuid() }),
   z.object({ action: z.literal("save_creator"), creatorId: z.string().uuid(), expectedUpdatedAt: z.string().datetime({ offset: true }), input: creatorInputSchema }),
@@ -39,6 +44,21 @@ Deno.serve(async request => {
   if (!parsed.success) return reply(headers, { code: "INPUT" }, 400);
   const input = parsed.data;
   try {
+    if(input.action==='chat_prepare')return reply(headers,{request:await prepareSearchChat(db,auth.user.id,input,Deno.env.get('CREATOR_OPENAI_API_KEY'))});
+    if(input.action==='chat_apply'||input.action==='chat_undo'){
+      const result=await db.rpc('creator_apply_search_chat',{p_id:input.requestId,p_actor:auth.user.id,p_undo:input.action==='chat_undo'});
+      if(result.error)return reply(headers,{code:result.error.message.includes('VERSION_CONFLICT')?'VERSION_CONFLICT':'SAVE_FAILED'},409);
+      return reply(headers,{version:result.data});
+    }
+    if(input.action==='chat_history'){
+      const profile=await db.from('content_profiles').select('creator_profile_id').eq('id',input.profileId).single();
+      if(profile.error)return reply(headers,{code:'PROFILE'},404);
+      let query=db.from('creator_search_chat').select('*').eq('actor',auth.user.id).eq('scope',input.scope);
+      query=input.scope==='creator'?query.eq('creator_id',profile.data.creator_profile_id):query.eq('profile_id',input.profileId);
+      const result=await query.order('created_at',{ascending:false}).limit(10);
+      if(result.error)throw result.error;
+      return reply(headers,{requests:result.data});
+    }
     if (input.action === "creators") {
       const {data, error, count} = await db.from("creator_profiles").select("id,display_name", { count: "exact" }).order("display_name").order("id").range(input.offset, input.offset + 49);
       if (error) throw error;
@@ -94,18 +114,19 @@ Deno.serve(async request => {
       if (error) return reply(headers, { code: error.message.includes("VERSION_CONFLICT") ? "VERSION_CONFLICT" : "SAVE_FAILED" }, error.message.includes("VERSION_CONFLICT") ? 409 : 503);
       return reply(headers, { version });
     }
-    const [quality, history, jobs, opportunities] = await Promise.all([
+    const [quality, history, jobs, opportunities, defaults] = await Promise.all([
       db.from("creator_search_quality").select("*").eq("content_profile_id", input.profileId).maybeSingle(),
       db.from("creator_search_quality_history").select("version,settings,created_at").eq("content_profile_id", input.profileId).order("version", { ascending: false }).limit(20),
       db.from("creator_research_jobs").select("id,status,requested_count,delivered_count,candidate_count,phase,provider_metadata,created_at").eq("content_profile_id", input.profileId).order("created_at", { ascending: false }).limit(20),
       db.from("creator_research_opportunities").select("id,title,category,relevance_score,source_snapshot,status,job_id,created_at").eq("content_profile_id", input.profileId).order("created_at", { ascending: false }).limit(40),
+      db.from('creator_search_defaults').select('*').eq('creator_id',profile.creator_profile_id).maybeSingle(),
     ]);
-    if (quality.error || history.error || jobs.error || opportunities.error) throw Error("READ_FAILED");
+    if (quality.error || history.error || jobs.error || opportunities.error || defaults.error) throw Error("READ_FAILED");
     const ids = (opportunities.data ?? []).map(item => item.id);
     const feedback = ids.length ? await db.from("creator_research_feedback").select("opportunity_id,reason,action,created_at").in("opportunity_id", ids).eq("action", "rejected").order("created_at", { ascending: false }).limit(100) : { data: [], error: null };
     if (feedback.error) throw Error("READ_FAILED");
     const strategy = profile.strategy && typeof profile.strategy === "object" && !Array.isArray(profile.strategy) ? profile.strategy as Record<string, unknown> : {};
-    return reply(headers, { profile, version: quality.data?.version ?? 0, settings: quality.data ? qualityFromRow(quality.data) : {
+    return reply(headers, { profile, version: quality.data?.version ?? 0, inherited: !quality.data?.enabled && !!defaults.data?.settings, settings: quality.data?.enabled ? qualityFromRow(quality.data) : defaults.data?.settings ?? {
       ...defaultSearchQuality,
       screeningCriteria: String(strategy.research_screening_criteria ?? ""),
       platforms: Array.isArray(strategy.research_source_platforms) && strategy.research_source_platforms.length

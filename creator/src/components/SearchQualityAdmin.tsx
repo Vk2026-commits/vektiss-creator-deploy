@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { defaultSearchQuality, type SearchQualitySettings } from "../domain/search-quality";
 import { type Creator, type ContentProfile, type CreatorInput, type ContentInput } from "../domain/strategy";
 import { CreatorForm, ContentForm, Modal } from "./StrategyForms";
+import { SearchQualityChat } from './SearchQualityChat';
 import "./search-quality-admin.css";
 
 type Profile = ContentProfile;
@@ -29,6 +30,7 @@ export function SearchQualityAdmin() {
   const [creatorId, setCreatorId] = useState("");
   const [creator, setCreator] = useState<Creator | null>(null);
   const [editing, setEditing] = useState<"creator" | "content" | null>(null);
+  const [chatScope,setChatScope]=useState<'profile'|'creator'>('profile');
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [total, setTotal] = useState(0);
@@ -129,6 +131,7 @@ export function SearchQualityAdmin() {
     {creator && <div className="quality-context"><span className="eyebrow">CREATOR-WIDE EXPERTISE & STYLE</span><strong>{creator.display_name}</strong><span>{creator.context.expertise || "No expertise added yet."}</span><p>Applies across this creator’s Content Profiles. Edit their background, experience, tone, and how they explain things.</p><button className="button secondary" disabled={busy} onClick={() => setEditing("creator")}>Edit creator profile</button></div>}
     {creator && !loading && !profiles.length && <p>This creator has no Content Profiles yet. Their overall creator profile is still editable above.</p>}
     {selected && !detail && !error && <p role="status">Loading this Content Profile…</p>}
+    {detail && creator && detail.profile.id===selected && <SearchQualityChat key={selected} scope={chatScope} setScope={setChatScope} profileId={selected} creatorName={creator.display_name} profileName={detail.profile.name} disabled={busy||JSON.stringify(form)!==JSON.stringify(detail.settings)} onApplied={()=>{setNotice('Search settings updated. Existing results and videos are unchanged.');setRefresh(value=>value+1);}} />}
     {detail && detail.profile.id === selected && creator && <div className="quality-context"><span className="eyebrow">INDIVIDUAL CONTENT PROFILE</span><strong>{detail.profile.name}</strong><p>Edit only this profile’s audience, topics, reaction angles, and CTA. Search rules below remain separate and authoritative.</p><button className="button secondary" disabled={busy} onClick={() => setEditing("content")}>Edit Content Profile</button></div>}
     {editing && creator && <Modal title={editing === "creator" ? `Edit creator: ${creator.display_name}` : `Edit Content Profile: ${detail?.profile.name}`} description={editing === "creator" ? "Creator-wide background and communication style. Existing videos and voice approvals stay unchanged." : "Changes apply only to this Content Profile and future generation."} onClose={() => { if (!busy) setEditing(null); }}>
       {editing === "creator" ? <CreatorForm initial={creator} onSave={saveProfile} onClose={() => setEditing(null)} /> : detail && <ContentForm initial={detail.profile} creator={creator} profileId={detail.profile.id} preview onSave={saveProfile} onClose={() => setEditing(null)} />}

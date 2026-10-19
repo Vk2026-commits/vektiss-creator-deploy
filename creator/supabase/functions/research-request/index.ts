@@ -4,7 +4,7 @@ import { startPlatformDiscovery, type NativePlatform } from "../_shared/platform
 import {startDeepResearch} from '../_shared/research-provider.ts';
 import {resolveArticleWindow} from '../../../src/domain/research-window.ts';
 import { researchBriefSchema, researchRequestSchema, type ResearchBrief } from "../../../src/domain/research.ts";
-import { qualityFromRow, qualityInstruction } from "../../../src/domain/search-quality.ts";
+import { qualityFromRow, qualityInstruction, searchQualitySettingsSchema } from "../../../src/domain/search-quality.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -116,10 +116,14 @@ Deno.serve(async (request) => {
     const brief = buildBrief(creator as Record<string, unknown> | null, profile as Record<string, unknown>);
     const { data: qualityRow, error: qualityError } = await db.from("creator_search_quality").select("*").eq("content_profile_id", input.profileId).maybeSingle();
     if (qualityError) throw new Error("PERSISTENCE");
-    if (qualityRow) {
-      const quality = qualityFromRow(qualityRow);
+    const defaults = await db.from('creator_search_defaults').select('settings').eq('creator_id',profile.creator_profile_id).maybeSingle();
+    if(defaults.error)throw new Error('PERSISTENCE');
+    if (qualityRow?.enabled || defaults.data?.settings) {
+      const quality = qualityRow?.enabled ? qualityFromRow(qualityRow) : searchQualitySettingsSchema.parse(defaults.data!.settings);
       brief.researchSourcePlatforms = quality.platforms;
-      brief.researchScreeningCriteria = [qualityInstruction(quality), brief.researchScreeningCriteria].filter(Boolean).join("\n").slice(0, 12000);
+      // Saved owner instructions replace old screening text, rather than
+      // appending contradictory requirements that the owner just removed.
+      brief.researchScreeningCriteria = qualityInstruction(quality);
       brief.researchBlockedUrls = quality.badExamples;
     }
     brief.sourceMode=input.sourceMode;
