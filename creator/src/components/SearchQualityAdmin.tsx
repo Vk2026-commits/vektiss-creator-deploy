@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { defaultSearchQuality, type SearchQualitySettings } from "../domain/search-quality";
+import { type Creator, type ContentProfile, type CreatorInput, type ContentInput } from "../domain/strategy";
+import { CreatorForm, ContentForm, Modal } from "./StrategyForms";
 import "./search-quality-admin.css";
 
-type Profile = { id: string; user_id: string; name: string; creator_name?: string; primary_audience: string; archived_at: string | null; strategy?: Record<string, unknown> };
+type Profile = ContentProfile;
 type Job = { id: string; status: string; requested_count: number; delivered_count: number; candidate_count: number; phase: string; provider_metadata: Record<string, unknown>; created_at: string };
 type Idea = { id: string; title: string; category: string; relevance_score: number; status: string; job_id: string; source_snapshot: Array<{ url: string; sourceType: string }>; created_at: string };
 type Detail = { profile: Profile; version: number; settings: SearchQualitySettings; history: Array<{ version: number; created_at: string }>; jobs: Job[]; opportunities: Idea[]; feedback: Array<{ opportunity_id: string; reason: string; created_at: string }> };
@@ -11,7 +13,11 @@ type Detail = { profile: Profile; version: number; settings: SearchQualitySettin
 async function call<T>(body: unknown): Promise<T> {
   if (!supabase) throw Error("Sign in to use Search Quality.");
   const { data, error } = await supabase.functions.invoke("search-quality-admin", { body: body as Record<string, unknown> });
-  if (error || data?.code) throw Error(data?.code === "VERSION_CONFLICT" ? "These settings changed elsewhere. Refresh before saving." : data?.code ?? "Search Quality could not load.");
+  if (error || data?.code) {
+    const failure = data?.code ? data : await error?.context?.json?.().catch(() => null);
+    const messages: Record<string,string> = { VERSION_CONFLICT: "This profile changed elsewhere. Close the editor and use Retry / refresh before saving.", AUTH: "Your session expired. Sign in again.", FORBIDDEN: "Only the owner can edit other creators.", INPUT: "Check the fields and try again.", SAVE_FAILED: "Could not save. Your existing profile is unchanged.", PROFILE: "This profile is no longer available." };
+    throw Error(messages[failure?.code] ?? "Search Quality could not load. Please retry.");
+  }
   return data as T;
 }
 const lines = (value: string) => value.split("\n").map(line => line.trim()).filter(Boolean);
@@ -19,6 +25,12 @@ const platformName = (sourceType: string) => sourceType.includes("instagram") ? 
 
 export function SearchQualityAdmin() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [creators, setCreators] = useState<Array<Pick<Creator,"id"|"display_name">>>([]);
+  const [creatorId, setCreatorId] = useState("");
+  const [creator, setCreator] = useState<Creator | null>(null);
+  const [editing, setEditing] = useState<"creator" | "content" | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState("");
@@ -28,22 +40,62 @@ export function SearchQualityAdmin() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
-  const loadList = useCallback(async (page: number) => {
-    const result = await call<{ profiles: Profile[]; total: number }>({ action: "list", offset: page });
-    setProfiles(result.profiles); setTotal(result.total);
-    setSelected(current => result.profiles.some(profile => profile.id === current) ? current : result.profiles[0]?.id || "");
-  }, []);
+  const selectedRef = useRef(selected); selectedRef.current = selected;
   const loadDetail = useCallback(async (id: string) => {
     if (!id) return;
     const result = await call<Detail>({ action: "detail", profileId: id });
-    setDetail(result); setForm(result.settings);
+    if (selectedRef.current === id) { setDetail(result); setForm(result.settings); }
   }, []);
-  useEffect(() => { void loadList(offset).catch(e => setError(String(e.message))); }, [offset, loadList]);
-  useEffect(() => { void loadDetail(selected).catch(e => setError(String(e.message))); }, [selected, loadDetail]);
+  useEffect(() => {
+    let active = true; setLoading(true); setError("");
+    void call<{creators: Array<Pick<Creator,"id"|"display_name">>; total:number}>({action:"creators", offset}).then(result => {
+      if (!active) return;
+      setCreators(result.creators); setTotal(result.total);
+      setCreatorId(current => result.creators.some(item => item.id === current) ? current : result.creators[0]?.id ?? "");
+    }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [offset, refresh]);
+  useEffect(() => {
+    let active = true; setCreator(null); setProfiles([]); setDetail(null);
+    if (!creatorId) { setSelected(""); return; }
+    setLoading(true); setError("");
+    void call<{creator: Creator; profiles:Profile[]}>({action:"creator_detail", creatorId}).then(result => {
+      if (!active) return;
+      setCreator(result.creator); setProfiles(result.profiles);
+      setSelected(current => result.profiles.some(item => item.id === current) ? current : result.profiles[0]?.id ?? "");
+    }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [creatorId, refresh]);
+  useEffect(() => {
+    let active = true; setDetail(null);
+    if (!selected) return;
+    setError("");
+    void call<Detail>({action:"detail", profileId:selected}).then(result => {
+      if (active) { setDetail(result); setForm(result.settings); }
+    }).catch(e => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [selected, refresh]);
+  function canSwitch() {
+    return !detail || JSON.stringify(form) === JSON.stringify(detail.settings) || window.confirm("Discard your unsaved search-rule changes?");
+  }
+  async function saveProfile(input: CreatorInput | ContentInput) {
+    if (!creator || busy || (editing === "content" && !detail)) return;
+    setBusy(true);
+    try {
+      await call(editing === "creator"
+        ? {action:"save_creator", creatorId:creator.id, expectedUpdatedAt:creator.updated_at, input}
+        : {action:"save_content", profileId:detail!.profile.id, expectedUpdatedAt:detail!.profile.updated_at, input});
+      setNotice(editing === "creator" ? "Creator profile saved. Future scripts across this creator’s Content Profiles use this expertise and style." : "Content Profile saved. Existing scripts and videos are unchanged.");
+      setRefresh(value => value + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save this profile.");
+      throw cause;
+    } finally { setBusy(false); }
+  }
   const feedbackById = useMemo(() => { const latest = new Map<string, string>(); for (const row of detail?.feedback ?? []) if (!latest.has(row.opportunity_id)) latest.set(row.opportunity_id, row.reason); return latest; }, [detail]);
   const reasonCounts = useMemo(() => { const counts = new Map<string, number>(); for (const reason of feedbackById.values()) if (reason) counts.set(reason, (counts.get(reason) ?? 0) + 1); return [...counts.entries()].sort((a, b) => b[1] - a[1]); }, [feedbackById]);
   async function save(action: "save" | "rollback", restoreVersion?: number) {
-    if (!detail || busy) return;
+    if (!detail || detail.profile.id !== selected || busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
       if (action === "save") await call({ action, profileId: selected, expectedVersion: detail.version, settings: form });
@@ -67,7 +119,20 @@ export function SearchQualityAdmin() {
   return <section className="search-quality-admin">
     <header><span className="eyebrow">OWNER STUDIO / DISCOVER</span><h1>Search Quality</h1><p>Tune what Discover looks for, then see what it actually found. Changes here never start a paid search.</p></header>
     {error && <p role="alert" className="error-message">{error}</p>}{notice && <p role="status" className="quality-notice">{notice}</p>}
-    <div className="quality-selector"><label>Creator and Content Profile<select value={selected} onChange={e => setSelected(e.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.creator_name ?? "Creator"} / {profile.name}{profile.archived_at ? " (archived)" : ""}</option>)}</select></label><div><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button><span>{total ? `${offset + 1}–${Math.min(offset + 50, total)} of ${total}` : "No profiles"}</span><button disabled={offset + 50 >= total} onClick={() => setOffset(offset + 50)}>Next</button></div></div>
+    <div className="quality-selector"><label>Creator<select disabled={busy || loading} value={creatorId} onChange={e => { if (canSwitch()) { setCreatorId(e.target.value); setSelected(""); setNotice(""); } }}><option value="" disabled>{loading ? "Loading creators…" : "Select creator"}</option>{creators.map(item => <option key={item.id} value={item.id}>{item.display_name}</option>)}</select></label>
+      <label>Content Profile<select disabled={busy || loading || !creator} value={selected} onChange={e => { if (canSwitch()) { setDetail(null); setSelected(e.target.value); setNotice(""); } }}><option value="" disabled>{loading ? "Loading profiles…" : "Select Content Profile"}</option>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name}{profile.archived_at ? " (archived)" : ""}</option>)}</select></label>
+      <button disabled={busy || loading} onClick={() => { if (canSwitch()) setRefresh(value => value + 1); }}>Retry / refresh</button>
+    </div>
+    {total > 50 && <div className="quality-pagination"><button disabled={busy || loading || offset === 0} onClick={() => { if (canSwitch()) setOffset(Math.max(0, offset - 50)); }}>Previous creators</button><span>{offset + 1}–{Math.min(offset + 50,total)} of {total}</span><button disabled={busy || loading || offset + 50 >= total} onClick={() => { if (canSwitch()) setOffset(offset + 50); }}>Next creators</button></div>}
+    {loading && <p role="status">Loading profiles…</p>}
+    {!loading && !error && !creators.length && <p>No creator profiles yet.</p>}
+    {creator && <div className="quality-context"><span className="eyebrow">CREATOR-WIDE EXPERTISE & STYLE</span><strong>{creator.display_name}</strong><span>{creator.context.expertise || "No expertise added yet."}</span><p>Applies across this creator’s Content Profiles. Edit their background, experience, tone, and how they explain things.</p><button className="button secondary" disabled={busy} onClick={() => setEditing("creator")}>Edit creator profile</button></div>}
+    {creator && !loading && !profiles.length && <p>This creator has no Content Profiles yet. Their overall creator profile is still editable above.</p>}
+    {selected && !detail && !error && <p role="status">Loading this Content Profile…</p>}
+    {detail && detail.profile.id === selected && creator && <div className="quality-context"><span className="eyebrow">INDIVIDUAL CONTENT PROFILE</span><strong>{detail.profile.name}</strong><p>Edit only this profile’s audience, topics, reaction angles, and CTA. Search rules below remain separate and authoritative.</p><button className="button secondary" disabled={busy} onClick={() => setEditing("content")}>Edit Content Profile</button></div>}
+    {editing && creator && <Modal title={editing === "creator" ? `Edit creator: ${creator.display_name}` : `Edit Content Profile: ${detail?.profile.name}`} description={editing === "creator" ? "Creator-wide background and communication style. Existing videos and voice approvals stay unchanged." : "Changes apply only to this Content Profile and future generation."} onClose={() => { if (!busy) setEditing(null); }}>
+      {editing === "creator" ? <CreatorForm initial={creator} onSave={saveProfile} onClose={() => setEditing(null)} /> : detail && <ContentForm initial={detail.profile} creator={creator} profileId={detail.profile.id} preview onSave={saveProfile} onClose={() => setEditing(null)} />}
+    </Modal>}
     {detail && <><div className="quality-context"><strong>Editing: {detail.profile.name}</strong><span>{detail.profile.primary_audience}</span><small>Creator account {detail.profile.user_id} · Rule version {detail.version || "not yet customized"}</small><details><summary>Existing Content Profile topics</summary><p>Source topics: {Array.isArray(detail.profile.strategy?.source_topics) ? detail.profile.strategy.source_topics.join(" · ") : "Not set"}</p><p>Content pillars: {Array.isArray(detail.profile.strategy?.content_pillars) ? detail.profile.strategy.content_pillars.join(" · ") : "Not set"}</p></details></div>
       <div className="quality-grid"><section className="quality-card"><h2>What makes a strong match?</h2><p>These rules apply only to this Content Profile. Existing ideas stay as they are.</p>
         <label>Situations to seek<textarea value={form.seekSituations} onChange={e => field("seekSituations", e.target.value)} placeholder="Real situations this creator can explain or react to" /></label>

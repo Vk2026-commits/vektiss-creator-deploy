@@ -2,10 +2,15 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { defaultSearchQuality, qualityFromRow, searchQualitySettingsSchema } from "../../../src/domain/search-quality.ts";
+import { creatorInputSchema, contentInputSchema } from "../../../src/domain/strategy.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const inputSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("creators"), offset: z.number().int().min(0).max(10000).default(0) }),
+  z.object({ action: z.literal("creator_detail"), creatorId: z.string().uuid() }),
+  z.object({ action: z.literal("save_creator"), creatorId: z.string().uuid(), expectedUpdatedAt: z.string().datetime({ offset: true }), input: creatorInputSchema }),
+  z.object({ action: z.literal("save_content"), profileId: z.string().uuid(), expectedUpdatedAt: z.string().datetime({ offset: true }), input: contentInputSchema }),
   z.object({ action: z.literal("list"), offset: z.number().int().min(0).max(10000).default(0) }),
   z.object({ action: z.literal("detail"), profileId: z.string().uuid() }),
   z.object({ action: z.literal("save"), profileId: z.string().uuid(), expectedVersion: z.number().int().min(0), settings: searchQualitySettingsSchema }),
@@ -13,7 +18,7 @@ const inputSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reject"), profileId: z.string().uuid(), opportunityId: z.string().uuid(), reason: z.enum(["off_topic","staged","duplicate","unavailable","poor_quality","not_relevant","wrong_angle"]) }),
 ]);
 function headersFor(origin: string | null) {
-  const headers: Record<string, string> = { "content-type": "application/json", "cache-control": "no-store", vary: "Origin", "access-control-allow-headers": "authorization, apikey, content-type", "access-control-allow-methods": "POST, OPTIONS" };
+  const headers: Record<string, string> = { "content-type": "application/json", "cache-control": "no-store", vary: "Origin", "access-control-allow-headers": "authorization, apikey, content-type, x-client-info", "access-control-allow-methods": "POST, OPTIONS" };
   if (origin) headers["access-control-allow-origin"] = origin;
   return headers;
 }
@@ -34,6 +39,34 @@ Deno.serve(async request => {
   if (!parsed.success) return reply(headers, { code: "INPUT" }, 400);
   const input = parsed.data;
   try {
+    if (input.action === "creators") {
+      const {data, error, count} = await db.from("creator_profiles").select("id,display_name", { count: "exact" }).order("display_name").order("id").range(input.offset, input.offset + 49);
+      if (error) throw error;
+      return reply(headers, { creators: data ?? [], total: count ?? 0 });
+    }
+    if (input.action === "creator_detail") {
+      const {data: creator, error} = await db.from("creator_profiles").select("*").eq("id", input.creatorId).maybeSingle();
+      if (error) throw error;
+      if (!creator) return reply(headers, {code:"PROFILE"},404);
+      // Page through all profiles; do not silently omit profiles at the API row limit.
+      const profiles = [];
+      for (let offset = 0; ; offset += 100) {
+        const result = await db.from("content_profiles").select("*").eq("creator_profile_id", creator.id).eq("user_id", creator.user_id).order("created_at").order("id").range(offset, offset + 99);
+        if (result.error) throw result.error;
+        profiles.push(...result.data);
+        if (result.data.length < 100) break;
+      }
+      return reply(headers, {creator, profiles});
+    }
+    if (input.action === "save_creator" || input.action === "save_content") {
+      const {data, error} = await db.rpc("creator_admin_save_profile", {
+        p_scope: input.action === "save_creator" ? "creator" : "content",
+        p_profile_id: input.action === "save_creator" ? input.creatorId : input.profileId,
+        p_expected_updated_at: input.expectedUpdatedAt, p_input: input.input, p_actor: auth.user.id,
+      });
+      if (error) return reply(headers, {code: error.message.includes("VERSION_CONFLICT") ? "VERSION_CONFLICT" : "SAVE_FAILED"}, error.message.includes("VERSION_CONFLICT") ? 409 : 503);
+      return reply(headers, {profile: data});
+    }
     if (input.action === "list") {
       const { data, error, count } = await db.from("content_profiles").select("id,user_id,creator_profile_id,name,primary_audience,archived_at,created_at", { count: "exact" }).order("created_at", { ascending: false }).range(input.offset, input.offset + 49);
       if (error) throw error;
@@ -43,7 +76,7 @@ Deno.serve(async request => {
       const names = new Map((creators.data ?? []).map(row => [row.id, row.display_name]));
       return reply(headers, { profiles: (data ?? []).map(row => ({ ...row, creator_name: names.get(row.creator_profile_id) ?? "Creator" })), total: count ?? 0 });
     }
-    const { data: profile, error: profileError } = await db.from("content_profiles").select("id,user_id,name,primary_audience,strategy,archived_at").eq("id", input.profileId).maybeSingle();
+    const { data: profile, error: profileError } = await db.from("content_profiles").select("*").eq("id", input.profileId).maybeSingle();
     if (profileError || !profile) return reply(headers, { code: "PROFILE" }, 404);
     if (input.action === "reject") {
       const { data: changed, error } = await db.rpc("creator_admin_reject_research", { p_profile_id: input.profileId, p_opportunity_id: input.opportunityId, p_reason: input.reason, p_actor: auth.user.id });
