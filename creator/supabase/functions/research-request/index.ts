@@ -4,6 +4,7 @@ import { startPlatformDiscovery, type NativePlatform } from "../_shared/platform
 import {startDeepResearch} from '../_shared/research-provider.ts';
 import {resolveArticleWindow} from '../../../src/domain/research-window.ts';
 import { researchBriefSchema, researchRequestSchema, type ResearchBrief } from "../../../src/domain/research.ts";
+import { qualityFromRow, qualityInstruction } from "../../../src/domain/search-quality.ts";
 
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -113,6 +114,14 @@ Deno.serve(async (request) => {
     if (profileError || !profile) return reply(headers, { code: "PROFILE" }, 403);
     const { data: creator } = await db.from("creator_profiles").select("context").eq("id", profile.creator_profile_id).eq("user_id", userId).maybeSingle();
     const brief = buildBrief(creator as Record<string, unknown> | null, profile as Record<string, unknown>);
+    const { data: qualityRow, error: qualityError } = await db.from("creator_search_quality").select("*").eq("content_profile_id", input.profileId).maybeSingle();
+    if (qualityError) throw new Error("PERSISTENCE");
+    if (qualityRow) {
+      const quality = qualityFromRow(qualityRow);
+      brief.researchSourcePlatforms = quality.platforms;
+      brief.researchScreeningCriteria = [qualityInstruction(quality), brief.researchScreeningCriteria].filter(Boolean).join("\n").slice(0, 12000);
+      brief.researchBlockedUrls = quality.badExamples;
+    }
     brief.sourceMode=input.sourceMode;
     if(input.sourceMode==='articles'){
       brief.articleWindow=resolveArticleWindow(input.articleDate??{preset:'week',timezone:'UTC'});

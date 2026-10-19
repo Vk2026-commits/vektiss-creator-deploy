@@ -41,6 +41,7 @@ export const feedbackReasonSchema = z.enum([
   "not_my_audience",
   "wrong_angle",
   "other",
+    "off_topic", "staged", "duplicate", "unavailable", "poor_quality",
 ]);
 
 export const researchSourceSchema = z
@@ -105,6 +106,7 @@ export const researchBriefSchema = z
     researchSourcePlatforms: z.array(z.enum(["TikTok", "Instagram", "YouTube"])).max(3).default([]),
     researchScreeningCriteria: z.string().trim().max(12000).default(""),
     researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
+    researchBlockedUrls: z.array(z.string().url().max(2048)).max(20).default([]),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleWindow:articleWindowSchema.optional(),
   })
@@ -238,6 +240,9 @@ export function rankResearchCandidates(
   const priorUrls = new Set(
     duplicateHistory.flatMap((item) => item.sourceSnapshot.map((source) => canonicalResearchUrl(source.url)).filter(Boolean)),
   );
+  const hardRejectedUrls = new Set(history.filter(item => item.status === "rejected" &&
+    ["unavailable", "staged", "duplicate"].includes(item.rejectionReason ?? ""))
+    .flatMap(item => item.sourceSnapshot.map(source => canonicalResearchUrl(source.url)).filter(Boolean)));
   const accepted: RankedResearchCandidate[] = [];
 
   for (const candidate of candidates) {
@@ -245,7 +250,7 @@ export function rankResearchCandidates(
       .map((id) => sourceById.get(id))
       .filter((source): source is ResearchSource => Boolean(source));
     const urls = sources.map((source) => canonicalResearchUrl(source.url)).filter(Boolean);
-    if (!sources.length || !urls.length || urls.every((url) => priorUrls.has(url!))) continue;
+    if (!sources.length || !urls.length || urls.every((url) => priorUrls.has(url!)) || urls.some(url => hardRejectedUrls.has(url!))) continue;
     // A new direct-video URL is the durable duplicate boundary. Similar titles are
     // common for raw clips (for example, multiple "followed in a parking lot"
     // videos) and must not hide a genuinely new clip just because the lesson is
@@ -255,12 +260,13 @@ export function rankResearchCandidates(
     const sameCategory = history.filter((item) => item.category.toLowerCase() === candidate.category.toLowerCase());
     const preferenceBoost = Math.max(-20, Math.min(20, sameCategory.reduce((score, item) => {
       if (["saved", "selected", "turned_into_content"].includes(item.status)) return score + 8;
-      if (item.status === "rejected" && item.rejectionReason && ["dont_like_this_topic", "not_relevant", "not_my_audience"].includes(item.rejectionReason)) return score - 10;
+      if (item.status === "rejected" && item.rejectionReason && ["dont_like_this_topic", "not_relevant", "not_my_audience", "off_topic"].includes(item.rejectionReason)) return score - 10;
       return score;
     }, 0)));
+    const similarQualityPenalty = history.some(item => item.status === "rejected" && item.rejectionReason === "poor_quality" && headlineSimilarity(item.title, candidate.title) >= 0.45) ? -5 : 0;
     const evidenceBoost = Math.min(sources.length, 3) * 3;
     const rankScore = Math.round(
-      Math.max(0, Math.min(100, candidate.relevanceScore * 0.68 + candidate.timelinessScore * 0.22 + evidenceBoost + preferenceBoost)),
+      Math.max(0, Math.min(100, candidate.relevanceScore * 0.68 + candidate.timelinessScore * 0.22 + evidenceBoost + preferenceBoost + similarQualityPenalty)),
     );
     accepted.push({
       ...candidate,

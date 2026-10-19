@@ -299,8 +299,10 @@ Deno.serve(async (request) => {
     });
     // A provider can emit low-confidence items despite on-brief instructions.
     // Keep the requested count a target, never a reason to pad weak clips.
+    const blockedUrls = new Set(brief.data.researchBlockedUrls.map(canonicalResearchUrl).filter(Boolean));
+    const sourcesById = new Map(providerRun.sources.map(source => [source.providerSourceId, source]));
     const eligibleCandidates = brief.data.sourceMode === 'videos'
-      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70)
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70 && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
       : providerRun.candidates;
     const requestedCount = Number(job.requested_count);
     const rankedPool = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, eligibleCandidates.length, duplicateHistory);

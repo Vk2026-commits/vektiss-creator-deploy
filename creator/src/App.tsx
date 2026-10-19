@@ -13,6 +13,7 @@ import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
 import { UsageDashboard } from './components/UsageDashboard';
+import { SearchQualityAdmin } from './components/SearchQualityAdmin';
 import { AvatarCostHelp } from './components/AvatarCostHelp';
 import { Discover } from './components/Discover';
 import type { ResearchOpportunity } from './lib/research-client';
@@ -358,7 +359,7 @@ export function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs";
+type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs" | "search-quality";
 function CreatorWorkspace({
   repo,
   userId,
@@ -543,7 +544,7 @@ function CreatorWorkspace({
           </button>
           <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
         </nav>
-        {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button></nav></>}
+        {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button><button className={page === 'search-quality' ? 'active' : ''} onClick={() => setPage('search-quality')}><Sparkles size={18}/> Search Quality</button></nav></>}
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
         <div className="upcoming">
           <span>
@@ -650,6 +651,7 @@ function CreatorWorkspace({
               {page === "avatars" && <AvatarLibrary preview={preview} />}
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
+              {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
               {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
                 <>

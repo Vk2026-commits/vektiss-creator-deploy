@@ -15,6 +15,8 @@ import {resolveArticleWindow,localDate,type ArticleDate} from '../domain/researc
 const activeStatuses = new Set(["queued", "researching", "reviewing_sources", "ranking"]);
 const rejectReasons = [
   ["not_relevant", "Not relevant"], ["already_talked_about_this", "Already talked about this"],
+  ["off_topic", "Off-topic"], ["staged", "Staged or fictional"], ["duplicate", "Duplicate clip"],
+  ["unavailable", "Unavailable or sign-in required"], ["poor_quality", "Poor video quality"],
   ["dont_like_this_topic", "Don’t like this topic"], ["too_old", "Too old"],
   ["not_my_audience", "Not my audience"], ["wrong_angle", "Wrong angle"], ["other", "Other"],
 ] as const;
