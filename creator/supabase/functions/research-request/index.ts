@@ -124,6 +124,7 @@ Deno.serve(async (request) => {
       // Saved owner instructions replace old screening text, rather than
       // appending contradictory requirements that the owner just removed.
       brief.researchScreeningCriteria = qualityInstruction(quality);
+      brief.researchSeekSituations = quality.seekSituations;
       brief.researchBlockedUrls = quality.badExamples;
     }
     brief.sourceMode=input.sourceMode;

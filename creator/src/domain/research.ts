@@ -105,6 +105,7 @@ export const researchBriefSchema = z
     profileContext: z.string().trim().max(5000),
     researchSourcePlatforms: z.array(z.enum(["TikTok", "Instagram", "YouTube"])).max(3).default([]),
     researchScreeningCriteria: z.string().trim().max(12000).default(""),
+    researchSeekSituations: z.string().trim().max(5000).default(""),
     researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
     researchBlockedUrls: z.array(z.string().url().max(2048)).max(20).default([]),
     sourceMode:z.enum(['videos','articles']).default('videos'),

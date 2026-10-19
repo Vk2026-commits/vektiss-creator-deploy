@@ -1,4 +1,5 @@
 import { canonicalResearchUrl, researchSourceSchema, type ResearchBrief, type ResearchSource } from "../../../src/domain/research.ts";
+import {wantsVisibleAction,actionFormatRejection} from '../../../src/domain/search-intent.ts';
 
 declare const Deno: { env: { get(key: string): string | undefined } };
 
@@ -52,7 +53,28 @@ function queryRotation(value: string): number {
   return [...value].reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 7);
 }
 
+function requestedQueries(brief:ResearchBrief,seed:string,round:number,instagram=false):string[]|null {
+ const safety=/safety|security|de-escalation/i.test([...brief.sourceTopics,...brief.contentPillars,brief.expertise].join(' '));
+ const explicit=(brief.researchSeekSituations??'').split(/[\n;,]+/).map(s=>s.trim()).filter(s=>s.length>3&&s.length<100&&!/^(avoid|reject|do not|don't|no )/i.test(s));
+ const action=safety&&wantsVisibleAction(brief);
+ if(!action&&!explicit.length)return null;
+ const rounds=[
+  ['security guard de-escalates confrontation caught on camera','store employee intervenes aggressive customer footage','bystander intervenes harassment CCTV','doorbell camera attempted entry homeowner response','security separates fight original footage'],
+  ['shop worker stops assault surveillance footage','public transport confrontation intervention footage','security removes aggressive visitor bodycam','bystander helps person escape confrontation camera','doorbell unwanted visitor leaves intervention footage'],
+  ['restaurant staff defuses confrontation CCTV','security officer breaks up altercation footage','bus driver intervenes passenger harassment camera','shopkeeper confronts intruder security camera','crowd intervenes stops assault original footage'],
+ ];
+ const tags=[['securityintervention','caughtoncamera','deescalation','doorbellfootage','cctvincident'],['bystanderintervention','bodycamfootage','storeconfrontation','securityguardintervention','publictransportincident'],['restaurantconfrontation','surveillancefootage','shopkeeperintervention','busdriverintervention','conflictresolutionfootage']];
+ const index=Math.max(0,Math.min(2,round-1));
+ const base=action?(instagram?tags[index]:rounds[index]):[];
+ const selected=explicit.length?explicit.slice((index*2)%explicit.length).concat(explicit).slice(0,2):[];
+ const queries=[...selected.map(s=>instagram?s.replace(/[^\p{L}\p{N}]/gu,''):s),...base];
+ const unique=[...new Set(queries)];
+ const start=queryRotation(seed)%Math.max(1,base.length);
+ return explicit.length?unique.slice(0,5):[...unique.slice(start),...unique.slice(0,start)].slice(0,5);
+}
+
 export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+  const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
   const safetyProfile = /women.?s? safety|personal safety|situational awareness/i.test(topics.join(' '));
   if (!safetyProfile) {
@@ -82,6 +104,7 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1)
 }
 
 export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+  const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   // Use shorter, incident-oriented phrases for Shorts and Reels search. Long
   // TikTok-style phrases tend to return unrelated keyword coincidences there.
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
@@ -98,6 +121,7 @@ export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", rou
 }
 
 export function buildInstagramQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+  const requested=requestedQueries(brief,seed,round,true); if(requested)return requested;
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
     [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
   );
@@ -297,7 +321,7 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
     const safetyProfile = !brief || /women.?s? safety|personal safety|situational awareness/i.test([...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(' '));
     const parsed = platform === "TikTok" ? sourceFromTiktokItem(item, sources.length, safetyProfile)
       : sourceFromCrossPlatformItem(item, sources.length, platform);
-    if (!parsed || seen.has(parsed.url)) continue;
+    if (!parsed || seen.has(parsed.url) || (brief&&actionFormatRejection(brief,parsed))) continue;
     seen.add(parsed.url);
     sources.push(parsed);
     // Keep a larger local pool than the requested delivery count. The screener
