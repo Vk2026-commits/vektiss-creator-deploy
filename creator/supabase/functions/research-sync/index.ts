@@ -1,4 +1,5 @@
 import {providerText} from '../../../src/domain/provider-text.ts';
+import {reviewWaitExpired} from '../../../src/domain/review-wait.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
@@ -243,13 +244,15 @@ Deno.serve(async (request) => {
           throw error;
         }
       }));
-      if (results.some((result) => result.status === "queued" || result.status === "in_progress")) {
+      const waitExpired=reviewWaitExpired(job.created_at);
+      if (results.some((result) => result.status === "queued" || result.status === "in_progress")&&!waitExpired) {
         const updated = await db.from("creator_research_jobs").update({ phase: `Checking clip quality across platforms (round ${currentRound} of 3)…`, updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
       const complete = results.filter((result): result is CompletedResearchRun => result.status === "completed" && "candidates" in result);
       const pending=Array.isArray(providerMetadata.pendingScreeningBatches)?providerMetadata.pendingScreeningBatches as number[][]:[];
-      if(pending.length){
+      if(waitExpired){providerMetadata.reviewLimited=true;providerMetadata.unavailableRound=currentRound;}
+      if(pending.length&&!waitExpired){
         // Claim before launching: overlapping polls cannot submit the next batch twice.
         const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources'}).eq('id',job.id).eq('status','researching').select('*').maybeSingle();
         if(claim.error)throw Error(`PERSISTENCE_QUEUE_${claim.error.code}`);
@@ -366,7 +369,7 @@ Deno.serve(async (request) => {
       screeningRunIds: (Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string }> : []).map((run) => run.id),
     } : null;
     const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
-    if (brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3) {
+    if (brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3 && !providerMetadata.reviewLimited) {
       // A sparse or off-topic popular feed must not be the only retrieval route.
       // Use the next bounded round for domain-filtered indexed video search.
       const nextRound=currentRound+1;
