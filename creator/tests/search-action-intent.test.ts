@@ -1,9 +1,16 @@
 import {expect,it,vi} from 'vitest';
 import {researchBriefSchema} from '../src/domain/research';
-import {wantsVisibleAction,actionFormatRejection} from '../src/domain/search-intent';
+import {wantsVisibleAction,actionFormatRejection,actionEvidenceInstruction} from '../src/domain/search-intent';
 import {discoveryDiagnostics,buildInstagramQueryPack,buildTikTokQueryPack,buildCrossPlatformQueryPack} from '../supabase/functions/_shared/platform-discovery';
 import {nativeScreeningInstructions,startDeepResearch} from '../supabase/functions/_shared/research-provider';
 const brief=researchBriefSchema.parse({expertise:'Security',experience:'',industries:[],communicationStyle:'',creatorTone:[],phrasesToAvoid:[],preferredCtaStyle:'',creatorContext:'',audienceName:'Safety',primaryAudience:'',audienceProblems:[],audienceInterests:[],contentPillars:['situational awareness'],sourceTopics:['personal safety'],reactionAngles:[],desiredOutcomes:[],profileTone:[],thingsToAvoid:[],profileContext:'',researchScreeningCriteria:'Focus on de-escalation techniques in action, rather than discussing situations.'});
+it('respects profile permissions for labeled demonstrations and recorded interactions',()=>{
+ const instruction=actionEvidenceInstruction(brief);
+ expect(instruction).toContain('Recorded conversations can qualify');
+ expect(instruction).toContain('News-account footage can qualify');
+ expect(instruction).toContain('never as a verified real incident');
+ expect(instruction).toContain('do not override an explicit permission');
+});
 it('keeps indexed fallback scoped to selected platforms and concrete action queries',async()=>{
  const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({id:'test',status:'queued'})));
  vi.stubGlobal('fetch',fetchMock);
