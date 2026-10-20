@@ -30,12 +30,16 @@ it('scopes verification to account, connection, avatar, engine and shape; invali
 it('blocks direct paid full submissions before reservation when no test is verified',async()=>{
  const script={id:'s',user_id:'u',hook:'Hello',body:'This is a test.',cta:'',brief:{production:{step:'saved',approved_at:'now',presenter:'avatar',avatar_id:'a',format:'portrait'}}};
  const avatar={id:'a',status:'ready',provider_avatar_id:'provider',provider_voice_id:'voice',connection_id:'c',thumbnail_url:'photo'};
- const insert=vi.fn(),rpc=vi.fn();
+ const insert=vi.fn(),rpc=vi.fn().mockResolvedValue({data:null,error:null});
  const db:any={rpc,from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,insert, single:async()=>({data:table==='creator_scripts'?script:avatar,error:null}),maybeSingle:async()=>({data:null,error:null})};return q;}};
  const service=presenterTestService(db,{} as any);
  const prepared:any=await service('u',{action:'prepare_test',script_id:'s',scope:'full'});
- await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:prepared.revision,paid_consent:true})).rejects.toThrow('Complete and verify');
+ await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:prepared.revision,paid_consent:true})).rejects.toThrow('acknowledge');
  expect(insert).not.toHaveBeenCalled();expect(rpc).not.toHaveBeenCalled();
+ // Explicit acknowledgment passes the gate, but does not bypass credentials or start a paid request.
+ await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:prepared.revision,paid_consent:true,unverified_background_acknowledged:true})).rejects.toThrow('Reconnect');
+ expect(rpc).toHaveBeenCalledOnce();expect(insert).not.toHaveBeenCalled();
+ await expect(service('u',{action:'start_test',script_id:'s',scope:'full',revision:'stale',paid_consent:true,unverified_background_acknowledged:true})).rejects.toThrow('changed');
 });
 it('keeps certification server-write-only',()=>{
  const sql=readFileSync('supabase/migrations/202610090004_avatar_verification.sql','utf8');
