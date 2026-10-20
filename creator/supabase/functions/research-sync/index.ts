@@ -346,7 +346,13 @@ Deno.serve(async (request) => {
       // Use the next bounded round for domain-filtered indexed video search.
       const nextRound=currentRound+1;
       const queryHints=buildCrossPlatformQueryPack(brief.data,`${job.id}:indexed:${nextRound}`,nextRound);
-      const run=await startDeepResearch({brief:brief.data,requestedCount:Number(job.requested_count),candidateMultiplier:2,queryHints,excludeUrls:providerRun.sources.map(source=>source.url)});
+      // Prioritize already-seen clips in the bounded provider exclusion list.
+      // Otherwise each new job pays to rediscover candidates ranking must reject.
+      const excludeUrls=[...new Set([
+        ...duplicateHistory.flatMap(item=>item.sourceSnapshot.map(source=>source.url)),
+        ...providerRun.sources.map(source=>source.url),
+      ])];
+      const run=await startDeepResearch({brief:brief.data,requestedCount:Number(job.requested_count),candidateMultiplier:2,queryHints,excludeUrls});
       const update=await db.from('creator_research_jobs').update({
         provider_response_id:run.id,status:'researching',phase:`${ranked.length} of ${job.requested_count} found; searching indexed video links (${nextRound}/3)…`,
         provider_metadata:{stage:'indexed_video_search',round:nextRound,roundReports,queryHints,acceptedCountSoFar:ranked.length,
