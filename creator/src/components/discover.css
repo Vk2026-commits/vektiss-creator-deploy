@@ -39,3 +39,5 @@
 .research-stop-confirm { margin-top: 12px; padding: 16px; border: 1px solid #c8dcfa; border-radius: 16px; background: #fff; }
 .research-stop-confirm > div { display: flex; flex-wrap: wrap; gap: 10px; }
 .research-stop-confirm p { font-size: 14px; line-height: 1.5; }
+
+.discovery-pilot{padding:18px;margin:16px 0;border:1px solid var(--border,#d5dae3);border-radius:12px}.discovery-pilot summary{cursor:pointer;font-weight:650}.discovery-pilot form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.discovery-pilot label{display:block;margin:12px 0}.discovery-pilot input[type=url]{display:block;width:min(500px,70vw);padding:10px}.discovery-pilot li{margin:10px 0}.discovery-pilot p,.discovery-evidence{font-size:13px;line-height:1.5}.discovery-evidence{padding:8px 0}.discovery-evidence summary{cursor:pointer}.discovery-evidence details p{white-space:pre-wrap;overflow-wrap:anywhere}

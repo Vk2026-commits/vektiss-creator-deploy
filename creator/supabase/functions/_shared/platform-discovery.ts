@@ -1,3 +1,4 @@
+import {creatorFromUrl,incomeSearchLanes} from '../../../src/domain/discovery-pilot.ts';
 import {providerText} from '../../../src/domain/provider-text.ts';
 import { canonicalResearchUrl, researchSourceSchema, type ResearchBrief, type ResearchSource } from "../../../src/domain/research.ts";
 import {wantsVisibleAction,actionFormatRejection} from '../../../src/domain/search-intent.ts';
@@ -82,6 +83,7 @@ function requestedQueries(brief:ResearchBrief,seed:string,round:number,instagram
 }
 
 export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+ if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '));
   const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
   const safetyProfile = /women.?s? safety|personal safety|situational awareness/i.test(topics.join(' '));
@@ -112,6 +114,7 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1)
 }
 
 export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+ if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '));
   const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   // Use shorter, incident-oriented phrases for Shorts and Reels search. Long
   // TikTok-style phrases tend to return unrelated keyword coincidences there.
@@ -129,6 +132,7 @@ export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", rou
 }
 
 export function buildInstagramQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
+ if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '));
   const requested=requestedQueries(brief,seed,round,true); if(requested)return requested;
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
     [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
@@ -266,6 +270,7 @@ export function sourceFromCrossPlatformItem(item: unknown, index: number, platfo
   const snippet = providerText([title, description, author].filter(Boolean).join("\n"),5000);
   if (snippet.replace(/[^a-z0-9]/gi, "").length < 25) return null;
   return researchSourceSchema.parse({
+    creator:creatorFromUrl(String(record.channelUrl??record.channelURL??(typeof record.channelId==='string'?'https://www.youtube.com/channel/'+record.channelId:typeof record.ownerUsername==='string'?'https://www.instagram.com/'+record.ownerUsername+'/':'')))??undefined,
     providerSourceId: index + 1, title: providerText((title || `${platform} short video`).replace(/\s+/g, " "),300),
     url, snippet, publishedAt: dateValue(record.date ?? record.timestamp ?? record.takenAt ?? record.publishedAt),
     sourceType: platform === "YouTube" ? "youtube-shorts-native" : "instagram-reels-native",
@@ -279,7 +284,7 @@ export async function startNativeDiscovery(input: { brief: ResearchBrief; reques
     body: JSON.stringify({
       searchQueries: queryPack,
       searchSection: "/video",
-      resultsPerPage: Math.min(15, Math.max(10, input.requestedCount)),
+      resultsPerPage: input.brief.discoveryPilot?3:Math.min(15, Math.max(10, input.requestedCount)),
       videoSearchSorting: "MOST_RELEVANT",
       videoSearchDateFilter: "ALL_TIME",
       scrapeRelatedSearchWords: false,
@@ -304,8 +309,8 @@ export async function startPlatformDiscovery(input: { brief: ResearchBrief; requ
   const queryPack = input.platform === "Instagram" ? buildInstagramQueryPack(input.brief, input.seed, input.round) : buildCrossPlatformQueryPack(input.brief, input.seed, input.round);
   const actor = input.platform === "YouTube" ? YOUTUBE_ACTOR : INSTAGRAM_ACTOR;
   const actorInput = input.platform === "YouTube"
-    ? { searchQueries: queryPack, maxResults: 0, maxResultsShorts: Math.min(12, Math.max(8, input.requestedCount)), maxResultStreams: 0, transcriptionAndSubtitle: "NONE" }
-    : { search: queryPack.join(", "), searchType: "popular", searchLimit: Math.min(12, Math.max(8, input.requestedCount)), liveSearch: false };
+    ? { searchQueries: queryPack, maxResults: 0, maxResultsShorts: input.brief.discoveryPilot?3:Math.min(12, Math.max(8, input.requestedCount)), maxResultStreams: 0, transcriptionAndSubtitle: "NONE" }
+    : { search: queryPack.join(", "), searchType: "popular", searchLimit: input.brief.discoveryPilot?3:Math.min(12, Math.max(8, input.requestedCount)), liveSearch: false };
   const payload = await apify(`/acts/${encodeURIComponent(actor)}/runs`, { method: "POST", body: JSON.stringify(actorInput) });
   const run = asRecord(payload.data);
   if (!run || typeof run.id !== "string" || typeof run.status !== "string") throw new Error("APIFY_PROVIDER");
@@ -341,4 +346,15 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
     if (sources.length >= Math.min(60, Math.max(requestedCount * 3, 30))) break;
   }
   return { state: "completed", status, sources, costUsd,rawCount:items.length,invalidCount,formatRejectedCount,duplicateCount };
+}
+
+export async function startWatchlistDiscovery(brief:ResearchBrief,watchlist:Array<{platform:NativePlatform;url:string}>):Promise<{runs:NativeDiscoveryRun[];diagnostics:string[]}>{
+ const runs=await Promise.allSettled((['TikTok','Instagram','YouTube'] as NativePlatform[]).map(async platform=>{
+  const urls=watchlist.filter(x=>x.platform===platform).slice(0,20).map(x=>x.url);if(!urls.length)return null;
+  const actor=platform==='TikTok'?TIKTOK_ACTOR:platform==='YouTube'?YOUTUBE_ACTOR:'apify~instagram-scraper';
+  const input=platform==='TikTok'?{profiles:urls,resultsPerPage:5,shouldDownloadVideos:false,commentsPerPost:0}:platform==='YouTube'?{startUrls:urls.map(url=>({url})),maxResults:0,maxResultsShorts:5,maxResultStreams:0,transcriptionAndSubtitle:'NONE'}:{directUrls:urls,resultsType:'posts',resultsLimit:5};
+  const payload=await apify(`/acts/${encodeURIComponent(actor)}/runs`,{method:'POST',body:JSON.stringify(input)});const run=asRecord(payload.data);if(!run||typeof run.id!=='string'||typeof run.status!=='string')throw Error('WATCHLIST_PROVIDER');
+  return {id:run.id,status:run.status,platform,queryPack:urls};
+ }));
+ return {runs:runs.flatMap(r=>r.status==='fulfilled'&&r.value?[r.value]:[]),diagnostics:runs.flatMap((r,i)=>r.status==='rejected'?[`Watchlist ${(['TikTok','Instagram','YouTube'] as const)[i]} discovery unavailable`]:[])};
 }

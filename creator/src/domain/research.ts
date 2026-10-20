@@ -1,3 +1,4 @@
+import {sourceReviewSchema,creatorSourceSchema} from './discovery-pilot.ts';
 import { z } from "zod";
 import { audienceItems } from './strategy.ts';
 import {articleDateSchema,articleWindowSchema} from './research-window.ts';
@@ -46,6 +47,8 @@ export const feedbackReasonSchema = z.enum([
 
 export const researchSourceSchema = z
   .object({
+    review: sourceReviewSchema.optional(),
+    creator:creatorSourceSchema.optional(),
     providerSourceId: z.number().int().positive(),
     title: shortText(300),
     url: z.string().url().max(2048),
@@ -107,6 +110,7 @@ export const researchBriefSchema = z
     researchScreeningCriteria: z.string().trim().max(12000).default(""),
     researchSeekSituations: z.string().trim().max(5000).default(""),
     researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
+    discoveryPilot:z.boolean().default(false),
     researchBlockedUrls: z.array(z.string().url().max(2048)).max(20).default([]),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleWindow:articleWindowSchema.optional(),

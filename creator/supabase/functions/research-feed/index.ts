@@ -50,6 +50,8 @@ Deno.serve(async (request) => {
     const active = Boolean(config?.feature_enabled && entitlement?.enabled);
     const monthlyLimit = Number(entitlement?.monthly_opportunity_limit ?? 0);
     const remaining = active ? Math.max(0, monthlyLimit - Number(entitlement?.delivered_count ?? 0) - Number(entitlement?.reserved_count ?? 0)) : 0;
-    return reply(headers, { active, remaining, limit: monthlyLimit, periodStart: entitlement?.period_start ?? null, jobs: jobResult.data ?? [], opportunities: opportunityResult.data ?? [], opportunityTotal: opportunityResult.count ?? 0, pageOffset: input.offset, pageSize: input.limit, statusCounts: { all, saved, used, skipped } });
+    const pilot=input.profileId?await db.from('creator_discovery_pilot').select('enabled').eq('content_profile_id',input.profileId).maybeSingle():{data:null,error:null};
+    if(pilot.error)throw Error('PERSISTENCE');
+    return reply(headers, { pilot:{profileId:input.profileId??'',configured:Boolean(pilot.data),enabled:pilot.data?.enabled??false}, active, remaining, limit: monthlyLimit, periodStart: entitlement?.period_start ?? null, jobs: jobResult.data ?? [], opportunities: opportunityResult.data ?? [], opportunityTotal: opportunityResult.count ?? 0, pageOffset: input.offset, pageSize: input.limit, statusCounts: { all, saved, used, skipped } });
   } catch { return reply(headers, { code: "UNAVAILABLE" }, 503); }
 });

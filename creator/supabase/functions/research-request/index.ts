@@ -1,3 +1,6 @@
+import {indexedVideoSearch,youtubeSearch} from '../_shared/discovery-search.ts';
+import {startWatchlistDiscovery} from '../_shared/platform-discovery.ts';
+import {creatorSourceSchema,incomeSearchLanes} from '../../../src/domain/discovery-pilot.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { startPlatformDiscovery, type NativePlatform } from "../_shared/platform-discovery.ts";
@@ -135,6 +138,12 @@ Deno.serve(async (request) => {
       brief.researchReferenceUrls=[];
     }
 
+    const pilot=await db.from('creator_discovery_pilot').select('enabled').eq('content_profile_id',input.profileId).maybeSingle();
+    if(pilot.error)throw Error('PERSISTENCE');
+    brief.discoveryPilot=input.sourceMode==='videos'&&pilot.data?.enabled===true;
+    const watch=brief.discoveryPilot?await db.from('creator_discovery_watchlist').select('platform,identifier,url,name').eq('content_profile_id',input.profileId).eq('user_id',userId):{data:[],error:null};
+    if(watch.error)throw Error('PERSISTENCE');
+    const watchlist=(watch.data??[]).flatMap(row=>{const parsed=creatorSourceSchema.safeParse(row);return parsed.success?[parsed.data]:[];});
     await reserve(userId, input.requestedCount);
     reservation = input.requestedCount;
     jobId = crypto.randomUUID();
@@ -162,14 +171,19 @@ Deno.serve(async (request) => {
     const requestedPlatforms = brief.researchSourcePlatforms.filter((platform): platform is NativePlatform =>
       platform === "TikTok" || platform === "YouTube" || platform === "Instagram");
     const platformsToSearch: NativePlatform[] = [...new Set<NativePlatform>(requestedPlatforms.length ? requestedPlatforms : ["TikTok", "Instagram", "YouTube"])];
-    const launches = await Promise.allSettled(platformsToSearch.map((platform) =>
-      startPlatformDiscovery({ brief, requestedCount: input.requestedCount, seed: jobId ?? undefined, round: 1, platform })));
+    const [launches,watchRuns,indexed,youtube]=await Promise.all([
+      Promise.allSettled(platformsToSearch.map(platform=>startPlatformDiscovery({brief,requestedCount:input.requestedCount,seed:jobId??undefined,round:1,platform}))),
+      brief.discoveryPilot?startWatchlistDiscovery(brief,watchlist):Promise.resolve({runs:[],diagnostics:[]}),
+      brief.discoveryPilot?indexedVideoSearch(brief):Promise.resolve({sources:[],diagnostics:[]}),
+      brief.discoveryPilot&&platformsToSearch.includes('YouTube')?youtubeSearch(brief,watchlist):Promise.resolve({sources:[],diagnostics:[]}),
+    ]);
     const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
-    if (!discoveryRuns.length) throw new Error("APIFY_PROVIDER");
-    const providerRun = discoveryRuns[0];
+    discoveryRuns.push(...watchRuns.runs.map(run=>({...run,state:'pending' as const,watchlist:true})));
+    if (!discoveryRuns.length && !indexed.sources.length && !youtube.sources.length) throw new Error('APIFY_PROVIDER');
+    const providerRun = discoveryRuns[0]??{id:jobId,status:'completed',platform:'YouTube',queryPack:[]};
     const updated = await db.from("creator_research_jobs").update({
       provider_response_id: providerRun.id, status: "researching", phase: "Finding direct social videos…", started_at: new Date().toISOString(),
-      provider_metadata: { stage: "multi_discovery", round: 1, discoveryRuns, roundReports: [], accumulatedSources: [], accumulatedCandidates: [], launchFailures: launches.filter((result) => result.status === "rejected").length },
+      provider_metadata: { stage: 'multi_discovery',pilot:brief.discoveryPilot,additionalSources:[...indexed.sources,...youtube.sources],providerDiagnostics:[...indexed.diagnostics,...youtube.diagnostics,...watchRuns.diagnostics],searchDiagnostics:{indexedQueries:'queryCount' in indexed?indexed.queryCount:0,youtubeCalls:'quotaCalls' in youtube?youtube.quotaCalls:0},queryLanes:brief.discoveryPilot?incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' ')):undefined, round: 1, discoveryRuns, roundReports: [], accumulatedSources: [], accumulatedCandidates: [], launchFailures: launches.filter((result) => result.status === "rejected").length },
       updated_at: new Date().toISOString(),
     }).eq("id", jobId).select("*").maybeSingle();
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");

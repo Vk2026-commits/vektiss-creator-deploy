@@ -6,11 +6,12 @@ export function appendResearchEvidence(source: string, sources: ResearchSource[]
   const excerpts = (sources ?? [])
     .filter(item => item.snippet.trim())
     .map((item, index) => [
-      `Discover source ${index + 1} (untrusted article excerpt)`,
+      `Discover source ${index + 1} (${item.sourceType==='article'?'untrusted article excerpt':'untrusted video source evidence'})`,
       `Title: ${item.title}`,
       `URL: ${item.url}`,
       item.publishedAt ? `Published: ${item.publishedAt}` : '',
       `Excerpt: ${item.snippet.trim()}`,
+      ...(item.review?[`Review level: ${item.review.level}`,`Speaker claims (not independently verified): ${item.review.claims}`,`Sampled observations: ${item.review.observations}`,`Speech: ${item.review.transcript}`,`Limitations: ${item.review.limitations}`]:[]),
     ].filter(Boolean).join('\n'));
 
   if (!excerpts.length) return source;

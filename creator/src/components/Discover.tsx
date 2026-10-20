@@ -1,3 +1,6 @@
+import {DiscoveryPilotControls} from './DiscoveryPilotControls';
+import {creatorFromUrl,reviewLabel,needsSourceCheck} from '../domain/discovery-pilot';
+import {discoverySettings} from '../lib/research-client';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bookmark, Check, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, ExternalLink, Eye, Lightbulb,
@@ -72,6 +75,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const [searchCount, setSearchCount] = useState(10);
   const [stopConfirm,setStopConfirm]=useState<string|null>(null);
   const [stopping,setStopping]=useState<string|null>(null);
+  const [watchRevision,setWatchRevision]=useState(0);
   const [notice,setNotice]=useState('');
   const stopLock=useRef(false);
   const [error, setError] = useState("");
@@ -184,10 +188,12 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
         </section>;
       })}
       {!activeJobs.length && !visible.length && <div className="discover-empty"><Lightbulb size={28}/><h2>{emptyTitle[historyFilter]}</h2><p>{emptyText[historyFilter]}</p></div>}
+      {profile&&feed?.pilot?.configured&&feed.pilot.profileId===profile.id&&<DiscoveryPilotControls key={profile.id} profileId={profile.id} revision={watchRevision} onUpdated={()=>void load()}/>}
       <div className="opportunity-list">{visible.map((opportunity) => {
         const source = opportunity.source_snapshot[0];
         const embed = source ? embeddedClip(source.url) : null;
-        const needsCheck = Boolean(opportunity.uncertainty);
+        const needsCheck = needsSourceCheck(source?.sourceType,opportunity.uncertainty);
+        const creator=source?.creator??(source?creatorFromUrl(source.url):null);
         const isArticle=source?.sourceType==='article';
         return <article className="opportunity-card" key={opportunity.id}>
           <div className="signal-rail" aria-hidden="true" />
@@ -199,6 +205,8 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
                 <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
                 <small>Match {Math.round(opportunity.relevance_score)}%</small>
               </div>
+              {!isArticle&&<div className="discovery-evidence"><strong>{reviewLabel(source?.review)}</strong>{source?.review?.accessibility&&source.review.accessibility!=='not_checked'&&<span> · {source.review.accessibility}</span>}<details><summary>Source evidence and limits</summary><p>{source?.review?.limitations??'Only the title/caption metadata has been inspected. Watch the original before reacting.'}</p>{source?.review?.claims&&<p><strong>Speaker’s claims:</strong> {source.review.claims}</p>}{source?.review?.observations&&<p><strong>Sampled observations:</strong> {source.review.observations}</p>}{source?.review?.timestamps?.length? <p>Sampled at {source.review.timestamps.map(t=>t.toFixed(1)+'s').join(', ')}</p>:null}</details></div>}
+              {profile&&feed?.pilot?.enabled&&feed.pilot.profileId===profile.id&&creator&&<button type="button" className="button secondary" disabled={busy} onClick={()=>void action(async()=>{await discoverySettings(profile.id,'follow',{url:creator.url});setWatchRevision(x=>x+1);setNotice('Creator added to this profile’s watchlist.');})}>Follow creator · {creator.name}</button>}
               <div className="signal-main">
                 <div>
                   <h2>{opportunity.title}</h2>
