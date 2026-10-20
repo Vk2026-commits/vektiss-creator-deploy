@@ -201,7 +201,7 @@ Deno.serve(async (request) => {
       const batchSize = 22;
       const batches = Array.from({ length: Math.ceil(freshSources.length / batchSize) }, (_, index) => freshSources.slice(index * batchSize, (index + 1) * batchSize));
       const batchTarget = Math.max(3, Math.ceil(Number(job.requested_count) / batches.length) + 2);
-      const started = await Promise.allSettled(batches.map((sources) =>
+      const started = await Promise.allSettled(batches.slice(0,1).map((sources) =>
         startNativeVideoScreening({ brief: brief.data, requestedCount: batchTarget, sources })));
       const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
         ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
@@ -213,6 +213,7 @@ Deno.serve(async (request) => {
           ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
           discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map(discoveryDiagnostics) : [discoveryDiagnostics({id:job.provider_response_id,platform:"TikTok",...discovery})],
           screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
+          pendingScreeningBatches:batches.slice(screeningRuns.length?1:0).map(sources=>sources.map(source=>source.providerSourceId)),
           nativeSources: compactSources, retainedCandidates: priorCandidates,
           accumulatedSources: undefined, accumulatedCandidates: undefined,
           discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length, freshByPlatform,
@@ -237,13 +238,36 @@ Deno.serve(async (request) => {
       const results = await Promise.all(runs.map(async (run) => {
         const ids = new Set(run.sourceIds);
         try { return await getDeepResearchRun(run.id, brief.data, suppliedSources!.filter((source) => ids.has(source.providerSourceId))); }
-        catch { return { id: run.id, status: "failed", usage: {} } as ProviderRun; }
+        catch(error) {
+          if(error instanceof Error && /PROVIDER_HTTP_(429|5\d\d)/.test(error.message))return {id:run.id,status:'in_progress',usage:{}} as ProviderRun;
+          throw error;
+        }
       }));
       if (results.some((result) => result.status === "queued" || result.status === "in_progress")) {
         const updated = await db.from("creator_research_jobs").update({ phase: `Checking clip quality across platforms (round ${currentRound} of 3)…`, updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
       const complete = results.filter((result): result is CompletedResearchRun => result.status === "completed" && "candidates" in result);
+      const pending=Array.isArray(providerMetadata.pendingScreeningBatches)?providerMetadata.pendingScreeningBatches as number[][]:[];
+      if(pending.length){
+        // Claim before launching: overlapping polls cannot submit the next batch twice.
+        const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources'}).eq('id',job.id).eq('status','researching').select('*').maybeSingle();
+        if(claim.error)throw Error(`PERSISTENCE_QUEUE_${claim.error.code}`);
+        if(!claim.data)return reply(headers,{job},202);
+        const ids=new Set(pending[0]);
+        let next:ProviderRun;
+        try{next=await startNativeVideoScreening({brief:brief.data,requestedCount:Number(job.requested_count),sources:suppliedSources!.filter(source=>ids.has(source.providerSourceId))});}
+        catch(error){
+          if(error instanceof Error&&error.message==='PROVIDER_HTTP_429'){
+            await db.from('creator_research_jobs').update({status:'researching',phase:'Review provider is busy; waiting to continue…'}).eq('id',job.id).eq('status','reviewing_sources');
+            return reply(headers,{job},202);
+          }
+          throw error;
+        }
+        const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,screeningRuns:[...runs,{id:next.id,sourceIds:pending[0]}],pendingScreeningBatches:pending.slice(1)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+        if(saved.error)throw Error(`PERSISTENCE_QUEUE_${saved.error.code}`);
+        return reply(headers,{job:saved.data??job},202);
+      }
       providerMetadata.screeningCompletedCount = complete.length;
       providerMetadata.screeningFailedCount = results.length - complete.length;
       const roundCost = complete.reduce((sum, result) => sum + (providerCost(result.usage) ?? 0), 0);

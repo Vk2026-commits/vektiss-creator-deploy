@@ -213,7 +213,7 @@ async function requestPerplexity(path: string, init: RequestInit): Promise<z.inf
   }
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = payload && typeof payload === "object" && "error" in payload ? "PROVIDER" : "PROVIDER_UNAVAILABLE";
+    const message = `PROVIDER_HTTP_${response.status}`;
     throw new Error(message);
   }
   return agentResponseSchema.parse(payload);
