@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, startPlatformDiscovery, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
+import {completedSearchPhase} from '../../../src/domain/search-phase.ts';
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -364,7 +365,7 @@ Deno.serve(async (request) => {
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
-          : `This search returned 0 qualifying clips after ${currentRound} round${currentRound === 1 ? '' : 's'}. Collection or screening fell short; this does not mean matching videos do not exist.`;
+          : completedSearchPhase(0,Number(job.requested_count),currentRound);
       const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
@@ -430,7 +431,7 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:`${delivered} of ${job.requested_count} clips found.${delivered<Number(job.requested_count)?` This search fell short after ${currentRound} round${currentRound === 1 ? '' : 's'}. ${providerMetadata.unavailableRound ? `The provider could not start round ${providerMetadata.unavailableRound}.` : 'The candidates retrieved did not meet the requested count and criteria; this does not mean suitable clips are unavailable elsewhere.'}`:''}`, delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:completedSearchPhase(delivered,Number(job.requested_count),currentRound,Number(providerMetadata.unavailableRound)||undefined), delivered_count: delivered, candidate_count: providerRun.candidates.length,
       provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).eq("status", "ranking").select("*").maybeSingle();
