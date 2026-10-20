@@ -1,23 +1,25 @@
 import {useEffect,useRef,useState} from 'react';
 import type {DiscoveryFilters} from '../domain/discovery-engagement';
+const displayNumber=(value:number,step:number)=>step<1?String(value):value.toLocaleString('en-US');
 function FilterNumber({value,onChange,min,max,step,disabled}:{value:number;onChange:(value:number)=>void;min:number;max:number;step:number;disabled:boolean}){
- const [draft,setDraft]=useState(String(value));
+ const [draft,setDraft]=useState(displayNumber(value,step));
  const editing=useRef(false);
- useEffect(()=>{if(!editing.current)setDraft(String(value));},[value]);
- return <input type="text" inputMode={step<1?'decimal':'numeric'} disabled={disabled} value={draft}
+ useEffect(()=>{if(!editing.current)setDraft(displayNumber(value,step));},[value,step]);
+ return <input type="text" inputMode={step<1?'decimal':'text'} disabled={disabled} value={draft}
   onFocus={()=>{editing.current=true;}}
   onChange={event=>{
    const raw=event.target.value;
-   if(!(step<1?/^\d*(?:\.\d*)?$/:/^\d*$/).test(raw))return;
+   if(!(step<1?/^\d*(?:\.\d*)?$/:/^[\d,]*$/).test(raw))return;
    setDraft(raw);
-   const next=Number(raw);
-   if(raw!==''&&Number.isFinite(next)&&next>=min&&next<=max)onChange(next);
+   const digits=raw.replace(/,/g,'');
+   const next=Number(digits);
+   if(digits!==''&&Number.isFinite(next)&&next>=min&&next<=max)onChange(next);
   }}
   onBlur={()=>{
    editing.current=false;
-   const parsed=Number(draft);
+   const parsed=Number(draft.replace(/,/g,''));
    const next=Math.min(max,Math.max(min,Number.isFinite(parsed)?parsed:value));
-   setDraft(String(next));onChange(next);
+   setDraft(displayNumber(next,step));onChange(next);
   }}/>
 }
 export function DiscoverFilters({value,onChange,disabled}:{value:DiscoveryFilters;onChange:(next:DiscoveryFilters)=>void;disabled:boolean}){
