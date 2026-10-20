@@ -8,7 +8,7 @@ export function DiscoveryPilotControls({profileId,revision,onUpdated}:{profileId
  return <details className="discovery-pilot"><summary>Enhanced discovery · {settings.enabled?'On':'Off'}</summary>
   <label><input type="checkbox" checked={settings.enabled} disabled={busy} onChange={e=>void change('toggle',{enabled:e.target.checked})}/> Use focused searches and inspect up to five shortlisted clips</label>
   <p>Metadata and sampled video evidence are labeled separately. Earnings claims remain unverified. Turning this off restores the previous search flow.</p>
-  {settings.youtube==='apify_fallback'&&<p>YouTube uses the existing Apify search route; the official API is not configured.</p>}
+  {settings.provider==='Scrape Creators'?<p>Public video search and engagement counts use Scrape Creators. Searches are capped at 40 API requests, including up to five creator comparisons. Unavailable metrics do not pass active filters.</p>:settings.youtube==='apify_fallback'&&<p>YouTube uses the existing Apify search route; the official API is not configured.</p>}
   <h3>Creators to follow</h3><p>Checked when you run a video search. No scheduled polling.</p>
   <form onSubmit={e=>{e.preventDefault();void change('follow',{url});}}><label>Public TikTok, Instagram, or YouTube creator URL<input type="url" required value={url} disabled={busy} onChange={e=>setUrl(e.target.value)} placeholder="https://www.youtube.com/@creator"/></label><button type="submit" className="button secondary" disabled={busy||!url.trim()}>Follow creator</button></form>
   {!settings.watchlist.length&&<p>No creators followed yet.</p>}

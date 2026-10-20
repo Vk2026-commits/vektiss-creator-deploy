@@ -22,6 +22,6 @@ Deno.serve(async request=>{
  const r=await db.from('creator_discovery_watchlist').upsert({...creator,content_profile_id:input.profileId,user_id:auth.user.id},{onConflict:'content_profile_id,platform,identifier',ignoreDuplicates:true});if(r.error)throw Error('PERSISTENCE');}
  if(input.action==='remove'){const id=z.string().uuid().parse(input.id);const r=await db.from('creator_discovery_watchlist').delete().eq('id',id).eq('content_profile_id',input.profileId).eq('user_id',auth.user.id);if(r.error)throw Error('PERSISTENCE');}
  const watch=await db.from('creator_discovery_watchlist').select('id,platform,identifier,url,name,created_at').eq('content_profile_id',input.profileId).eq('user_id',auth.user.id).order('created_at');if(watch.error)throw Error('PERSISTENCE');
- return reply({configured:Boolean(pilot.data),enabled:input.action==='toggle'?input.enabled:pilot.data?.enabled??false,watchlist:watch.data??[],youtube:Deno.env.get('CREATOR_YOUTUBE_API_KEY')?'configured':'apify_fallback'});
+ return reply({configured:Boolean(pilot.data),enabled:input.action==='toggle'?input.enabled:pilot.data?.enabled??false,watchlist:watch.data??[],provider:Deno.env.get('CREATOR_DISCOVERY_PROVIDER')==='scrapecreators'?'Scrape Creators':'Apify',youtube:Deno.env.get('CREATOR_YOUTUBE_API_KEY')?'configured':'apify_fallback'});
  }catch(e){return reply({code:e instanceof z.ZodError?'INPUT':'UNAVAILABLE'},e instanceof z.ZodError?400:503);}
 });

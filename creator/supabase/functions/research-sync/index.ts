@@ -1,3 +1,4 @@
+import {runSCTask,detailTasks,balancedSources,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
 import {engagementFailure,sourceCreator,creatorKey,attachBaseline} from '../../../src/domain/discovery-engagement.ts';
 import type {CreatorSource} from '../../../src/domain/discovery-pilot.ts';
 import {startWatchlistDiscovery} from '../_shared/platform-discovery.ts';
@@ -114,6 +115,42 @@ Deno.serve(async (request) => {
     const brief = researchBriefSchema.safeParse(job.input_snapshot);
     if (!brief.success) throw new Error("RESEARCH_INPUT");
     const providerMetadata = metadata(job);
+    if(providerMetadata.stage==='scrape_discovery'){
+      const tasks=(Array.isArray(providerMetadata.scTasks)?providerMetadata.scTasks:[]) as SCTask[];
+      const ledger=(Array.isArray(providerMetadata.scLedger)?providerMetadata.scLedger:[]) as SCLedger[];
+      const sources=nativeSources(providerMetadata.scSources);
+      const groups=(Array.isArray(providerMetadata.scGroups)?providerMetadata.scGroups:[]) as SCGroup[];
+      if(job.status==='reviewing_sources'){
+        if(Date.now()-Date.parse(String(providerMetadata.scPhaseAt))<60000)return reply(headers,{job},202);
+        const abandoned=new Set(Array.isArray(providerMetadata.scInFlight)?providerMetadata.scInFlight as string[]:[]);
+        const recovered=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,scTasks:tasks.map(t=>abandoned.has(t.id)?{...t,state:'failed'}:t),scLedger:[...ledger,...tasks.filter(t=>abandoned.has(t.id)).map(t=>({id:t.id,route:'interrupted-request',status:0,credits:null,remaining:null,at:String(providerMetadata.scPhaseAt)}))],scInFlight:[],providerDiagnostics:[...(providerMetadata.providerDiagnostics as string[]??[]),'Interrupted Scrape Creators requests were not automatically retried; credit charge unknown.']},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',String(providerMetadata.scPhaseAt)).select('*').maybeSingle();if(recovered.error)throw Error('PERSISTENCE');return reply(headers,{job:recovered.data??job},202);
+      }
+      const remaining=ledger.map(l=>l.remaining).filter((n):n is number=>typeof n==='number');
+      let pending=tasks.filter(t=>!t.state);
+      if(scrapeUnavailable(ledger)){pending=[];providerMetadata.providerDiagnostics=[...(providerMetadata.providerDiagnostics as string[]??[]),'Scrape Creators authentication or credits unavailable; no Apify fallback or purchase was made.'];}
+      if(!pending.length&&!providerMetadata.scHydrated&&!scrapeUnavailable(ledger)){
+        const details=detailTasks(sources,tasks,35-ledger.length);providerMetadata.scHydrated=true;
+        if(details.length){providerMetadata.scTasks=[...tasks,...details];const saved=await db.from('creator_research_jobs').update({provider_metadata:providerMetadata,phase:'Fetching current engagement counts for shortlisted search results…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);}
+      }
+      if(!pending.length){
+        await db.from('creator_provider_costs').upsert({provider:'Scrape Creators',external_id:String(job.id),user_id:job.user_id,job_id:job.id,operation:'Discovery (credits recorded in search diagnostics)',status:scrapeUnavailable(ledger)?'LIMITED':'COMPLETED',cost_usd:null},{onConflict:'provider,external_id'});
+        const next={...providerMetadata,stage:'multi_discovery',scGroups:undefined,scSources:undefined,additionalSources:sources,discoveryRuns:[],searchDiagnostics:{provider:'Scrape Creators',requests:ledger.length,credits:ledger.reduce((n,l)=>n+(l.credits??0),0),unreportedCharges:ledger.filter(l=>l.credits===null).length,creditsRemaining:remaining.length?Math.min(...remaining):null,requestLimit:SC_REQUEST_LIMIT}};
+        const saved=await db.from('creator_research_jobs').update({provider_metadata:next,phase:'Screening clips from Scrape Creators…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
+      }
+      const batch=pending.slice(0,Math.max(0,Math.min(3,35-ledger.length)));
+      if(!batch.length)throw Error('SCRAPECREATORS_REQUEST_LIMIT');
+      const phaseAt=new Date().toISOString();
+      const claimed=await db.from('creator_research_jobs').update({status:'reviewing_sources',provider_metadata:{...providerMetadata,scInFlight:batch.map(t=>t.id),scPhaseAt:phaseAt},phase:'Searching Scrape Creators for public clips…',updated_at:phaseAt}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claimed.error)throw Error('PERSISTENCE');if(!claimed.data)return reply(headers,{job},202);
+      const results=await Promise.all(batch.map(task=>runSCTask(task,brief.data)));
+      for(let i=0;i<batch.length;i++){const result=results[i];if(batch[i].kind==='detail'){const incoming=new Map(result.sources.map(s=>[videoIdentity(s.url),s]));for(const group of groups)group.sources=group.sources.map(s=>incoming.get(videoIdentity(s.url))??s);}else groups.push({id:batch[i].id,sources:result.sources});}
+      const merged=balancedSources(groups);
+      const byId=new Map(batch.map((task,i)=>[task.id,results[i]]));
+      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,scTasks:tasks.map(task=>byId.has(task.id)?{...task,state:byId.get(task.id)!.diagnostic?'failed':'done'}:task),scGroups:groups,scSources:merged,scLedger:[...ledger,...results.map(r=>r.ledger)],scInFlight:[],providerDiagnostics:[...(providerMetadata.providerDiagnostics as string[]??[]),...results.flatMap(r=>r.diagnostic?[r.diagnostic]:[])]},phase:`Scrape Creators: ${merged.length} unique clips collected`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
+    }
+    if(job.status==='reviewing_sources'&&providerMetadata.provider==='Scrape Creators'&&providerMetadata.baselineClaimAt){
+      if(Date.now()-Date.parse(String(providerMetadata.baselineClaimAt))<60000)return reply(headers,{job},202);
+      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,baselineRuns:[],baselineStartedAt:new Date().toISOString(),baselineLaunchDiagnostics:['Interrupted creator-baseline requests were not retried. Charges and outlier baseline unavailable.']},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>baselineClaimAt',String(providerMetadata.baselineClaimAt)).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
+    }
     let inspectionRun:CompletedResearchRun|undefined;
     if(providerMetadata.stage==='pilot_inspection'){
       let check;try{check=await inspectPilot(String(job.id),request.headers.get('authorization')!);}catch{check={state:'failed' as const,reason:'Media inspection unavailable; watch original.'};}
@@ -200,10 +237,19 @@ Deno.serve(async (request) => {
         if(filters.mode==='outliers'){
           if(!Array.isArray(providerMetadata.baselineRuns)){
             const creators=[...new Map([...prequalified].sort((a,b)=>(b.engagement?.views??0)-(a.engagement?.views??0)).flatMap(source=>{const creator=sourceCreator(source);return creator?[[creatorKey(creator),creator] as const]:[];})).values()].slice(0,5);
-            const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources'}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claim.error)throw Error('PERSISTENCE');if(!claim.data)return reply(headers,{job},202);
-            const launches=await Promise.all(creators.map(async creator=>{const launched=await startWatchlistDiscovery(brief.data,[creator],true);return {creator,runs:launched.runs,diagnostics:launched.diagnostics};}));
-            const baselineRuns=launches.flatMap(x=>x.runs.map(run=>({...run,creator:x.creator,state:'pending'})));
-            const saved=await db.from('creator_research_jobs').update({status:'researching',phase:'Comparing clips with creators’ recent video performance…',provider_metadata:{...providerMetadata,discoveryRuns:checkedRuns,baselineRuns,baselineStartedAt:new Date().toISOString(),baselineLaunchDiagnostics:launches.flatMap(x=>x.diagnostics)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
+            const baselineClaimAt=new Date().toISOString();
+            const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources',provider_metadata:{...providerMetadata,baselineClaimAt},updated_at:baselineClaimAt}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claim.error)throw Error('PERSISTENCE');if(!claim.data)return reply(headers,{job},202);
+            const existingLedger=(Array.isArray(providerMetadata.scLedger)?providerMetadata.scLedger:[]) as SCLedger[];
+            const baselineCreators=providerMetadata.provider==='Scrape Creators'?(scrapeUnavailable(existingLedger)?[]:creators.slice(0,Math.min(5,SC_REQUEST_LIMIT-existingLedger.length))):creators;
+            const baselineLedger:SCLedger[]=[];
+            const launches=await Promise.all(baselineCreators.map(async (creator,i)=>{
+              if(providerMetadata.provider==='Scrape Creators'){const result=await runSCTask({id:`baseline-${i}`,platform:creator.platform,kind:'creator',creator},brief.data);baselineLedger.push(result.ledger);return {creator,runs:[{id:`sc-baseline-${i}`,platform:creator.platform,status:result.diagnostic?'FAILED':'SUCCEEDED',queryPack:[creator.url],state:result.diagnostic?'failed':'completed',sources:result.sources}],diagnostics:result.diagnostic?[result.diagnostic]:[]};}
+              const launched=await startWatchlistDiscovery(brief.data,[creator],true);return {creator,runs:launched.runs,diagnostics:launched.diagnostics};
+            }));
+            providerMetadata.scLedger=[...existingLedger,...baselineLedger];
+            if(providerMetadata.provider==='Scrape Creators')providerMetadata.searchDiagnostics={...providerMetadata.searchDiagnostics as Record<string,unknown>,requests:existingLedger.length+baselineLedger.length,credits:[...existingLedger,...baselineLedger].reduce((n,l)=>n+(l.credits??0),0),unreportedCharges:[...existingLedger,...baselineLedger].filter(l=>l.credits===null).length};
+            const baselineRuns=launches.flatMap(x=>x.runs.map(run=>({...run,creator:x.creator,state:'state' in run?run.state:'pending'})));
+            const saved=await db.from('creator_research_jobs').update({status:'researching',phase:'Comparing clips with creators’ recent video performance…',provider_metadata:{...providerMetadata,discoveryRuns:checkedRuns,baselineRuns,baselineClaimAt:undefined,baselineStartedAt:new Date().toISOString(),baselineLaunchDiagnostics:launches.flatMap(x=>x.diagnostics)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>baselineClaimAt',baselineClaimAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
           }
           const deadline=Date.now()-Date.parse(String(providerMetadata.baselineStartedAt))>5*60*1000;
           const baselineRuns=await Promise.all((providerMetadata.baselineRuns as Array<Record<string,unknown>>).map(async run=>{

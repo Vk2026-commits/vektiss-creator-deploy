@@ -49,6 +49,7 @@ export const feedbackReasonSchema = z.enum([
 export const researchSourceSchema = z
   .object({
     engagement:engagementSchema.optional(),
+    durationSeconds:z.number().min(0).max(86400).optional(),
     review: sourceReviewSchema.optional(),
     creator:creatorSourceSchema.optional(),
     providerSourceId: z.number().int().positive(),

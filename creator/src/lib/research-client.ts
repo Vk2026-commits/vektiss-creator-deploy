@@ -36,5 +36,5 @@ export const stopResearch = (jobId: string) => invoke<{ job: ResearchJob }>("res
 export const researchFeedback = (opportunityId: string, action: "saved" | "rejected" | "selected" | "script_created", reason?: string) => invoke<{ ok: true }>("research-feedback", { opportunityId, action, ...(reason ? { reason } : {}) });
 export const refineResearchOpportunity = (opportunityId: string, instruction: string) => invoke<{ opportunity: ResearchOpportunity }>("research-refine", { opportunityId, instruction });
 
-export type DiscoverySettings={configured:boolean;enabled:boolean;youtube:string;watchlist:Array<{id:string;platform:string;identifier:string;url:string;name:string;created_at:string}>};
+export type DiscoverySettings={configured:boolean;enabled:boolean;provider?:string;youtube:string;watchlist:Array<{id:string;platform:string;identifier:string;url:string;name:string;created_at:string}>};
 export const discoverySettings=(profileId:string,action:'load'|'toggle'|'follow'|'remove'='load',options:{enabled?:boolean;url?:string;id?:string}={})=>invoke<DiscoverySettings>('discovery-settings',{profileId,action,...options});
