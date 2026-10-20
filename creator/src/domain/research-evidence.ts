@@ -11,6 +11,7 @@ export function appendResearchEvidence(source: string, sources: ResearchSource[]
       `URL: ${item.url}`,
       item.publishedAt ? `Published: ${item.publishedAt}` : '',
       `Excerpt: ${item.snippet.trim()}`,
+      ...(item.engagement?[`Platform-reported engagement at ${item.engagement.observedAt}: ${JSON.stringify(item.engagement)}. Counts are snapshots, not proof of income or future performance.`]:[]),
       ...(item.review?[`Review level: ${item.review.level}`,`Speaker claims (not independently verified): ${item.review.claims}`,`Sampled observations: ${item.review.observations}`,`Speech: ${item.review.transcript}`,`Limitations: ${item.review.limitations}`]:[]),
     ].filter(Boolean).join('\n'));
 

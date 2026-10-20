@@ -1,3 +1,4 @@
+import {filterLibraryPlatform} from '../../../src/domain/discovery-engagement.ts';
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
@@ -7,7 +8,7 @@ import {orderResearch} from '../../../src/domain/research-sort.ts';
 declare const Deno: { env: { get(key: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void };
 const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const feedFilterSchema = z.enum(["all", "saved", "used", "skipped"]);
-const inputSchema = z.object({ sort:z.enum(['match','newest','oldest','discovered']).default('discovered'), sourceMode:z.enum(["all","videos","articles"]).default("all"), profileId: z.string().uuid().optional(), filter: feedFilterSchema.default("all"), offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(6).max(30).default(8) }).strict();
+const inputSchema = z.object({ platform:z.enum(['all','TikTok','Instagram','YouTube']).default('all'), sort:z.enum(['match','newest','oldest','discovered','views','engagement','outlier']).default('discovered'), sourceMode:z.enum(["all","videos","articles"]).default("all"), profileId: z.string().uuid().optional(), filter: feedFilterSchema.default("all"), offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(6).max(30).default(8) }).strict();
 type FeedFilter = z.infer<typeof feedFilterSchema>;
 const opportunityFields = "id,content_profile_id,title,factual_summary,why_audience_cares,creator_connection,recommended_angle,suggested_hook,category,published_at,timeliness_score,relevance_score,rank_score,source_snapshot,uncertainty,status,created_at,updated_at";
 function headersFor(origin: string | null): Record<string, string> {
@@ -33,15 +34,15 @@ Deno.serve(async (request) => {
     const input = inputSchema.parse(await request.json());
     const { data: entitlement } = await db.from("creator_research_entitlements").select("enabled,monthly_opportunity_limit,delivered_count,reserved_count,period_start").eq("user_id", auth.user.id).maybeSingle();
     const { data: config } = await db.from("creator_research_config").select("feature_enabled").eq("id", true).maybeSingle();
-    const jobs = db.from("creator_research_jobs").select("id,content_profile_id,requested_count,delivered_count,candidate_count,status,phase,error_code,created_at,updated_at,completed_at")
+    const jobs = db.from("creator_research_jobs").select("id,content_profile_id,requested_count,delivered_count,candidate_count,status,phase,error_code,created_at,updated_at,completed_at,engagement_diagnostics:provider_metadata->engagementDiagnostics")
       .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(30);
     let opportunities = db.from("creator_research_opportunities").select(opportunityFields, { count: "exact" }).eq("user_id", auth.user.id);
     if (input.profileId) opportunities = opportunities.eq("content_profile_id", input.profileId);
-    opportunities = orderResearch(applyFilter(filterResearchSource(opportunities,input.sourceMode), input.filter),input.sort).range(input.offset, input.offset + input.limit - 1);
+    opportunities = orderResearch(applyFilter(filterLibraryPlatform(filterResearchSource(opportunities,input.sourceMode),input.platform), input.filter),input.sort).range(input.offset, input.offset + input.limit - 1);
     const countFor = async (filter: FeedFilter) => {
       let query = db.from("creator_research_opportunities").select("id", { count: "exact", head: true }).eq("user_id", auth.user.id);
       if (input.profileId) query = query.eq("content_profile_id", input.profileId);
-      const result = await applyFilter(filterResearchSource(query,input.sourceMode), filter);
+      const result = await applyFilter(filterLibraryPlatform(filterResearchSource(query,input.sourceMode),input.platform), filter);
       if (result.error) throw new Error("PERSISTENCE");
       return result.count ?? 0;
     };

@@ -131,6 +131,7 @@ Deno.serve(async (request) => {
       brief.researchBlockedUrls = quality.badExamples;
     }
     brief.sourceMode=input.sourceMode;
+    if(input.sourceMode==='videos'&&input.discoveryFilters){brief.discoveryFilters=input.discoveryFilters;brief.researchSourcePlatforms=input.discoveryFilters.platform==='all'?['TikTok','Instagram','YouTube']:[input.discoveryFilters.platform];}
     if(input.sourceMode==='articles'){
       brief.articleWindow=resolveArticleWindow(input.articleDate??{preset:'week',timezone:'UTC'});
       brief.researchSourcePlatforms=[];
@@ -174,8 +175,8 @@ Deno.serve(async (request) => {
     const [launches,watchRuns,indexed,youtube]=await Promise.all([
       Promise.allSettled(platformsToSearch.map(platform=>startPlatformDiscovery({brief,requestedCount:input.requestedCount,seed:jobId??undefined,round:1,platform}))),
       brief.discoveryPilot?startWatchlistDiscovery(brief,watchlist):Promise.resolve({runs:[],diagnostics:[]}),
-      brief.discoveryPilot?indexedVideoSearch(brief):Promise.resolve({sources:[],diagnostics:[]}),
-      brief.discoveryPilot&&platformsToSearch.includes('YouTube')?youtubeSearch(brief,watchlist):Promise.resolve({sources:[],diagnostics:[]}),
+      brief.discoveryPilot?indexedVideoSearch(brief,jobId!):Promise.resolve({sources:[],diagnostics:[]}),
+      brief.discoveryPilot&&platformsToSearch.includes('YouTube')?youtubeSearch(brief,watchlist,jobId!):Promise.resolve({sources:[],diagnostics:[]}),
     ]);
     const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
     discoveryRuns.push(...watchRuns.runs.map(run=>({...run,state:'pending' as const,watchlist:true})));
@@ -183,7 +184,7 @@ Deno.serve(async (request) => {
     const providerRun = discoveryRuns[0]??{id:jobId,status:'completed',platform:'YouTube',queryPack:[]};
     const updated = await db.from("creator_research_jobs").update({
       provider_response_id: providerRun.id, status: "researching", phase: "Finding direct social videos…", started_at: new Date().toISOString(),
-      provider_metadata: { stage: 'multi_discovery',pilot:brief.discoveryPilot,additionalSources:[...indexed.sources,...youtube.sources],providerDiagnostics:[...indexed.diagnostics,...youtube.diagnostics,...watchRuns.diagnostics],searchDiagnostics:{indexedQueries:'queryCount' in indexed?indexed.queryCount:0,youtubeCalls:'quotaCalls' in youtube?youtube.quotaCalls:0},queryLanes:brief.discoveryPilot?incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' ')):undefined, round: 1, discoveryRuns, roundReports: [], accumulatedSources: [], accumulatedCandidates: [], launchFailures: launches.filter((result) => result.status === "rejected").length },
+      provider_metadata: { stage: 'multi_discovery',pilot:brief.discoveryPilot,additionalSources:[...indexed.sources,...youtube.sources],providerDiagnostics:[...indexed.diagnostics,...youtube.diagnostics,...watchRuns.diagnostics],searchDiagnostics:{indexedQueries:'queryCount' in indexed?indexed.queryCount:0,youtubeCalls:'quotaCalls' in youtube?youtube.quotaCalls:0},queryLanes:brief.discoveryPilot?incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '),jobId!):undefined, round: 1, discoveryRuns, roundReports: [], accumulatedSources: [], accumulatedCandidates: [], launchFailures: launches.filter((result) => result.status === "rejected").length },
       updated_at: new Date().toISOString(),
     }).eq("id", jobId).select("*").maybeSingle();
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");

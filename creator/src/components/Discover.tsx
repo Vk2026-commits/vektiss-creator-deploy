@@ -1,3 +1,5 @@
+import {DiscoverFilters} from './DiscoverFilters';
+import {discoveryFiltersSchema,type DiscoveryFilters} from '../domain/discovery-engagement';
 import {DiscoveryPilotControls} from './DiscoveryPilotControls';
 import {creatorFromUrl,reviewLabel,needsSourceCheck} from '../domain/discovery-pilot';
 import {discoverySettings} from '../lib/research-client';
@@ -71,6 +73,8 @@ function embeddedClip(url: string): EmbeddedClip | null {
 export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { profiles: ContentProfile[]; selectedId: string | null; onSelectProfile: (id: string) => void; onCreate: (opportunity: ResearchOpportunity) => void }) {
   const activeProfiles = profiles.filter(item => !item.archived_at);
   const profile = activeProfiles.find(item => item.id === selectedId) ?? activeProfiles[0] ?? null;
+  const [filters,setFilters]=useState<DiscoveryFilters>(()=>{try{return discoveryFiltersSchema.parse(JSON.parse(localStorage.getItem('creator-discovery-filters:'+profile?.id)??'{}'));}catch{return discoveryFiltersSchema.parse({});}});
+  function updateFilters(next:DiscoveryFilters){if(next.platform!==filters.platform)setFeed(null);setFilters(next);setPageOffset(0);setSort(next.mode==='outliers'?'outlier':next.mode==='engaged'?'views':'match');try{localStorage.setItem('creator-discovery-filters:'+profile?.id,JSON.stringify(next));}catch{/* Preferences remain available for this session. */}}
   const [feed, setFeed] = useState<ResearchFeed | null>(null);
   const [busy, setBusy] = useState(false);
   const [searchCount, setSearchCount] = useState(10);
@@ -85,20 +89,23 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const [refining, setRefining] = useState<string | null>(null);
   const [instruction, setInstruction] = useState("");
   const [sourceMode,setSourceMode]=useState<'all'|'videos'|'articles'>('videos');
-  const [sort,setSort]=useState<ResearchSort>('discovered');
+  const [sort,setSort]=useState<ResearchSort>('views');
   const [articleDate,setArticleDate]=useState<ArticleDate>({preset:'week',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
   const discoverRef = useRef<HTMLElement>(null);
 
+  const loadVersion=useRef(0);
   const load = useCallback(async () => {
-    const next = await loadResearchFeed(profile?.id, { filter: historyFilter, sourceMode, sort, offset: pageOffset, limit: archivePageSize });
+    const version=++loadVersion.current;
+    const next = await loadResearchFeed(profile?.id, { platform:sourceMode==='articles'?'all':filters.platform,filter: historyFilter, sourceMode, sort, offset: pageOffset, limit: archivePageSize });
+    if(version!==loadVersion.current)return next;
     setFeed(next);
     if (!next.opportunities.length && next.opportunityTotal > 0 && pageOffset >= next.opportunityTotal) {
       setPageOffset(Math.max(0, Math.floor((next.opportunityTotal - 1) / archivePageSize) * archivePageSize));
     }
     return next;
-  }, [historyFilter, pageOffset, profile?.id, sourceMode, sort]);
+  }, [historyFilter, pageOffset, profile?.id, sourceMode, sort,filters.platform]);
   useEffect(() => { setPageOffset(0); }, [profile?.id]);
   useEffect(() => { void load().catch(() => setError("Discover could not load. Refresh to retry.")); }, [load]);
   const activeJobs = useMemo(() => feed?.jobs.filter((job) => job.content_profile_id===profile?.id&&activeStatuses.has(job.status)) ?? [], [feed,profile?.id]);
@@ -133,7 +140,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     if (!profile) { setError("Create a content profile before researching."); return; }
     await action(async () => {
       if(sourceMode==='articles')try{resolveArticleWindow(articleDate);}catch{throw Error('Choose valid dates within the past year, ending no later than today.');}
-      await requestResearch(profile.id, count,{sourceMode,...(sourceMode==='articles'?{articleDate}:{})});
+      await requestResearch(profile.id, count,{sourceMode,...(sourceMode==='articles'?{articleDate}:{discoveryFilters:filters})});
     });
   }
   const visible = feed?.opportunities ?? [];
@@ -174,9 +181,10 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     </div>
     {!activeJobs.length && latestJob?.status==='failed' && <div className="error-message" role="alert"><strong>Search couldn’t finish</strong><p>{latestJob.error_code==='PROVIDER_INCOMPLETE'?'The search provider returned an incomplete result.':'The search provider could not finish this run.'} Your saved ideas are safe. Unused idea allowance has been released. Choose 1–10 and try again.</p></div>}
     {!activeJobs.length && latestJob?.status==='ready' && latestJob.delivered_count<latestJob.requested_count && <p role="status">{latestJob.phase} Only delivered ideas count against your allowance.</p>}
+    {!activeJobs.length&&latestJob?.engagement_diagnostics&&<p className="search-filter-diagnostics">{latestJob.engagement_diagnostics.passed} of {latestJob.engagement_diagnostics.freshCandidates} fresh clips passed your search filters. {Object.entries(latestJob.engagement_diagnostics.excluded).map(([reason,count])=>`${count} excluded: ${reason==='baseline'?'outlier baseline missing, insufficient, or below threshold':reason==='date'?'outside date range or date unavailable':reason==='views'?'views below minimum or unavailable':reason==='engagement'?'engagement below minimum or unavailable':reason}`).join(' · ')}.</p>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>{feed?'Discover is almost ready.':'Loading your ideas…'}</h2>{feed&&<p>This feature is available to selected Pro pilot accounts.</p>}</div> : <>
       <div className="discover-source-options"><div role="group" aria-label="Source type">{(['videos','articles','all'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>{setSourceMode(mode);setPageOffset(0);setFeed(null);}}>{mode==='videos'?'Videos':mode==='articles'?'Articles':'All'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}</>}</div>
-      {sourceMode==='all'?<p className="discover-library-hint">Select Videos or Articles above to find new ideas.</p>:<><section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'Choose how many strong, watchable clips to look for. We won’t fill gaps with weak matches.'}</span></div><div className="discover-search-actions"><label className="discover-count-label" htmlFor="discover-count">How many?<select id="discover-count" value={searchCount} disabled={busy || activeJobs.length>0} onChange={(event)=>setSearchCount(Number(event.target.value))}>{Array.from({length:10},(_,index)=>index+1).map(count=><option key={count} value={count}>{count}</option>)}</select></label><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < searchCount} onClick={() => void find(searchCount)}><Sparkles size={18}/><span>Find {searchCount} {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button></div></section></>}
+      {sourceMode==='all'?<p className="discover-library-hint">Select Videos or Articles above to find new ideas.</p>:<>{sourceMode==='videos'&&<DiscoverFilters value={filters} onChange={updateFilters} disabled={busy||activeJobs.length>0}/>}<section className="discover-find" aria-label="Find new opportunities"><div><strong>Get new ideas</strong><span>{sourceMode==='articles'?'Find relevant news and articles for your audience.':'Choose how many strong, watchable clips to look for. We won’t fill gaps with weak matches.'}</span></div><div className="discover-search-actions"><label className="discover-count-label" htmlFor="discover-count">How many?<select id="discover-count" value={searchCount} disabled={busy || activeJobs.length>0} onChange={(event)=>setSearchCount(Number(event.target.value))}>{Array.from({length:10},(_,index)=>index+1).map(count=><option key={count} value={count}>{count}</option>)}</select></label><button className="discover-primary-find" disabled={busy || !profile || activeJobs.length>0 || (feed?.remaining ?? 0) < searchCount} onClick={() => void find(searchCount)}><Sparkles size={18}/><span>Find {searchCount} {sourceMode==='articles'?'articles':'clips'}</span><ChevronRight size={18}/></button></div></section></>}
 
       <nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav><label className="discover-sort">Sort by<select value={sort} disabled={busy} onChange={e=>{setSort(e.target.value as ResearchSort);setPageOffset(0);}}>{Object.entries(researchSortLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       {activeJobs.map((job) => {
@@ -206,6 +214,8 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
                 <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
                 <small>Match {Math.round(opportunity.relevance_score)}%</small>
               </div>
+              {!isArticle&&!source?.engagement&&<div className="clip-engagement"><small>Engagement was not collected for this saved clip. New searches apply your thresholds.</small></div>}
+              {!isArticle&&source?.engagement&&<div className="clip-engagement" aria-label="Reported clip engagement"><strong>{source.engagement.views===null?'Views unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.views)+' views'}</strong><span>{source.engagement.likes===null?'Likes unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.likes)+' likes'}</span><span>{source.engagement.rate===null?'Engagement unavailable':source.engagement.rate.toFixed(1)+'% engagement'}</span>{source.engagement.baseline&&<strong>{source.engagement.baseline.ratio.toFixed(1)}× creator median · {source.engagement.baseline.sampleSize} recent videos</strong>}<small>{source.engagement.provider} snapshot · {new Date(source.engagement.observedAt).toLocaleDateString()}</small></div>}
               {!isArticle&&<div className="discovery-evidence"><strong>{reviewLabel(source?.review)}</strong>{source?.review?.accessibility&&source.review.accessibility!=='not_checked'&&<span> · {source.review.accessibility}</span>}<details><summary>Source evidence and limits</summary><p>{source?.review?.limitations??'Only the title/caption metadata has been inspected. Watch the original before reacting.'}</p>{source?.review?.claims&&<p><strong>Speaker’s claims:</strong> {source.review.claims}</p>}{source?.review?.observations&&<p><strong>Sampled observations:</strong> {source.review.observations}</p>}{source?.review?.timestamps?.length? <p>Sampled at {source.review.timestamps.map(t=>t.toFixed(1)+'s').join(', ')}</p>:null}</details></div>}
               {profile&&feed?.pilot?.enabled&&feed.pilot.profileId===profile.id&&creator&&<button type="button" className="button secondary" disabled={busy} onClick={()=>void action(async()=>{await discoverySettings(profile.id,'follow',{url:creator.url});setWatchRevision(x=>x+1);setNotice('Creator added to this profile’s watchlist.');})}>Follow creator · {creator.name}</button>}
               <div className="signal-main">

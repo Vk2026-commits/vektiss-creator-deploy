@@ -1,3 +1,6 @@
+import {engagementFailure,sourceCreator,creatorKey,attachBaseline} from '../../../src/domain/discovery-engagement.ts';
+import type {CreatorSource} from '../../../src/domain/discovery-pilot.ts';
+import {startWatchlistDiscovery} from '../_shared/platform-discovery.ts';
 import {inspectPilot,mergePilotEvidence} from '../_shared/discovery-inspection.ts';
 import {dedupeVideos,INSPECTION_LIMIT,canonicalVideo,videoIdentity} from '../../../src/domain/discovery-pilot.ts';
 import {providerText} from '../../../src/domain/provider-text.ts';
@@ -185,10 +188,38 @@ Deno.serve(async (request) => {
       if(providerMetadata.pilot){const seen=await db.from('creator_research_sources').select('canonical_url').eq('user_id',auth.user.id).order('created_at',{ascending:false}).limit(1000);if(seen.error)throw Error('PERSISTENCE');for(const row of seen.data??[]){const id=videoIdentity(row.canonical_url);if(id)knownIdentities.add(id);}}
       const priorUrls = new Set(priorSources.map((source) => canonicalResearchUrl(source.url)));
       const nextSourceId = Math.max(0, ...priorSources.map((source) => source.providerSourceId));
-      const freshSources = renumberNativeSources(uniqueSources.filter((source) => {
+      let freshSources = renumberNativeSources(uniqueSources.filter((source) => {
         const canonical = canonicalResearchUrl(source.url);
         return canonical && !knownUrls.has(canonical) && !priorUrls.has(canonical) && (!providerMetadata.pilot||!knownIdentities.has(videoIdentity(source.url)!));
       })).map((source) => ({ ...source, providerSourceId: source.providerSourceId + nextSourceId }));
+      const freshBeforeFilters=freshSources.length;
+      const filters=brief.data.discoveryFilters;
+      if(filters){
+        const initialFresh=freshSources.length;
+        const prequalified=freshSources.filter(source=>!engagementFailure(source,{...filters,mode:'engaged'}));
+        if(filters.mode==='outliers'){
+          if(!Array.isArray(providerMetadata.baselineRuns)){
+            const creators=[...new Map([...prequalified].sort((a,b)=>(b.engagement?.views??0)-(a.engagement?.views??0)).flatMap(source=>{const creator=sourceCreator(source);return creator?[[creatorKey(creator),creator] as const]:[];})).values()].slice(0,5);
+            const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources'}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claim.error)throw Error('PERSISTENCE');if(!claim.data)return reply(headers,{job},202);
+            const launches=await Promise.all(creators.map(async creator=>{const launched=await startWatchlistDiscovery(brief.data,[creator],true);return {creator,runs:launched.runs,diagnostics:launched.diagnostics};}));
+            const baselineRuns=launches.flatMap(x=>x.runs.map(run=>({...run,creator:x.creator,state:'pending'})));
+            const saved=await db.from('creator_research_jobs').update({status:'researching',phase:'Comparing clips with creators’ recent video performance…',provider_metadata:{...providerMetadata,discoveryRuns:checkedRuns,baselineRuns,baselineStartedAt:new Date().toISOString(),baselineLaunchDiagnostics:launches.flatMap(x=>x.diagnostics)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);
+          }
+          const deadline=Date.now()-Date.parse(String(providerMetadata.baselineStartedAt))>5*60*1000;
+          const baselineRuns=await Promise.all((providerMetadata.baselineRuns as Array<Record<string,unknown>>).map(async run=>{
+            if(run.state==='completed'||run.state==='failed')return run;
+            if(deadline)return {...run,state:'failed',status:'BASELINE_DEADLINE',sources:[]};
+            try{const result=await getNativeDiscoveryRun(String(run.id),4,brief.data,run.platform as NativePlatform,true);return {...run,...result};}catch{return {...run,state:'failed',status:'BASELINE_UNAVAILABLE',sources:[]};}
+          }));
+          for(const run of baselineRuns)if(typeof run.costUsd==='number')await db.from('creator_provider_costs').upsert({provider:'Apify',external_id:String(run.id),user_id:job.user_id,job_id:job.id,operation:'Creator performance baseline',status:String(run.status),cost_usd:run.costUsd},{onConflict:'provider,external_id'});
+          providerMetadata.baselineRuns=baselineRuns;
+          if(baselineRuns.some(run=>run.state==='pending')){const saved=await db.from('creator_research_jobs').update({provider_metadata:{...providerMetadata,discoveryRuns:checkedRuns},phase:'Comparing clips with creators’ recent video performance…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE');return reply(headers,{job:saved.data??job},202);}
+          freshSources=freshSources.map(source=>{const creator=sourceCreator(source);const run=creator?baselineRuns.find(run=>run.state==='completed'&&creatorKey(run.creator as CreatorSource)===creatorKey(creator)):undefined;return run?attachBaseline(source,nativeSources(run.sources)):source;});
+        }
+        const excluded:Record<string,number>={};for(const source of freshSources){const reason=engagementFailure(source,filters);if(reason)excluded[reason]=(excluded[reason]??0)+1;}
+        freshSources=freshSources.filter(source=>!engagementFailure(source,filters)).sort((a,b)=>filters.mode==='outliers'?(b.engagement?.baseline?.ratio??0)-(a.engagement?.baseline?.ratio??0):filters.mode==='engaged'?(b.engagement?.views??0)-(a.engagement?.views??0):0);
+        providerMetadata.engagementDiagnostics={filters,freshCandidates:initialFresh,passed:freshSources.length,excluded,baselineLimit:5,baselineLimitNote:'Outlier mode checks up to five creators with ten recent videos each. Missing or insufficient baseline data never qualifies as an outlier.'};
+      }
       const freshByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
       for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
       if (!freshSources.length) {
@@ -232,7 +263,7 @@ Deno.serve(async (request) => {
           nativeSources: compactSources, retainedCandidates: priorCandidates,
           accumulatedSources: undefined, accumulatedCandidates: undefined,
           discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length, freshByPlatform,
-          duplicateSourceCount: uniqueSources.length - freshSources.length,
+          duplicateSourceCount: uniqueSources.length - freshBeforeFilters,filteredSourceCount:freshBeforeFilters-freshSources.length,
         }, updated_at: new Date().toISOString(),
       }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
       if (updated.error) throw new Error(`PERSISTENCE_SCREENING_${updated.error.code}`);
@@ -374,6 +405,8 @@ Deno.serve(async (request) => {
       : providerRun.candidates;
     const requestedCount = Number(job.requested_count);
     const rankedPool = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, eligibleCandidates.length, duplicateHistory);
+    if(brief.data.discoveryFilters?.mode==='outliers')rankedPool.sort((a,b)=>(b.sources[0]?.engagement?.baseline?.ratio??0)-(a.sources[0]?.engagement?.baseline?.ratio??0));
+    if(brief.data.discoveryFilters?.mode==='engaged')rankedPool.sort((a,b)=>(b.sources[0]?.engagement?.views??0)-(a.sources[0]?.engagement?.views??0));
     const ranked = brief.data.sourceMode === 'videos'
       ? selectDiverseVideoCandidates(rankedPool, requestedCount)
       : rankedPool.slice(0, requestedCount);
@@ -395,7 +428,7 @@ Deno.serve(async (request) => {
       screeningRunIds: (Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string }> : []).map((run) => run.id),
     } : null;
     const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
-    if (!providerMetadata.pilot && brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3 && !providerMetadata.reviewLimited) {
+    if (!providerMetadata.pilot && !brief.data.discoveryFilters && brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3 && !providerMetadata.reviewLimited) {
       // A sparse or off-topic popular feed must not be the only retrieval route.
       // Use the next bounded round for domain-filtered indexed video search.
       const nextRound=currentRound+1;
@@ -423,7 +456,7 @@ Deno.serve(async (request) => {
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
-          : completedSearchPhase(0,Number(job.requested_count),currentRound);
+          : brief.data.discoveryFilters?`No new clips met the selected filters and audience relevance. ${Number(providerMetadata.freshSourceCount??0)} clips reached screening. Try another platform, a wider date range, or lower engagement thresholds. Missing metrics and insufficient creator baselines cannot pass strict filters.`:completedSearchPhase(0,Number(job.requested_count),currentRound);
       const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();

@@ -28,14 +28,14 @@ export function creatorFromUrl(value:string):CreatorSource|null{
  if(h==='youtube.com'){const id=u.pathname.match(/^\/(?:channel\/(UC[\w-]{22})|(@[\w.-]+))\/?$/);const k=id?.[1]??id?.[2];return k?{platform:'YouTube',identifier:k.startsWith('@')?k.toLowerCase():k,url:`https://www.youtube.com/${k.startsWith('@')?k:'channel/'+k}`,name:k}:null;}
  return null;}catch{return null;}
 }
-export function dedupeVideos<T extends {url:string}>(sources:T[],limit=CANDIDATE_LIMIT):T[]{const seen=new Set<string>();return sources.filter(s=>{const id=videoIdentity(s.url);if(!id||seen.has(id))return false;seen.add(id);return true;}).slice(0,limit);}
-export function incomeSearchLanes(context:string):string[]{const extra=context.replace(/[\r\n]+/g,' ').slice(0,180);return [
- 'AI side hustle experiment actual results costs time spent',
- 'first paying client AI service customer acquisition story',
- 'selling AI automations local business client demonstration',
- 'freelancer uses AI existing skills paid project walkthrough',
- 'AI business income claim revenue profit breakdown evidence',
- ].map(q=>extra?`${q} ${extra}`:q);}
+export function dedupeVideos<T extends {url:string}>(sources:T[],limit=CANDIDATE_LIMIT):T[]{const unique=new Map<string,T>();for(const source of sources){const id=videoIdentity(source.url);if(!id)continue;const prior=unique.get(id) as (T&{engagement?:unknown;creator?:unknown})|undefined;const next=source as T&{engagement?:unknown;creator?:unknown};unique.set(id,prior?{...prior,...(!prior.engagement&&next.engagement?{engagement:next.engagement}:{}),...(!prior.creator&&next.creator?{creator:next.creator}:{})}:source);}return [...unique.values()].slice(0,limit);}
+export function incomeSearchLanes(context:string,seed?:string):string[]{const extra=context.replace(/[\r\n]+/g,' ').slice(0,180);const variants=[
+ ['AI side hustle experiment actual results costs time spent','I tested AI side hustles real results','30 day AI business experiment profit','AI income experiment failed lessons'],
+ ['first paying client AI service customer acquisition story','how I got my first AI automation client','first client AI freelancer case study','selling my first AI service local business'],
+ ['selling AI automations local business client demonstration','AI automation agency paying customers demo','small business AI service sales case study','client AI workflow automation business results'],
+ ['freelancer uses AI existing skills paid project walkthrough','freelancer AI paid client project','turning skills into AI services customers','AI freelancing real earnings breakdown'],
+ ['AI business income claim revenue profit breakdown evidence','AI side hustle income claim proof costs','AI agency revenue results expenses breakdown','making money AI real profit customer results'],
+ ];const hash=[...(seed??'')].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,0);return variants.map((v,i)=>v[seed?(hash>>>i)%v.length:0]).map(q=>extra?`${q} ${extra}`:q);}
 export function reviewLabel(review?:SourceReview):string{return review?.level==='video_sampled'&&review.accessibility==='accessible'&&review.timestamps.length>0?'Video sampled':review?.level==='transcript_reviewed'&&review.accessibility==='accessible'&&review.transcript.trim()?'Transcript reviewed':'Metadata only';}
 export function needsSourceCheck(sourceType?:string,uncertainty=''):boolean{return sourceType!=='article'||Boolean(uncertainty);}
 export const discoveryReportSchema=z.object({summary:z.string().min(1).max(2500),claims:z.string().max(3000),observations:z.string().max(6000),angle:z.string().min(1).max(1800),limitations:z.string().min(1).max(2000)});

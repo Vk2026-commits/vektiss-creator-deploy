@@ -1,3 +1,4 @@
+import {engagementSchema,discoveryFiltersSchema} from './discovery-engagement.ts';
 import {sourceReviewSchema,creatorSourceSchema} from './discovery-pilot.ts';
 import { z } from "zod";
 import { audienceItems } from './strategy.ts';
@@ -47,6 +48,7 @@ export const feedbackReasonSchema = z.enum([
 
 export const researchSourceSchema = z
   .object({
+    engagement:engagementSchema.optional(),
     review: sourceReviewSchema.optional(),
     creator:creatorSourceSchema.optional(),
     providerSourceId: z.number().int().positive(),
@@ -111,6 +113,7 @@ export const researchBriefSchema = z
     researchSeekSituations: z.string().trim().max(5000).default(""),
     researchReferenceUrls: z.array(z.string().url().max(2048)).max(10).default([]),
     discoveryPilot:z.boolean().default(false),
+    discoveryFilters:discoveryFiltersSchema.optional(),
     researchBlockedUrls: z.array(z.string().url().max(2048)).max(20).default([]),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleWindow:articleWindowSchema.optional(),
@@ -125,6 +128,7 @@ export const researchRequestSchema = z
     idempotencyKey: z.string().uuid(),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleDate:articleDateSchema.optional(),
+    discoveryFilters:discoveryFiltersSchema.optional(),
   })
   .strict();
 
