@@ -10,7 +10,7 @@ import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
-import {completedSearchPhase} from '../../../src/domain/search-phase.ts';
+import {completedSearchPhase,filteredSearchPhase} from '../../../src/domain/search-phase.ts';
 import {mergeSearchRound} from '../../../src/domain/search-rounds.ts';
 import {
   canonicalResearchUrl,
@@ -502,7 +502,7 @@ Deno.serve(async (request) => {
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
-          : brief.data.discoveryFilters?`No new clips met the selected filters and audience relevance. ${Number(providerMetadata.freshSourceCount??0)} clips reached screening. Try another platform, a wider date range, or lower engagement thresholds. Missing metrics and insufficient creator baselines cannot pass strict filters.`:completedSearchPhase(0,Number(job.requested_count),currentRound);
+          : brief.data.discoveryFilters?filteredSearchPhase():completedSearchPhase(0,Number(job.requested_count),currentRound);
       const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
