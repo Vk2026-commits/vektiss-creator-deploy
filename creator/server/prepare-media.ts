@@ -30,10 +30,10 @@ export async function prepareMedia(source:AsyncIterable<Uint8Array>,preserve?:(p
     await exec(mediaBinary('ffmpeg'),['-hide_banner','-loglevel','error','-protocol_whitelist','file,pipe','-i',input,'-t',String(end),'-map','0:v:0','-map','0:a:0?','-vf','scale=trunc(iw/2)*2:trunc(ih/2)*2','-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-af',`afade=t=out:st=${Math.max(0,end-.03)}:d=0.03`,'-movflags','+faststart','-threads','2',output],{timeout:300000,maxBuffer:1024*1024});
     await preserve(output);
    }else await preserve(input);
-   return {body:Buffer.alloc(0),type:'video/mp4'};
+   return {body:Buffer.alloc(0),type:'video/mp4',hasAudio:probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')};
   }
   await exec(mediaBinary('ffmpeg'),['-hide_banner','-loglevel','error','-protocol_whitelist','file,pipe','-i',input,'-map','0:v:0','-map','0:a:0?','-vf','scale=480:480:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=15','-c:v','libx264','-preset','veryfast','-b:v','280k','-maxrate','280k','-bufsize','560k','-pix_fmt','yuv420p','-c:a','aac','-b:a','48k','-ac','1','-movflags','+faststart','-threads','2',output],{timeout:300000,maxBuffer:1024*1024});
   if((await stat(output)).size>10*1024*1024)throw Error('VIDEO_FORMAT');
-  return {body:await readFile(output),type:'video/mp4'};
+  return {body:await readFile(output),type:'video/mp4',hasAudio:probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')};
  }finally{await rm(dir,{recursive:true,force:true});}
 }

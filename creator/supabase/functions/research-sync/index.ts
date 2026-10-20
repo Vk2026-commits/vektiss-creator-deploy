@@ -503,7 +503,7 @@ Deno.serve(async (request) => {
       provider_response_id: providerRun.id, model: providerRun.model ?? null, status: "completed", usage,
       provider_cost_usd: providerCost(usage), candidate_count: providerRun.candidates.length, accepted_count: delivered,
       elapsed_ms: job.started_at ? Date.now() - new Date(String(job.started_at)).getTime() : null,
-      request_metadata: { requestedCount: job.requested_count, sourceCount: providerRun.sources.length,sourceMode:brief.data.sourceMode,articleWindow:brief.data.articleWindow },
+      request_metadata: { requestedCount: job.requested_count, sourceCount: providerRun.sources.length,sourceMode:brief.data.sourceMode,articleWindow:brief.data.articleWindow,review:providerMetadata.reviewDiagnostics,search:providerMetadata.searchDiagnostics },
     });
     return reply(headers, { job: finalJob.data, deliveredCount: delivered });
   } catch (error) {

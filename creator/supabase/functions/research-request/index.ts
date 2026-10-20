@@ -189,8 +189,9 @@ Deno.serve(async (request) => {
     if (updated.error || !updated.data) throw new Error("PERSISTENCE");
     await db.from("creator_research_usage").insert({
       id: crypto.randomUUID(), job_id: jobId, user_id: userId, operation: "deep_research_start", provider_response_id: providerRun.id,
-      model: "apify-multi-platform-discovery", status: "started", request_metadata: { requestedCount: input.requestedCount, platforms: discoveryRuns.map((run) => run.platform) },
+      model: "apify-multi-platform-discovery", status: "started", request_metadata: { requestedCount: input.requestedCount, platforms: discoveryRuns.map((run) => run.platform),pilot:brief.discoveryPilot },
     });
+    if(brief.discoveryPilot)await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',model:'perplexity-search',status:'completed',provider_cost_usd:null,usage:{query_count:'queryCount' in indexed?indexed.queryCount:0},request_metadata:{route:'supplementary_web_discovery',diagnostics:indexed.diagnostics,costStatus:'Provider charge not reported; unknown, not free'}});
     reservation = 0;
     return reply(headers, { job: updated.data, reused: false }, 202);
   } catch (error) {

@@ -29,7 +29,7 @@ export async function reviewDiscovery(root:string,input:unknown,authorization:st
   try{
    await importVideo(root,source.url,stream=>prepareMedia(stream,p=>copyFile(p,file)));
    review={...review,accessibility:'accessible',reviewedAt:new Date().toISOString()};
-   let transcript='';try{const prepared=await prepareMedia(createReadStream(file));const value=await ai('transcribe',undefined,'',prepared.body);transcript=z.string().max(40000).parse(value.text);if(value.generationId)review.generationIds.push(value.generationId);}catch{review.limitations='Speech was absent or transcription was unavailable.';}
+   let transcript='';try{const prepared=await prepareMedia(createReadStream(file));if(prepared.hasAudio===false)throw Error('NO_AUDIO');const value=await ai('transcribe',undefined,'',prepared.body);transcript=z.string().max(40000).parse(value.text);if(value.generationId)review.generationIds.push(value.generationId);}catch{review.limitations='Speech was absent or transcription was unavailable.';}
    if(transcript.trim())review={...review,level:'transcript_reviewed',transcript:transcript.slice(0,16000),limitations:'Speech reviewed; earnings claims remain unverified.'};
    const frames=await extractVideoFrames(createReadStream(file));
    const value=await ai('video-analysis',frames.frames,transcript);const report=discoveryReportSchema.parse(value.report);

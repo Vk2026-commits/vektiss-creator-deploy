@@ -34,6 +34,7 @@ type ResearchProgress = { percent: number; title: string; timing: string };
 
 function progressForResearch(job: { status: string; phase: string }): ResearchProgress {
   const phase = job.phase.toLowerCase();
+  if(phase.includes('inspecting shortlisted'))return {percent:78,title:'Inspecting shortlisted clips',timing:'Reviewing speech and sampled frames from up to five videos'};
   const round = Number(phase.match(/round (\d) of 3/)?.[1] ?? 0);
   if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
   if (round > 1 && phase.includes("searching round")) return { percent: round === 2 ? 48 : 72, title: `Searching round ${round} of 3`, timing: "Looking for more strong matches" };
