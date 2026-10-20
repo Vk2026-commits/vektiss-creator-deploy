@@ -1,3 +1,4 @@
+import {providerText} from '../../../src/domain/provider-text.ts';
 import { canonicalResearchUrl, researchSourceSchema, type ResearchBrief, type ResearchSource } from "../../../src/domain/research.ts";
 import {wantsVisibleAction,actionFormatRejection} from '../../../src/domain/search-intent.ts';
 
@@ -217,8 +218,8 @@ function sourceFromTiktokItem(item: unknown, index: number, safetyProfile = true
   const sourceText = [description, subtitles, authorName].filter(Boolean).join("\n");
   if (safetyProfile && automaticTikTokRejectReason(sourceText)) return null;
   if (sourceText.replace(/[^a-z0-9]/gi, "").length < 35 || /^tiktok video from /i.test(description)) return null;
-  const snippet = [description, subtitles].filter(Boolean).join("\n").slice(0, 5000);
-  const title = (description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim().slice(0, 300);
+  const snippet = providerText([description, subtitles].filter(Boolean).join("\n"),5000);
+  const title = providerText((description || `TikTok video from ${authorName || "creator"}`).replace(/\s+/g, " ").trim(),300);
   return researchSourceSchema.parse({
     providerSourceId: index + 1,
     title: title || "TikTok video lead",
@@ -262,10 +263,10 @@ export function sourceFromCrossPlatformItem(item: unknown, index: number, platfo
   const title = stringValue(record, ["title", "caption", "description", "text"]);
   const description = stringValue(record, ["description", "caption", "text"]);
   const author = stringValue(record, ["channelName", "ownerUsername", "username"]);
-  const snippet = [title, description, author].filter(Boolean).join("\n").slice(0, 5000);
+  const snippet = providerText([title, description, author].filter(Boolean).join("\n"),5000);
   if (snippet.replace(/[^a-z0-9]/gi, "").length < 25) return null;
   return researchSourceSchema.parse({
-    providerSourceId: index + 1, title: (title || `${platform} short video`).replace(/\s+/g, " ").slice(0, 300),
+    providerSourceId: index + 1, title: providerText((title || `${platform} short video`).replace(/\s+/g, " "),300),
     url, snippet, publishedAt: dateValue(record.date ?? record.timestamp ?? record.takenAt ?? record.publishedAt),
     sourceType: platform === "YouTube" ? "youtube-shorts-native" : "instagram-reels-native",
   });

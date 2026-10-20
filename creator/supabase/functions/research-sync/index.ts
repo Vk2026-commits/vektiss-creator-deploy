@@ -1,3 +1,4 @@
+import {providerText} from '../../../src/domain/provider-text.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
@@ -117,7 +118,7 @@ Deno.serve(async (request) => {
         const platform: NativePlatform = run.platform === "YouTube" || run.platform === "Instagram" ? run.platform : "TikTok";
         try {
           const result = await getNativeDiscoveryRun(String(run.id), Number(job!.requested_count), brief.data, platform);
-          return { ...run, ...result, sources: result.state === "completed" ? result.sources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) })) : [] };
+          return { ...run, ...result, sources: result.state === "completed" ? result.sources.map((source) => ({ ...source, snippet: providerText(source.snippet,1200) })) : [] };
         } catch { return { ...run, state: "failed", status: "PROVIDER_ERROR", sources: [] }; }
       })) : [];
       const sourceGroups = checkedRuns.map((run) => run.state === "completed" && Array.isArray(run.sources) ? nativeSources(run.sources) : []);
@@ -188,7 +189,7 @@ Deno.serve(async (request) => {
       const claimed = await db.from("creator_research_jobs").update({
         status: "reviewing_sources", phase: "Checking clip quality…", updated_at: new Date().toISOString(),
       }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
-      if (claimed.error) throw new Error("PERSISTENCE");
+      if (claimed.error) throw new Error(`PERSISTENCE_CLAIM_${claimed.error.code}`);
       if (!claimed.data) {
         const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
         return reply(headers, { job: current ?? job }, 202);
@@ -204,7 +205,7 @@ Deno.serve(async (request) => {
         startNativeVideoScreening({ brief: brief.data, requestedCount: batchTarget, sources })));
       const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
         ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
-      const compactSources = [...priorSources, ...freshSources.map((source) => ({ ...source, snippet: source.snippet.slice(0, 1200) }))];
+      const compactSources = [...priorSources, ...freshSources.map((source) => ({ ...source, snippet: providerText(source.snippet,1200) }))];
       const updated = await db.from("creator_research_jobs").update({
         provider_response_id: screeningRuns[0]?.id ?? job.provider_response_id, status: "researching",
         phase: currentRound > 1 ? `Checking clip quality (round ${currentRound} of 3; ${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips so far)…` : "Ranking direct video leads…",
@@ -218,7 +219,7 @@ Deno.serve(async (request) => {
           duplicateSourceCount: uniqueSources.length - freshSources.length,
         }, updated_at: new Date().toISOString(),
       }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
-      if (updated.error) throw new Error("PERSISTENCE");
+      if (updated.error) throw new Error(`PERSISTENCE_SCREENING_${updated.error.code}`);
       if (!updated.data) {
         const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
         return reply(headers, { job: current ?? job }, 202);
@@ -277,7 +278,7 @@ Deno.serve(async (request) => {
 
     const claimed = await db.from("creator_research_jobs").update({ status: "reviewing_sources", phase: "Reviewing sources…", updated_at: new Date().toISOString() })
       .eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
-    if (claimed.error) throw new Error("PERSISTENCE");
+    if (claimed.error) throw new Error(`PERSISTENCE_CLAIM_${claimed.error.code}`);
     if (!claimed.data) {
       const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
       return reply(headers, { job: current ?? job }, 202);
