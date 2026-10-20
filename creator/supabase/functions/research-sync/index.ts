@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { getDeepResearchRun, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
-import { discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, startPlatformDiscovery, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
+import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
+import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {completedSearchPhase} from '../../../src/domain/search-phase.ts';
+import {mergeSearchRound} from '../../../src/domain/search-rounds.ts';
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -261,6 +262,18 @@ Deno.serve(async (request) => {
       return reply(headers, { code: `PROVIDER_${providerRun.status.toUpperCase()}` }, 503);
     }
     if (providerRun.status !== "completed" || !("candidates" in providerRun)) return reply(headers, { code: "PROVIDER" }, 502);
+    if(providerMetadata.stage==='indexed_video_search'){
+      const merged=mergeSearchRound({sources:nativeSources(providerMetadata.accumulatedSources),candidates:retainedCandidates(providerMetadata.accumulatedCandidates)},providerRun);
+      const roundCost=providerCost(providerRun.usage)??0;
+      providerMetadata.screeningCompletedCount=1;
+      providerMetadata.screeningFailedCount=0;
+      providerMetadata.freshSourceCount=providerRun.sources.length;
+      providerMetadata.screenedCandidateCount=providerRun.candidates.length;
+      providerMetadata.screeningRuns=[{id:providerRun.id,sourceIds:merged.sources.slice(nativeSources(providerMetadata.accumulatedSources).length).map(source=>source.providerSourceId)}];
+      providerMetadata.discoverySummary=[{id:providerRun.id,route:'indexed_video_search',queryPack:providerMetadata.queryHints,sourceCount:providerRun.sources.length}];
+      providerRun={...providerRun,...merged,usage:{cost:{total_cost:Number(providerMetadata.accumulatedCost??0)+roundCost}}};
+    }
+    if (!("candidates" in providerRun)) throw new Error("RESEARCH_EVIDENCE_MISSING");
 
     const claimed = await db.from("creator_research_jobs").update({ status: "reviewing_sources", phase: "Reviewing sources…", updated_at: new Date().toISOString() })
       .eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
@@ -321,7 +334,7 @@ Deno.serve(async (request) => {
     const currentReport = brief.data.sourceMode === "videos" ? {
       round: currentRound, discovery: providerMetadata.discoverySummary ?? [],
       freshSourceCount: providerMetadata.freshSourceCount ?? 0, freshByPlatform: providerMetadata.freshByPlatform ?? {},
-      screenedCandidateCount: providerRun.candidates.length - previousCandidates.length,
+      screenedCandidateCount: providerMetadata.screenedCandidateCount ?? providerRun.candidates.length - previousCandidates.length,
       acceptedCount: ranked.length, acceptedByPlatform,
       screeningCompletedCount: providerMetadata.screeningCompletedCount ?? 0,
       screeningFailedCount: providerMetadata.screeningFailedCount ?? 0,
@@ -329,35 +342,20 @@ Deno.serve(async (request) => {
     } : null;
     const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
     if (brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3) {
-      const platforms = [...new Set<NativePlatform>(brief.data.researchSourcePlatforms.filter((platform): platform is NativePlatform =>
-        platform === "TikTok" || platform === "YouTube" || platform === "Instagram"))];
-      if (!platforms.length) platforms.push("TikTok", "Instagram", "YouTube");
-      const nextRound = currentRound + 1;
-      const launches = await Promise.allSettled(platforms.map((platform) => startPlatformDiscovery({
-        brief: brief.data, requestedCount: Number(job!.requested_count), seed: `${job!.id}:round-${nextRound}`, round: nextRound, platform,
-      })));
-      const discoveryRuns = launches.flatMap((result) => result.status === "fulfilled" ? [{ ...result.value, state: "pending" as const }] : []);
-      const nextRoundLaunchErrors = launches.flatMap((result, index) => result.status === "rejected"
-        ? [{ platform: platforms[index], code: result.reason instanceof Error ? result.reason.message.slice(0, 60) : "APIFY_PROVIDER" }] : []);
-      if (discoveryRuns.length) {
-        const updated = await db.from("creator_research_jobs").update({
-          provider_response_id: discoveryRuns[0].id, status: "researching",
-          phase: `${ranked.length} of ${job.requested_count} strong clips found; searching round ${nextRound} of 3…`,
-          provider_metadata: { stage: "multi_discovery", round: nextRound, discoveryRuns,
-            roundReports, acceptedCountSoFar: ranked.length, launchFailures: launches.length - discoveryRuns.length,
-            nextRoundLaunchErrors,
-            accumulatedSources: providerRun.sources, accumulatedCandidates: providerRun.candidates,
-            accumulatedCost: providerCost(providerRun.usage) ?? 0 }, updated_at: new Date().toISOString(),
-        }).eq("id", job.id).eq("status", "reviewing_sources").select("*").maybeSingle();
-        if (updated.error) throw new Error("PERSISTENCE");
-        if (!updated.data) {
-          const { data: current } = await db.from("creator_research_jobs").select("*").eq("id", job.id).maybeSingle();
-          return reply(headers, { job: current ?? job }, 202);
-        }
-        return reply(headers, { job: updated.data }, 202);
-      }
-      providerMetadata.nextRoundLaunchErrors = nextRoundLaunchErrors;
-      providerMetadata.unavailableRound = nextRound;
+      // A sparse or off-topic popular feed must not be the only retrieval route.
+      // Use the next bounded round for domain-filtered indexed video search.
+      const nextRound=currentRound+1;
+      const queryHints=buildCrossPlatformQueryPack(brief.data,`${job.id}:indexed:${nextRound}`,nextRound);
+      const run=await startDeepResearch({brief:brief.data,requestedCount:Number(job.requested_count),candidateMultiplier:2,queryHints,excludeUrls:providerRun.sources.map(source=>source.url)});
+      const update=await db.from('creator_research_jobs').update({
+        provider_response_id:run.id,status:'researching',phase:`${ranked.length} of ${job.requested_count} found; searching indexed video links (${nextRound}/3)…`,
+        provider_metadata:{stage:'indexed_video_search',round:nextRound,roundReports,queryHints,acceptedCountSoFar:ranked.length,
+          accumulatedSources:providerRun.sources,accumulatedCandidates:providerRun.candidates,accumulatedCost:providerCost(providerRun.usage)??0},
+        updated_at:new Date().toISOString(),
+      }).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+      if(update.error)throw Error('PERSISTENCE');
+      await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{round:nextRound,route:'indexed_video_search',queryHints}});
+      return reply(headers,{job:update.data??job},202);
     }
     if (!ranked.length) {
 

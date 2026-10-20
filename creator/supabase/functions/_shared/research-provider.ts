@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {actionEvidenceInstruction} from '../../../src/domain/search-intent.ts';
+import {directVideoUrl} from '../../../src/domain/search-rounds.ts';
 import {articleSearchFilters,publicationInWindow} from '../../../src/domain/research-window.ts';
 import {
   canonicalResearchUrl,
@@ -222,17 +223,20 @@ export async function startDeepResearch(input: {
   brief: ResearchBrief;
   requestedCount: number;
   candidateMultiplier: number;
+  queryHints?:string[];
+  excludeUrls?:string[];
 }): Promise<ProviderRun> {
   const brief = researchBriefSchema.parse(input.brief);
-  const candidateTarget = input.requestedCount;
+  const candidateTarget = brief.sourceMode==='videos'?Math.min(20,input.requestedCount*Math.max(1,input.candidateMultiplier)):input.requestedCount;
   const domains = platformSearchDomains(brief.researchSourcePlatforms);
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
     body: JSON.stringify({
       model: Deno.env.get("CREATOR_PERPLEXITY_RESEARCH_MODEL") ?? "openai/gpt-5.6-sol",
-      input: researchInstructions(brief, input.requestedCount, candidateTarget),
+      input: researchInstructions(brief, input.requestedCount, candidateTarget)+(brief.sourceMode==='videos'?`\nSearch for direct video links, not popular-keyword landing pages, profiles, articles or compilations. Try distinct concrete queries from these hints: ${JSON.stringify(input.queryHints??brief.sourceTopics)}. Rotate situations rather than repeating an unproductive keyword. Exclude previously retrieved URLs: ${JSON.stringify((input.excludeUrls??[]).slice(0,90))}. The approved search criteria are authoritative. ${actionEvidenceInstruction(brief)}`:''),
       tools: [{ type: "web_search", ...(brief.sourceMode==='articles'&&brief.articleWindow?{filters:articleSearchFilters(brief.articleWindow)}:domains.length ? { filters: { search_domain_filter: domains } } : {}) }],
       background: true,
+      ...(brief.sourceMode==='videos'?{max_steps:5}:{}),
       temperature: 0.2,
       max_output_tokens: 8000,
       response_format: {
@@ -298,11 +302,12 @@ export async function getDeepResearchRun(providerResponseId: string, brief?: Res
   const envelope = providerResearchEnvelopeSchema.parse(JSON.parse(outputText(response)));
   let sources = suppliedSources?.map((source) => researchSourceSchema.parse(source))
     ?? providerSources(response, brief ? platformSearchDomains(brief.researchSourcePlatforms) : []);
+  if(brief?.sourceMode==='videos'&&!suppliedSources)sources=sources.filter(source=>directVideoUrl(source.url));
   if(brief?.sourceMode==='articles'&&brief.articleWindow)sources=sources.filter(source=>publicationInWindow(source.publishedAt,brief.articleWindow!)).filter(source=>!/(^|\.)(tiktok\.com|instagram\.com|youtube\.com|youtu\.be)$/.test(new URL(source.url).hostname)).map(source=>({...source,sourceType:'article'}));
   const sourceIds = new Set(sources.map((source) => source.providerSourceId));
   const candidates = envelope.opportunities.filter((candidate) => candidate.sourceIds.every((id) => sourceIds.has(id)));
   if(brief?.sourceMode==='articles')for(const candidate of candidates)candidate.publishedAt=sources.find(source=>source.providerSourceId===candidate.sourceIds[0])!.publishedAt;
-  if (brief?.sourceMode!=='articles'&&!sources.length) throw new Error("RESEARCH_EVIDENCE_MISSING");
+  if (brief?.sourceMode!=='articles'&&!sources.length&&envelope.opportunities.length) throw new Error("RESEARCH_EVIDENCE_MISSING");
   return {
     ...run,
     completedAt: response.completed_at,

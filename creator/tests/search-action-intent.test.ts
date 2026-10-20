@@ -1,9 +1,23 @@
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {researchBriefSchema} from '../src/domain/research';
 import {wantsVisibleAction,actionFormatRejection} from '../src/domain/search-intent';
 import {discoveryDiagnostics,buildInstagramQueryPack,buildTikTokQueryPack,buildCrossPlatformQueryPack} from '../supabase/functions/_shared/platform-discovery';
-import {nativeScreeningInstructions} from '../supabase/functions/_shared/research-provider';
+import {nativeScreeningInstructions,startDeepResearch} from '../supabase/functions/_shared/research-provider';
 const brief=researchBriefSchema.parse({expertise:'Security',experience:'',industries:[],communicationStyle:'',creatorTone:[],phrasesToAvoid:[],preferredCtaStyle:'',creatorContext:'',audienceName:'Safety',primaryAudience:'',audienceProblems:[],audienceInterests:[],contentPillars:['situational awareness'],sourceTopics:['personal safety'],reactionAngles:[],desiredOutcomes:[],profileTone:[],thingsToAvoid:[],profileContext:'',researchScreeningCriteria:'Focus on de-escalation techniques in action, rather than discussing situations.'});
+it('keeps indexed fallback scoped to selected platforms and concrete action queries',async()=>{
+ const fetchMock=vi.fn().mockResolvedValue(new Response(JSON.stringify({id:'test',status:'queued'})));
+ vi.stubGlobal('fetch',fetchMock);
+ vi.stubGlobal('Deno',{env:{get:()=> 'test-only'}});
+ try{
+  await startDeepResearch({brief:{...brief,sourceMode:'videos',researchSourcePlatforms:['Instagram']},requestedCount:3,candidateMultiplier:2,queryHints:['doorbell attempted entry footage'],excludeUrls:['https://www.instagram.com/reel/seen/']});
+  const body=JSON.parse(fetchMock.mock.calls[0][1].body);
+  expect(body.tools[0].filters.search_domain_filter).toEqual(['instagram.com']);
+  expect(body.input).toContain('doorbell attempted entry footage');
+  expect(body.input).toContain('https://www.instagram.com/reel/seen/');
+  expect(body.input).toContain('omit the lead rather than using Watch first');
+  expect(body.max_steps).toBe(5);
+ }finally{vi.unstubAllGlobals();}
+});
 it('uses action-specific queries across three distinct rounds without gender/following defaults',()=>{
  expect(wantsVisibleAction(brief)).toBe(true);
  for(const build of [buildInstagramQueryPack,buildTikTokQueryPack,buildCrossPlatformQueryPack]){
