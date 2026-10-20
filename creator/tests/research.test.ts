@@ -118,7 +118,7 @@ describe("research contracts", () => {
     });
     expect(buildCrossPlatformQueryPack(brief, "seed")).toHaveLength(5);
     expect(buildInstagramQueryPack(brief, "seed")).toHaveLength(5);
-    expect(buildInstagramQueryPack(brief, "seed").every((query) => !query.includes(" "))).toBe(true);
+    expect(buildInstagramQueryPack(brief, "seed").every((query) => query.includes(" "))).toBe(true);
     for (const build of [buildTikTokQueryPack, buildCrossPlatformQueryPack, buildInstagramQueryPack]) {
       const rounds = [1, 2, 3].map((round) => build(brief, "same-job", round));
       expect(rounds.every((queries) => queries.length >= 3)).toBe(true);

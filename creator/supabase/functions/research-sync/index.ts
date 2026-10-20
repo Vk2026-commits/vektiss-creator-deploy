@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
-import { getNativeDiscoveryRun, renumberNativeSources, startPlatformDiscovery, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
+import { discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, startPlatformDiscovery, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -178,7 +178,7 @@ Deno.serve(async (request) => {
           status: "researching", phase: `Round ${currentRound} found no new clips; checking ${priorCandidates.length} candidates…`,
           provider_metadata: { ...providerMetadata, stage: "multi_screening", discoveryRuns: undefined,
             screeningRuns: [], nativeSources: priorSources, retainedCandidates: priorCandidates, freshSourceCount: 0, freshByPlatform,
-            discoverySummary: multi ? checkedRuns.map((run) => ({ id:run.id, platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [] },
+            discoverySummary: multi ? checkedRuns.map(discoveryDiagnostics) : [] },
           updated_at: new Date().toISOString(),
         }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
@@ -208,7 +208,7 @@ Deno.serve(async (request) => {
         phase: currentRound > 1 ? `Checking clip quality (round ${currentRound} of 3; ${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips so far)…` : "Ranking direct video leads…",
         provider_metadata: {
           ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
-          discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map((run) => ({ id:run.id, platform: run.platform, status: run.status, sourceCount: Array.isArray(run.sources) ? run.sources.length : 0 })) : [{ id:job.provider_response_id, platform: "TikTok", status: discovery.status, sourceCount: discovery.sources.length }],
+          discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map(discoveryDiagnostics) : [discoveryDiagnostics({id:job.provider_response_id,platform:"TikTok",...discovery})],
           screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
           nativeSources: compactSources, retainedCandidates: priorCandidates,
           accumulatedSources: undefined, accumulatedCandidates: undefined,
@@ -364,7 +364,7 @@ Deno.serve(async (request) => {
         ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
-          : `No strong, distinct clips found after ${currentRound} search round${currentRound === 1 ? '' : 's'}. Try again later or broaden this profile’s research criteria.`;
+          : `This search returned 0 qualifying clips after ${currentRound} round${currentRound === 1 ? '' : 's'}. Collection or screening fell short; this does not mean matching videos do not exist.`;
       const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();

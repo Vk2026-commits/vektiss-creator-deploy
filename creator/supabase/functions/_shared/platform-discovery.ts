@@ -21,7 +21,14 @@ export type NativeDiscoveryRun = {
 export type NativeDiscoveryResult = { costUsd?: number | null } & (
   | { state: "pending"; status: string }
   | { state: "failed"; status: string }
-  | { state: "completed"; status: string; sources: ResearchSource[] });
+  | { state: "completed"; status: string; sources: ResearchSource[]; rawCount?: number; invalidCount?: number; formatRejectedCount?: number; duplicateCount?: number });
+
+export function discoveryDiagnostics(run:Record<string,unknown>) {
+ return {id:run.id,platform:run.platform,status:run.status,queryPack:run.queryPack,
+  sourceCount:Array.isArray(run.sources)?run.sources.length:0,
+  rawCount:run.rawCount??null,invalidCount:run.invalidCount??null,
+  formatRejectedCount:run.formatRejectedCount??null,duplicateCount:run.duplicateCount??null};
+}
 
 function apifyToken(): string {
   const token = Deno.env.get("CREATOR_APIFY_API_TOKEN");
@@ -63,11 +70,11 @@ function requestedQueries(brief:ResearchBrief,seed:string,round:number,instagram
   ['shop worker stops assault surveillance footage','public transport confrontation intervention footage','security removes aggressive visitor bodycam','bystander helps person escape confrontation camera','doorbell unwanted visitor leaves intervention footage'],
   ['restaurant staff defuses confrontation CCTV','security officer breaks up altercation footage','bus driver intervenes passenger harassment camera','shopkeeper confronts intruder security camera','crowd intervenes stops assault original footage'],
  ];
- const tags=[['securityintervention','caughtoncamera','deescalation','doorbellfootage','cctvincident'],['bystanderintervention','bodycamfootage','storeconfrontation','securityguardintervention','publictransportincident'],['restaurantconfrontation','surveillancefootage','shopkeeperintervention','busdriverintervention','conflictresolutionfootage']];
+ const tags=[['security intervention','caught on camera','de escalation','doorbell footage','CCTV incident'],['bystander intervention','bodycam footage','store confrontation','security guard intervention','public transport incident'],['restaurant confrontation','surveillance footage','shopkeeper intervention','bus driver intervention','conflict resolution footage']];
  const index=Math.max(0,Math.min(2,round-1));
  const base=action?(instagram?tags[index]:rounds[index]):[];
  const selected=explicit.length?explicit.slice((index*2)%explicit.length).concat(explicit).slice(0,2):[];
- const queries=[...selected.map(s=>instagram?s.replace(/[^\p{L}\p{N}]/gu,''):s),...base];
+ const queries=[...selected.map(s=>s.replace(/\s+/g,' ').trim()),...base];
  const unique=[...new Set(queries)];
  const start=queryRotation(seed)%Math.max(1,base.length);
  return explicit.length?unique.slice(0,5):[...unique.slice(start),...unique.slice(0,start)].slice(0,5);
@@ -125,12 +132,12 @@ export function buildInstagramQueryPack(brief: ResearchBrief, seed = "", round =
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(
     [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(" "),
   );
-  if (!safety) return buildCrossPlatformQueryPack(brief, seed, round).map((query) => query.replace(/\s+/g, "")).slice(0, 5);
-  // Instagram's "popular" search uses short keyword paths, not sentence search.
+  if (!safety) return buildCrossPlatformQueryPack(brief, seed, round).slice(0, 5);
+  // The provider accepts multiword keywords. Do not fabricate hashtags by joining words.
   const terms = [
-    ["womensafety", "parkinglotsafety", "doorbellcamera", "stalkingawareness", "storesafety", "ridesharesafety"],
-    ["followedinstore", "parkinglotincident", "ringdoorbell", "unwantedvisitor", "securityescort", "gasstationsafety"],
-    ["followedwhilewalking", "parkinggaragesafety", "doorbellfootage", "storesecurity", "unsafeencounter", "bystanderhelp"],
+    ["women safety", "parking lot safety", "doorbell camera", "stalking awareness", "store safety", "rideshare safety"],
+    ["followed in store", "parking lot incident", "ring doorbell", "unwanted visitor", "security escort", "gas station safety"],
+    ["followed while walking", "parking garage safety", "doorbell footage", "store security", "unsafe encounter", "bystander help"],
   ][Math.max(0, Math.min(2, round - 1))];
   const start = queryRotation(`${brief.profileContext}:${seed}:instagram`) % terms.length;
   return Array.from({ length: 5 }, (_, offset) => terms[(start + offset) % terms.length]);
@@ -317,11 +324,14 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
   const items = Array.isArray(dataset) ? dataset : Array.isArray((dataset as Record<string, unknown>).data) ? (dataset as Record<string, unknown>).data as unknown[] : [];
   const seen = new Set<string>();
   const sources: ResearchSource[] = [];
+  let invalidCount=0,formatRejectedCount=0,duplicateCount=0;
   for (const item of items) {
     const safetyProfile = !brief || /women.?s? safety|personal safety|situational awareness/i.test([...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests].join(' '));
     const parsed = platform === "TikTok" ? sourceFromTiktokItem(item, sources.length, safetyProfile)
       : sourceFromCrossPlatformItem(item, sources.length, platform);
-    if (!parsed || seen.has(parsed.url) || (brief&&actionFormatRejection(brief,parsed))) continue;
+    if (!parsed) {invalidCount++;continue;}
+    if (seen.has(parsed.url)) {duplicateCount++;continue;}
+    if (brief&&actionFormatRejection(brief,parsed)) {formatRejectedCount++;continue;}
     seen.add(parsed.url);
     sources.push(parsed);
     // Keep a larger local pool than the requested delivery count. The screener
@@ -329,5 +339,5 @@ export async function getNativeDiscoveryRun(runId: string, requestedCount: numbe
     // a Find 10 request into a three-result search.
     if (sources.length >= Math.min(60, Math.max(requestedCount * 3, 30))) break;
   }
-  return { state: "completed", status, sources, costUsd };
+  return { state: "completed", status, sources, costUsd,rawCount:items.length,invalidCount,formatRejectedCount,duplicateCount };
 }
