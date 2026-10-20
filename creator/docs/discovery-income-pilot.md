@@ -12,7 +12,7 @@ Watchlists are profile-owned, initially empty, capped at 20 accounts and checked
 
 ## Release and rollback
 
-Apply `202610200001_discovery_pilot.sql`; deploy research-request, research-sync, research-feed, discovery-settings and script-assistant with `supabase/functions/deno.json`. Publish the existing image with `publish-creator.yml` and update the existing Bunny pilot app. Verify authenticated settings, media access, provider connections and a complete pilot search before enabling this profile. Its discovery-settings switch restores the old flow without deleting saved opportunities.
+Apply `202610200001_discovery_pilot.sql`; deploy research-request, research-sync, research-feed, discovery-settings and script-assistant with `supabase/functions/deno.json`. Publish the existing image with `publish-creator.yml` and update the existing Bunny pilot app. The custom domain serves its frontend from the existing Vercel project (`prj_bflC6b4Ht9e5med53Tdszqb6Oynl`), so also promote/deploy the tested commit there; its existing rewrites forward media requests to Bunny. Verify authenticated settings, media access, provider connections and a complete pilot search before enabling this profile. Its discovery-settings switch restores the old flow without deleting saved opportunities.
 
 ## Metrics
 
@@ -28,4 +28,17 @@ where content_profile_id='3ea48507-fd4b-45bd-acfe-11d73489d867'
 order by created_at desc limit 10;
 ```
 
-Local validation: 406 tests pass, 2 skipped; two pre-existing avatar-pricing assertions fail, with that implementation byte-identical to Git HEAD. Production build and worker bundle pass. Targeted tests cover five lanes, cross-provider deduplication/cap, spoofed/nonvideo URLs, canonical follows, evidence accuracy, quota fallback, idempotent polling, media limits/reuse and database RLS/isolation. Existing cancellation/settlement tests pass.
+Local validation: 413 tests pass, 2 skipped; two pre-existing avatar-pricing assertions fail, with that implementation byte-identical to Git HEAD. Production build and worker bundle pass. Targeted tests cover five lanes, cross-provider deduplication/cap, spoofed/nonvideo URLs, canonical follows, evidence accuracy, quota fallback, idempotent polling, media limits/reuse and database RLS/isolation. Existing cancellation/settlement tests pass.
+
+
+## Live acceptance — 2026-10-20
+
+Application revision `3845ba97e3ad0b8cf490d1020d39e4b56e981535` deployed through existing GitHub image publication, Bunny worker and Vercel frontend (`dpl_EHcixhqLHCBLK7HXfUb7QQR1S2eQ`). Health JSON and final frontend revision markers verified on both origins. No subscriptions or resources were purchased. Existing server credentials were reused. Official YouTube key was absent; fallback is visible in settings. The saved profile currently requests TikTok, so its acceptance run used that platform plus Perplexity web search; adapters for other allowed platforms remain available when selected in the profile.
+
+Research job `3aee6082-c800-481b-ac77-b62a44021fc3` completed ready with seven recommendations from 14 fresh screened candidates (50% usable-result yield). Five source clips were imported, transcribed and frame-sampled successfully (100% inspection success). Two recommendations remained explicitly metadata-only. End-to-end observed latency was 329 seconds, including polling intervals; the inspection worker took 203.5 seconds. Native discovery returned 15 records with one previously seen source removed before screening.
+
+Reported Apify cost was $0.061; screening recorded $0.05857; transcription and visual-analysis estimates totaled $0.58859765. Combined known/estimated provider cost: $0.70816765. Five supplementary Perplexity Search queries and hosting/worker charges were not reported as dollar charges in this acceptance run, so this is not a complete billed total. Later runs explicitly record the supplementary search as an unknown-cost usage event.
+
+The live Discover UI displayed sampled and metadata-only badges, claims, limitations and timestamps. “Use idea” saved draft `d58c7be3-eb34-4e81-9979-9988d3652935` (“Audit the $1,000 AI Front-Desk Offer”) in the existing script editor, retaining video_sampled evidence, 64 timestamps and 2,899 transcript characters. No avatar generation or export started.
+
+The profile switch was turned off and back on through the authenticated settings API. Existing opportunities remained; retrying completed sync returned the same seven results. Exactly one profile is configured/enabled, and its watchlist remains empty. Database ownership and cancellation/settlement tests passed. Full suite: 413 passed, two skipped, two pre-existing avatar-pricing failures; production build and hosted bundle passed.
