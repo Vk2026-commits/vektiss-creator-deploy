@@ -208,7 +208,7 @@ Deno.serve(async (request) => {
       }
       const original=retainedCandidates(providerMetadata.inspectionCandidates).filter(c=>!ids.has(c.sourceIds[0]));
       const complete='candidates' in checked?checked as CompletedResearchRun:undefined;
-      const decisions=complete?screeningDecisions(complete.sources,complete.candidates,complete.decisions):[];
+      const decisions=complete?screeningDecisions(complete.sources,complete.candidates,complete.decisions,brief.data):[];
       inspectionRun={id:String(job.provider_response_id),status:'completed',sources:all,candidates:[...original,...(complete?acceptedCandidates(complete.candidates,decisions):[])],raw:{},usage:{cost:{total_cost:Number(providerCost(providerMetadata.inspectionUsage as Record<string,unknown>??{})??0)+Number(complete?providerCost(complete.usage)??0:0)}}};
       providerMetadata.pilotReviewed=true;providerMetadata.relevanceDecisions=decisions;
       providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,contentReviewAccepted:decisions.filter(d=>d.outcome==='accepted').length,contentReviewRejected:decisions.filter(d=>d.outcome==='rejected').length,contentReviewUnresolved:decisions.filter(d=>d.outcome==='needs_content_review').length};
@@ -485,7 +485,7 @@ Deno.serve(async (request) => {
 
     if(providerMetadata.selectionVersion===2&&!providerMetadata.pilotReviewed&&!inspectionRun){
       const priorDecisions=(providerMetadata.metadataDecisions??[]) as ScreeningDecision[];
-      const decisions=screeningDecisions(providerRun.sources,providerRun.candidates,[...priorDecisions,...providerRun.decisions??[]]);
+      const decisions=screeningDecisions(providerRun.sources,providerRun.candidates,[...priorDecisions,...providerRun.decisions??[]],brief.data);
       const approved=acceptedCandidates(providerRun.candidates,decisions);
       const checkedUrls=[...new Set([...(providerMetadata.scScreenedUrls as string[]??[]),...providerRun.sources.map(s=>s.url)])];
       providerMetadata.metadataDecisions=decisions;

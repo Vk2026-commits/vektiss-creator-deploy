@@ -1,7 +1,7 @@
 import {expect,it,vi,afterEach} from 'vitest';
 import {mergePool,shortlist,selectionDiagnostics,confirmedFailure} from '../supabase/functions/_shared/discovery-selection';
 import {detailTasks,runSCTask,expansionTask,scrapeTasks,type SCTask} from '../supabase/functions/_shared/scrape-creators';
-import {screeningDecisions,acceptedCandidates,inspectionIds} from '../src/domain/pilot-screening';
+import {screeningDecisions,acceptedCandidates,inspectionIds,sourceTopicSupported} from '../src/domain/pilot-screening';
 import {getDeepResearchRun,nativeScreeningInstructions,startNativeVideoScreening} from '../supabase/functions/_shared/research-provider';
 import {discoveryFiltersSchema,collectEngagement} from '../src/domain/discovery-engagement';
 import type {ResearchBrief,ResearchSource,ProviderResearchCandidate} from '../src/domain/research';
@@ -56,4 +56,11 @@ it('preserves useful search metadata and recomputes engagement when a partial de
 
 it('does not approve a candidate when the model omitted its explicit relevance decision',()=>{
  const decisions=screeningDecisions([source(1)],[candidate(1)],[]);expect(decisions[0].outcome).toBe('needs_content_review');expect(acceptedCandidates([candidate(1)],decisions)).toHaveLength(0);
+});
+
+it('does not turn a generic first-client story into an AI recommendation using an invented reaction angle',()=>{
+ const generic={...source(1),title:'My first customer in Dubai',snippet:'A customer commissioned this handmade mandala. I placed 2500 nails by hand.'};
+ const verdict=screeningDecisions([generic],[candidate(1)],[{sourceId:1,outcome:'accepted',reason:'Ricky could add AI marketing'}],brief);expect(verdict[0].outcome).toBe('needs_content_review');expect(acceptedCandidates([candidate(1)],verdict)).toHaveLength(0);
+ expect(sourceTopicSupported({...generic,review:{level:'video_sampled',accessibility:'accessible',reviewedAt:new Date().toISOString(),timestamps:[1],transcript:'',claims:'',observations:'No AI tools are visible.',limitations:'',generationIds:[]}},brief)).toBe(false);
+ expect(sourceTopicSupported({...generic,snippet:'I use ChatGPT to draft client proposals for my service business.'},brief)).toBe(true);
 });
