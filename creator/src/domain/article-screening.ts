@@ -1,3 +1,4 @@
+import {supportedEnglishEditorial} from './article-policy.ts';
 import {canonicalResearchUrl,type ProviderResearchCandidate,type ResearchSource,type ResearchBrief} from './research.ts';
 import {sourceTopicSupported} from './pilot-screening.ts';
 
@@ -9,7 +10,8 @@ export function qualifyArticleCandidates(candidates:ProviderResearchCandidate[],
   if(c.relevanceScore<70||!c.sourceIds.length)return false;
   const evidence=c.sourceIds.map(id=>byId.get(id));
   if(evidence.some(s=>!s||!canonicalResearchUrl(s.url)||blocked.has(canonicalResearchUrl(s.url))))return false;
+  if(!supportedEnglishEditorial(evidence[0]!))return false;
   // The source itself must establish the pilot profile's AI connection. Suggested angles cannot supply it.
-  return !brief.discoveryPilot||sourceTopicSupported(evidence[0]!,brief);
+  return sourceTopicSupported(evidence[0]!,brief);
  });
 }

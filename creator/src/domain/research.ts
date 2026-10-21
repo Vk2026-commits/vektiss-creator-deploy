@@ -1,3 +1,4 @@
+import {articleReviewSchema} from './article-policy.ts';
 import {engagementSchema,discoveryFiltersSchema} from './discovery-engagement.ts';
 import {sourceReviewSchema,creatorSourceSchema} from './discovery-pilot.ts';
 import { z } from "zod";
@@ -51,6 +52,7 @@ export const researchSourceSchema = z
     engagement:engagementSchema.optional(),
     durationSeconds:z.number().min(0).max(86400).optional(),
     review: sourceReviewSchema.optional(),
+    articleReview:articleReviewSchema.optional(),
     creator:creatorSourceSchema.optional(),
     providerSourceId: z.number().int().positive(),
     title: shortText(300),

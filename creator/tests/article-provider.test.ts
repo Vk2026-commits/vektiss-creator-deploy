@@ -9,7 +9,9 @@ it('uses publication filters without social domain restrictions',async()=>{
  const fetcher=mock({id:'test',status:'queued'});await startDeepResearch({brief,requestedCount:10,candidateMultiplier:1});
  const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
  expect(body.tools[0].filters.search_after_date_filter).toBe('09/28/2026');
- expect(body.tools[0].filters.search_domain_filter).toBeUndefined();
+ expect(body.tools[0].filters.search_domain_filter).toContain('reuters.com');
+ expect(body.tools[0].filters.search_domain_filter).not.toContain('tiktok.com');
+ expect(body.tools[0].filters.search_domain_filter.length).toBeLessThanOrEqual(20);
  expect(body.input).toContain('Return fewer or zero');
 });
 it('accepts an empty article result without inventing sources',async()=>{
@@ -56,4 +58,13 @@ it('specifies percentage scoring and source-grounded article relevance without p
  expect(body.input).toContain('0–100 scale, NOT 0–10');expect(body.input).toContain('Only recommend relevanceScore >= 70');
  expect(body.input).toContain('not only its headline');expect(body.input).toContain('hypothetical AI angle');expect(body.input).toContain('alternate topic wording');
  expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.relevanceScore.description).toContain('10 means ten percent');
+});
+
+it('requires original English news text and extracts source-linked editorial evidence',async()=>{
+ const fetcher=mock({id:'test',status:'queued'});await startDeepResearch({brief,requestedCount:10,candidateMultiplier:1});
+ const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
+ expect(body.input).toContain('English-language articles only');expect(body.input).toContain('International subjects and events are welcome');expect(body.input).toContain('press-release wires');expect(body.response_format.json_schema.schema.required).toContain('articleReviews');
+ const source={providerSourceId:1,title:'AI business expands in India',url:'https://www.reuters.com/world/india/ai-business',snippet:'The company said its AI services business expanded in India this year.',publishedAt:'2026-10-06',sourceType:'article'};
+ mock({id:'test',status:'completed',output_text:JSON.stringify({opportunities:[],articleReviews:[{sourceId:1,language:'en',editorialType:'reporting',excerpt:source.snippet}]}),output:[]});
+ const result=await getDeepResearchRun('test',brief,[source]);expect('sources' in result&&result.sources[0].articleReview?.language).toBe('en');
 });

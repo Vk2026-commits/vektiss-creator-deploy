@@ -1,3 +1,4 @@
+import {ARTICLE_NEWS_DOMAINS} from '../../../src/domain/article-policy.ts';
 import {qualifyArticleCandidates} from '../../../src/domain/article-screening.ts';
 import {screeningDecisions,acceptedCandidates,inspectionIds,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import {mergePool,shortlist,selectionDiagnostics,selectionReason} from '../_shared/discovery-selection.ts';
@@ -555,7 +556,7 @@ Deno.serve(async (request) => {
     const eligibleCandidates = brief.data.sourceMode === 'videos'
       ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70 && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
       : qualifyArticleCandidates(providerRun.candidates,providerRun.sources,brief.data);
-    if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
+    if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={requiredLanguage:'en',publisherPolicy:'established_news_editorial',approvedDomains:[...ARTICLE_NEWS_DOMAINS],minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
     const requestedCount = Number(job.requested_count);
     const rankedPool = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, eligibleCandidates.length, duplicateHistory);
     if(brief.data.discoveryFilters?.mode==='outliers')rankedPool.sort((a,b)=>(b.sources[0]?.engagement?.baseline?.ratio??0)-(a.sources[0]?.engagement?.baseline?.ratio??0));
