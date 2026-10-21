@@ -2,7 +2,7 @@
 
 Scope: profile `3ea48507-fd4b-45bd-acfe-11d73489d867` on isolated Creator staging `meihyxdibqbqggogseon`. Migration seeds only this profile, disabled, and an empty watchlist. Other profiles retain their prior search path.
 
-With `CREATOR_DISCOVERY_PROVIDER=scrapecreators`, five focused lanes use Scrape Creators public-video search. The server-only credential is `CREATOR_SCRAPECREATORS_API_KEY`; no value belongs in this document or the frontend. Other profiles and the profile rollback retain the existing Apify/Perplexity discovery path. Perplexity continues metadata relevance screening and OpenAI continues media analysis. Canonical platform video IDs deduplicate up to 40 candidates before screening. The strongest five eligible primary clips enter the authenticated media worker. Imports, 180-second/500-MB limits, transcription and chronological frame extraction reuse existing tools without automatic cutting. Reviews use the research job UUID for idempotency and check ownership/cancellation before each provider analysis. Interrupted reviews return explicit metadata-only leads rather than silently rerunning paid inspection.
+With `CREATOR_DISCOVERY_PROVIDER=scrapecreators`, five focused lanes use Scrape Creators public-video search. The server-only credential is `CREATOR_SCRAPECREATORS_API_KEY`; no value belongs in this document or the frontend. Other profiles and the profile rollback retain the existing Apify/Perplexity discovery path. Perplexity continues metadata relevance screening and OpenAI continues media analysis. Canonical platform video IDs deduplicate a compact pool of up to 250 source records; known threshold failures are removed before selecting at most 40 unique clips for relevance screening. The strongest five eligible primary clips enter the authenticated media worker. Imports, 180-second/500-MB limits, transcription and chronological frame extraction reuse existing tools without automatic cutting. Reviews use the research job UUID for idempotency and check ownership/cancellation before each provider analysis. Interrupted reviews return explicit metadata-only leads rather than silently rerunning paid inspection.
 
 On the legacy discovery path, optional server-only `CREATOR_YOUTUBE_API_KEY` enables official search, details and followed-channel upload retrieval. Missing credentials or quota failures retain Apify YouTube discovery and produce diagnostics. The Scrape Creators pilot uses its own YouTube routes and does not silently fall back to Apify when authentication, credits, or requests fail. No browser credentials or new subscriptions are required.
 
@@ -64,3 +64,37 @@ Live TikTok outlier test `e30dec40-9271-4985-8dfb-47e0aad51eb2`: 32 unique clips
 
 
 Repeat TikTok outlier acceptance `dfd97559-3a7a-49a8-a025-2d46e99dfbe3` completed ready in 187 seconds: 33 unique/fresh clips, 5 above-threshold creator comparisons, 2 relevant recommendations saved. Both media inspections succeeded with transcripts and timestamped frame samples (82.6 seconds for media review). Their reported views were 1,252,170 and 1,516,143; each comparison used seven other recent public clips. Search cost was 10 reported API credits; 2 delivered ideas were charged and reserved_count returned to zero. The search diagnostics patch includes baseline-call credits in remaining-credit summaries for subsequent searches. Only the original pilot profile is enabled.
+
+
+## Selection and relevance upgrade — 2026-10-20
+
+New Scrape Creators pilot jobs use selectionVersion 2. Older jobs remain readable and follow their original checkpoints. Only Make Money With AI is enabled; the existing profile switch still restores the prior flow. No migration, additional service, purchase, or worker redeployment is required.
+
+Collection now normalizes all returned page records rather than keeping only the first eight. It retains up to 250 compact unique sources, skips previously saved video IDs, excludes confirmed numeric/date failures before shortlisting, and chooses at most 40 qualifying sources for metadata relevance review. Topic phrases come from the profile; high minimum-view requests use TikTok most-liked ordering independently of the final relevance ranking. YouTube retains Shorts/relevance search and requests extras. Selected platform controls override legacy platform wording inside saved screening prose.
+
+Missing metadata is distinct from failure. Detail lookups use the remaining 40-request budget, avoid clips already known to fail, preserve useful earlier metadata, and recompute interaction rate from merged counts. Returned cursors/continuation tokens and Instagram pages are checkpointed. Each search family is bounded to three requests; repeated cursors do not loop. When relevance rejects a shortlist and budget/screening slots remain, collection resumes to seek replacements. Outlier mode reserves five provider calls for its existing bounded creator comparisons. No thresholds are silently lowered.
+
+Metadata screening returns accepted/rejected/needs_content_review decisions per source. Missing decisions remain unresolved. Up to five total inspections combine strong metadata leads and unclear captions. After the existing media worker returns transcripts and timestamped frames, a separate relevance pass evaluates that evidence; rejected or unresolved inspected clips do not become recommendations. Successful sampled review remains different from continuous viewing or income verification. Uninspected accepted metadata leads retain Metadata only / Watch first.
+
+Screening deadlines start at the current screening batch, not search creation. Rejected rate-limited submissions use a 30-second backoff and a separate three-minute queue allowance. Interrupted requests with unknown outcomes are not silently replayed. Compare-and-set stage/timestamp checks prevent late polls from overwriting newer stages or cancelled jobs. Feed diagnostics distinguish insufficient values, unavailable fields, metadata relevance rejection, content-review outcomes, collection counts, and incomplete provider review. Legacy fields remain optional.
+
+### Replay and live acceptance
+
+Failed reference job: 73276c4f-538f-4799-97ae-5ecf2745c24a. Replay used the saved 40-source pool, removed the two sources already known when that job began, and preserved publication ages relative to the original search. The same 38 fresh sources still yielded one qualifying clip. The new diagnostic partition is 26 below minimum views, 9 outside the date range, and 2 with unavailable views. The old run discarded other page results before persistence, so replay cannot reconstruct them or claim they were unavailable on the platforms.
+
+Live comparison: 6e7c3f11-a761-4a55-8f79-bec09cd5c478. Exact settings were preserved: All platforms, Relevant clips, 100,000 minimum views, 2% minimum engagement, last 90 days, 10 requested recommendations.
+
+| Measure | Previous run | Upgraded live run |
+|---|---:|---:|
+| Fresh unique retained records | 38 | 230 |
+| Clips meeting numeric/date criteria | 1 | 57 |
+| Scrape Creators calls / reported credits | 25 | 15 |
+| Recommendations saved | 0 | 10 |
+
+The new provider responses contained 279 records before deduplication and history removal. Forty qualifying sources were selected for relevance review. A provider rate limit prevented completion of one metadata batch during rollout; that limitation is recorded, and rejected submissions are now backed off independently of completed-batch timing. Eleven metadata candidates were retained. Five media inspections succeeded (194.2 seconds), and the final evidence-based pass accepted four and rejected one. Ten recommendations were saved: four Video sampled and six Metadata only, all with Watch first. Total live run duration was 667 seconds, including the provider delay and manual verification intervals. Reserved idea allowance returned to zero; ten delivered ideas were charged.
+
+Final stored-source assertions: minimum views 146,081; minimum reported engagement 4.513%; oldest source under 83 days; zero threshold/date violations and zero recommendations lacking an accepted relevance decision. None relied on an inferred acceptance caused by an omitted model decision. Media analysis estimates total $0.6157095 and screening usage records total $0.19186; Scrape Creators cost remains 15 reported credits rather than an invented USD value.
+
+Validation: full suite 448 passed, 2 skipped, with the same 2 pre-existing avatar-pricing failures. Additional targeted regression coverage checks omitted verdicts remain unresolved. Production TypeScript/Vite build passes. Tests cover post-eighth-result matches, duplicate crowding, partial detail enrichment, real versus unknown failures, profile/platform query behavior, pagination loops, fixed API budgets, cancellation, overlapping polls, late-stage responses, stage-specific deadlines, rate-limit backoff, and ambiguous-caption review.
+
+Frontend was deployed through the existing Vercel production project; Edge request/sync/feed functions use the same existing Supabase project. The existing Bunny media worker was reused unchanged. Saved opportunities and other profiles are preserved.

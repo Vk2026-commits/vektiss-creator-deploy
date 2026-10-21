@@ -36,7 +36,7 @@ it('checkpoints platform pagination and stops repeated cursors instead of loopin
  const ig={...root,platform:'Instagram' as const,nextCursor:undefined};expect(expansionTask([ig])?.page).toBe(2);
 });
 it('keeps ambiguous captions out of recommendations but inside the five-inspection allowance',()=>{
- const rows=[source(1),source(2),source(3)];const decisions=screeningDecisions(rows,[candidate(1)],[{sourceId:2,outcome:'needs_content_review',reason:'Caption does not establish topic'},{sourceId:3,outcome:'rejected',reason:'Clearly unrelated'}]);expect(acceptedCandidates([candidate(1),candidate(2),candidate(3)],decisions).map(c=>c.sourceIds[0])).toEqual([1]);expect(inspectionIds([candidate(1)],decisions)).toEqual([1,2]);
+ const rows=[source(1),source(2),source(3)];const decisions=screeningDecisions(rows,[candidate(1)],[{sourceId:1,outcome:'accepted',reason:'Concrete AI service demonstration'},{sourceId:2,outcome:'needs_content_review',reason:'Caption does not establish topic'},{sourceId:3,outcome:'rejected',reason:'Clearly unrelated'}]);expect(acceptedCandidates([candidate(1),candidate(2),candidate(3)],decisions).map(c=>c.sourceIds[0])).toEqual([1]);expect(inspectionIds([candidate(1)],decisions)).toEqual([1,2]);
  const many=screeningDecisions(Array.from({length:20},(_,i)=>source(i+1)),[]);expect(inspectionIds([],many)).toHaveLength(5);expect(acceptedCandidates([candidate(1)],many)).toHaveLength(0);
 });
 it('uses reviewed evidence to classify an ambiguous source without inventing relevance',async()=>{
@@ -52,4 +52,8 @@ it('preserves useful search metadata and recomputes engagement when a partial de
  const original={...source(999),engagement:collectEngagement({views:100000,likes:5000},'test')};
  const partial={...source(999),title:'TikTok public creator video',snippet:'',publishedAt:null,engagement:collectEngagement({views:1000000},'test')};
  const [merged]=mergePool([original],[partial],brief);expect(merged.publishedAt).toBe(original.publishedAt);expect(merged.snippet).toBe(original.snippet);expect(merged.engagement?.rate).toBe(0.5);expect(shortlist([merged],brief)).toHaveLength(0);
+});
+
+it('does not approve a candidate when the model omitted its explicit relevance decision',()=>{
+ const decisions=screeningDecisions([source(1)],[candidate(1)],[]);expect(decisions[0].outcome).toBe('needs_content_review');expect(acceptedCandidates([candidate(1)],decisions)).toHaveLength(0);
 });

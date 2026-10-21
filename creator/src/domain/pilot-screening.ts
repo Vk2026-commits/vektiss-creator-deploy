@@ -4,7 +4,7 @@ export const screeningDecisionSchema=z.object({sourceId:z.number().int().positiv
 export type ScreeningDecision=z.infer<typeof screeningDecisionSchema>;
 export function screeningDecisions(sources:ResearchSource[],candidates:ProviderResearchCandidate[],supplied:ScreeningDecision[]=[]):ScreeningDecision[]{
  const byId=new Map(supplied.map(d=>[d.sourceId,d]));
- return sources.map(s=>byId.get(s.providerSourceId)??{sourceId:s.providerSourceId,outcome:candidates.some(c=>c.sourceIds[0]===s.providerSourceId&&c.relevanceScore>=70)?'accepted':'needs_content_review',reason:'No explicit metadata verdict; content review required.'});
+ return sources.map(s=>byId.get(s.providerSourceId)??{sourceId:s.providerSourceId,outcome:'needs_content_review',reason:'No explicit metadata verdict; content review required.'});
 }
 export function acceptedCandidates(candidates:ProviderResearchCandidate[],decisions:ScreeningDecision[]):ProviderResearchCandidate[]{
  const accepted=new Set(decisions.filter(d=>d.outcome==='accepted').map(d=>d.sourceId));

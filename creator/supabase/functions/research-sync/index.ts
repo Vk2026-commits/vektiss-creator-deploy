@@ -490,8 +490,9 @@ Deno.serve(async (request) => {
       const checkedUrls=[...new Set([...(providerMetadata.scScreenedUrls as string[]??[]),...providerRun.sources.map(s=>s.url)])];
       providerMetadata.metadataDecisions=decisions;
       providerMetadata.scScreenedUrls=checkedUrls;
+      providerMetadata.scExplicitReviewedIds=[...new Set([...(providerMetadata.scExplicitReviewedIds as number[]??[]),...(providerRun.decisions??[]).map(d=>d.sourceId)])];
       providerMetadata.metadataRejectionCount=decisions.filter(d=>d.outcome==='rejected').length;
-      providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,relevanceRejected:decisions.filter(d=>d.outcome==='rejected').length,needsContentReview:decisions.filter(d=>d.outcome==='needs_content_review').length};
+      providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,metadataReviewed:(providerMetadata.scExplicitReviewedIds as number[]).length,relevanceRejected:decisions.filter(d=>d.outcome==='rejected').length,needsContentReview:decisions.filter(d=>d.outcome==='needs_content_review').length};
       providerRun.candidates=approved;
       const ledger=(providerMetadata.scLedger??[]) as SCLedger[];
       if(approved.length<Number(job.requested_count)&&checkedUrls.length<40&&ledger.length<40&&!scrapeUnavailable(ledger)&&!['no_more_results','provider_limited'].includes(String((providerMetadata.searchDiagnostics as Record<string,unknown>)?.stopReason))){
