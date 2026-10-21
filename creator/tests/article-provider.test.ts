@@ -49,3 +49,11 @@ it('preserves incomplete reason and billed usage without parsing partial JSON',a
  expect(result.usage).toEqual({output_tokens:8000});
  expect('candidates' in result).toBe(false);
 });
+
+it('specifies percentage scoring and source-grounded article relevance without padding',async()=>{
+ const fetcher=mock({id:'test',status:'queued'});await startDeepResearch({brief,requestedCount:10,candidateMultiplier:1});
+ const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
+ expect(body.input).toContain('0–100 scale, NOT 0–10');expect(body.input).toContain('Only recommend relevanceScore >= 70');
+ expect(body.input).toContain('not only its headline');expect(body.input).toContain('hypothetical AI angle');expect(body.input).toContain('alternate topic wording');
+ expect(body.response_format.json_schema.schema.properties.opportunities.items.properties.relevanceScore.description).toContain('10 means ten percent');
+});

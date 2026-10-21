@@ -1,3 +1,4 @@
+import {qualifyArticleCandidates} from '../../../src/domain/article-screening.ts';
 import {screeningDecisions,acceptedCandidates,inspectionIds,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import {mergePool,shortlist,selectionDiagnostics,selectionReason} from '../_shared/discovery-selection.ts';
 import {runSCTask,detailTasks,balancedSources,expansionTask,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
@@ -553,7 +554,8 @@ Deno.serve(async (request) => {
     const sourcesById = new Map(providerRun.sources.map(source => [source.providerSourceId, source]));
     const eligibleCandidates = brief.data.sourceMode === 'videos'
       ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70 && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
-      : providerRun.candidates;
+      : qualifyArticleCandidates(providerRun.candidates,providerRun.sources,brief.data);
+    if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
     const requestedCount = Number(job.requested_count);
     const rankedPool = rankResearchCandidates(eligibleCandidates, providerRun.sources, history, eligibleCandidates.length, duplicateHistory);
     if(brief.data.discoveryFilters?.mode==='outliers')rankedPool.sort((a,b)=>(b.sources[0]?.engagement?.baseline?.ratio??0)-(a.sources[0]?.engagement?.baseline?.ratio??0));
@@ -604,7 +606,7 @@ Deno.serve(async (request) => {
     if (!ranked.length) {
 
       const phase=brief.data.sourceMode==='articles'
-        ? 'No new relevant articles with verified dates were found in this window. Try a wider date range.'
+        ? 'No strong article matches found. No ideas charged; try another search or adjust your date range.'
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
           : brief.data.discoveryFilters?filteredSearchPhase():completedSearchPhase(0,Number(job.requested_count),currentRound);
