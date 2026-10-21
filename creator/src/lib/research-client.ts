@@ -10,7 +10,7 @@ export type ResearchOpportunity = {
   timeliness_score: number; relevance_score: number; rank_score: number; source_snapshot: ResearchSource[]; uncertainty: string;
   status: "new" | "saved" | "rejected" | "selected" | "turned_into_content"; created_at: string; updated_at: string;
 };
-export type ResearchJob = { engagement_diagnostics?:{passed:number;freshCandidates:number;excluded:Record<string,number>};id: string; content_profile_id: string; requested_count: number; delivered_count: number; candidate_count: number; status: string; phase: string; error_code: string | null; created_at: string; updated_at: string; completed_at: string | null };
+export type ResearchJob = { engagement_diagnostics?:{passed:number;freshCandidates:number;excluded:Record<string,number>;relevanceRejected?:number;needsContentReview?:number;contentReviewAccepted?:number;contentReviewRejected?:number;contentReviewUnresolved?:number};id: string; content_profile_id: string; requested_count: number; delivered_count: number; candidate_count: number; status: string; phase: string; error_code: string | null; created_at: string; updated_at: string; completed_at: string | null };
 export type ResearchFeedFilter = "all" | "saved" | "used" | "skipped";
 export type ResearchFeed = { pilot?:{profileId:string;configured:boolean;enabled:boolean}; active: boolean; remaining: number; limit: number; periodStart: string | null; jobs: ResearchJob[]; opportunities: ResearchOpportunity[]; opportunityTotal: number; pageOffset: number; pageSize: number; statusCounts: Record<ResearchFeedFilter, number> };
 

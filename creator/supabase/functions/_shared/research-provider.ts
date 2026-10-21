@@ -1,3 +1,4 @@
+import {screeningDecisionSchema,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import { z } from "zod";
 import {actionEvidenceInstruction} from '../../../src/domain/search-intent.ts';
 import {directVideoUrl} from '../../../src/domain/search-rounds.ts';
@@ -49,6 +50,7 @@ export type CompletedResearchRun = ProviderRun & {
   sources: ResearchSource[];
   candidates: ProviderResearchCandidate[];
   raw: Record<string, unknown>;
+  decisions?:ScreeningDecision[];
   completedAt?: number | null;
 };
 
@@ -174,7 +176,8 @@ function researchInstructions(brief: ResearchBrief, requestedCount: number, cand
 
 export function nativeScreeningInstructions(brief: ResearchBrief, requestedCount: number, candidateTarget: number, sources: ResearchSource[]): string {
  const strict=actionEvidenceInstruction(brief);
- return nativeScreeningBase(brief,requestedCount,candidateTarget,sources)+(strict?`\n\nThe following explicit profile format requirement takes precedence over the general Watch first allowance above: ${strict}`:'');
+ const pilot=brief.discoveryPilot?'\nFor every supplied source return one screeningDecisions entry. accepted means the available evidence establishes a substantive audience-relevant topic; also return an opportunity. rejected means the evidence establishes an off-topic or excluded subject. needs_content_review means a vague caption or insufficient metadata does not establish the topic; do not invent an opportunity for it. A missing AI keyword alone is not proof of irrelevance. Use supplied reviewed transcript/frames when present; if relevance remains unsupported, return needs_content_review. Source platform selection is controlled only by researchSourcePlatforms; platform names in saved descriptive screening prose are legacy guidance, not additional restrictions. Never reject Instagram or YouTube solely because saved prose mentions TikTok.':'';
+ return nativeScreeningBase(brief,requestedCount,candidateTarget,sources)+(strict?`\n\nThe following explicit profile format requirement takes precedence over the general Watch first allowance above: ${strict}`:'')+pilot;
 }
 function nativeScreeningBase(brief: ResearchBrief, requestedCount: number, candidateTarget: number, sources: ResearchSource[]): string {
   const compactSources = sources.map((source) => ({
@@ -261,7 +264,8 @@ export async function startNativeVideoScreening(input: {
   // Ranking and story deduplication happen after screening; ask for a buffer.
   // Otherwise one duplicate can turn a Find 10 run into nine or fewer ideas.
   const candidateTarget = Math.min(sources.length, input.requestedCount * 2, 20);
-  const compactSchema = structuredClone(candidateJsonSchema);
+  const compactSchema:Record<string,any> = structuredClone(candidateJsonSchema);
+  if(brief.discoveryPilot){compactSchema.required.push('screeningDecisions');compactSchema.properties.screeningDecisions={type:'array',maxItems:sources.length,items:{type:'object',additionalProperties:false,required:['sourceId','outcome','reason'],properties:{sourceId:{type:'integer',enum:sources.map(s=>s.providerSourceId)},outcome:{type:'string',enum:['accepted','rejected','needs_content_review']},reason:{type:'string',minLength:1,maxLength:300}}}};}
   compactSchema.properties.opportunities.maxItems = candidateTarget;
   Object.assign(compactSchema.properties.opportunities.items.properties.sourceIds.items, {
     enum: sources.map((source) => source.providerSourceId),
@@ -301,7 +305,10 @@ export async function getDeepResearchRun(providerResponseId: string, brief?: Res
     usage: response.usage && typeof response.usage === 'object' ? response.usage as Record<string,unknown> : {},
   };
   if (response.status !== "completed") return run;
-  const envelope = providerResearchEnvelopeSchema.parse(JSON.parse(outputText(response)));
+  const output=JSON.parse(outputText(response));
+  const {screeningDecisions:rawDecisions,...legacyOutput}=output;
+  const envelope = providerResearchEnvelopeSchema.parse(legacyOutput);
+  const decisions=brief?.discoveryPilot?z.array(screeningDecisionSchema).max(50).parse(rawDecisions??[]):undefined;
   let sources = suppliedSources?.map((source) => researchSourceSchema.parse(source))
     ?? providerSources(response, brief ? platformSearchDomains(brief.researchSourcePlatforms) : []);
   if(brief?.sourceMode==='videos'&&!suppliedSources)sources=sources.filter(source=>directVideoUrl(source.url));
@@ -315,7 +322,7 @@ export async function getDeepResearchRun(providerResponseId: string, brief?: Res
     completedAt: response.completed_at,
     usage: response.usage && typeof response.usage === "object" ? response.usage as Record<string, unknown> : {},
     sources,
-    candidates,
+    candidates,decisions,
     raw: response as Record<string, unknown>,
   };
 }

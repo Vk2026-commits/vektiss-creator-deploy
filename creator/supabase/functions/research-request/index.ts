@@ -172,7 +172,7 @@ Deno.serve(async (request) => {
     }
     if(brief.discoveryPilot&&scrapeEnabled()){
       if(!Deno.env.get('CREATOR_SCRAPECREATORS_API_KEY'))throw Error('SCRAPECREATORS_NOT_CONFIGURED');
-      const saved=await db.from('creator_research_jobs').update({provider_response_id:jobId,status:'researching',phase:'Preparing Scrape Creators platform searches…',started_at:new Date().toISOString(),provider_metadata:{stage:'scrape_discovery',pilot:true,provider:'Scrape Creators',round:1,scTasks:scrapeTasks(brief,jobId!,watchlist),scSources:[],scLedger:[],providerDiagnostics:[],roundReports:[],accumulatedSources:[],accumulatedCandidates:[]},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();if(saved.error||!saved.data)throw Error('PERSISTENCE');
+      const saved=await db.from('creator_research_jobs').update({provider_response_id:jobId,status:'researching',phase:'Preparing Scrape Creators platform searches…',started_at:new Date().toISOString(),provider_metadata:{stage:'scrape_discovery_v2',selectionVersion:2,pilot:true,provider:'Scrape Creators',round:1,scTasks:scrapeTasks(brief,jobId!,watchlist),scSources:[],scLedger:[],providerDiagnostics:[],roundReports:[],accumulatedSources:[],accumulatedCandidates:[]},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();if(saved.error||!saved.data)throw Error('PERSISTENCE');
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',model:'scrape-creators-discovery',status:'started',request_metadata:{requestedCount:input.requestedCount,filters:input.discoveryFilters,provider:'Scrape Creators',maxRequests:40}});
       return reply(headers,{job:saved.data,reused:false},202);
     }
