@@ -18,7 +18,7 @@ it('rejects missing or blocked source evidence and preserves other profiles subj
 });
 
 it('requires established English editorial reporting independently of a high relevance score',()=>{
- for(const url of ['https://dev.to/user/ai-experiment','https://note.com/user/story','https://www.prnewswire.com/news-releases/ai-contract','https://rexautomaton.com/blog/ai-automation','https://forbesjapan.com/articles/detail/123','https://reuters.com.evil.test/story','https://www.bbc.com/mundo/noticias-123','https://www.wired.com/sponsored/ai-story'])expect(qualifyArticleCandidates([candidate(99)],[{...source,url}],brief)).toEqual([]);
+ for(const url of ['https://dev.to/user/ai-experiment','https://note.com/user/story','https://www.prnewswire.com/news-releases/ai-contract','https://rexautomaton.com/blog/ai-automation','https://forbesjapan.com/articles/detail/123','https://reuters.com.evil.test/story','https://www.bbc.com/mundo/noticias-123','https://www.wired.com/sponsored/ai-story','https://www.axios.com/business/2026/10/16','https://www.reuters.com/technology/'])expect(qualifyArticleCandidates([candidate(99)],[{...source,url}],brief)).toEqual([]);
  for(const language of ['other','unknown'] as const)expect(qualifyArticleCandidates([candidate(99)],[{...source,articleReview:{...source.articleReview,language}}],brief)).toEqual([]);
  for(const editorialType of ['sponsored','press_release','opinion','unknown'] as const)expect(qualifyArticleCandidates([candidate(99)],[{...source,articleReview:{...source.articleReview,editorialType}}],brief)).toEqual([]);
  expect(qualifyArticleCandidates([candidate(99)],[{...source,articleReview:undefined}],brief)).toEqual([]);

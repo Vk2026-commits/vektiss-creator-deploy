@@ -18,6 +18,10 @@ export function approvedNewsUrl(value:string):boolean{
   if(u.protocol!=='https:'||u.username||u.password||u.port)return false;
   if(!ARTICLE_NEWS_DOMAINS.includes(host as typeof ARTICLE_NEWS_DOMAINS[number]))return false;
   const path=decodeURIComponent(u.pathname).toLowerCase();
+  // Dated section/archive pages can contain news snippets without being a source article.
+  if(/\/\d{4}\/\d{1,2}\/\d{1,2}\/?$/.test(path)||/\/(?:topics?|tags?|newsletters?|search)(?:\/|$)/.test(path))return false;
+  const last=path.split('/').filter(Boolean).at(-1)??'';
+  if(last.length<12||!/[\d-]/.test(last))return false;
   if(/(?:^|\/)(?:sponsored|advertorial|brandstudio|brand-studio|brandvoice|partner-content|paidpost|press-releases?|pressreleases|native-ad|mundo|afrique|hindi|arabic|zhongwen|persian|russian|portuguese|japanese|espanol)(?:\/|$)/.test(path))return false;
   if(/(?:^|\/)(?:cn|jp|es|ar|zh|ru|pt|fr|de|ja)(?:\/|$)/.test(path))return false;
   return path.split('/').filter(Boolean).length>0;
