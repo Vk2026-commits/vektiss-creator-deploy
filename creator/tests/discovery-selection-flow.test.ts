@@ -39,3 +39,8 @@ it('measures the review deadline from screening rather than an hour-old search c
  state.job.provider_metadata={stage:'multi_screening',selectionVersion:2,pilot:true,screeningStartedAt:new Date(Date.now()-10000).toISOString(),nativeSources:[source],screeningRuns:[{id:'screening',sourceIds:[1]}],pendingScreeningBatches:[]};
  state.review.mockResolvedValue({id:'screening',status:'queued'});const response=await call();expect(response.status).toBe(202);expect(state.job.status).toBe('researching');expect(state.job.phase).toContain('Checking clip quality');
 });
+
+it('does not let a late screening poll overwrite a newer evidence-review stage',async()=>{
+ state.job.provider_metadata={stage:'multi_screening',selectionVersion:2,pilot:true,screeningStartedAt:new Date().toISOString(),nativeSources:[source],screeningRuns:[{id:'screening',sourceIds:[1]}],pendingScreeningBatches:[],scLedger:Array.from({length:40},(_,i)=>({id:String(i),status:200})),searchDiagnostics:{stopReason:'request_budget'}};
+ state.review.mockImplementation(async()=>{state.job.provider_metadata.stage='pilot_relevance';return {id:'screening',status:'completed',sources:[source],candidates:[],decisions:[{sourceId:1,outcome:'needs_content_review',reason:'Caption unclear'}],usage:{},raw:{}};});await call();expect(state.job.provider_metadata.stage).toBe('pilot_relevance');
+});
