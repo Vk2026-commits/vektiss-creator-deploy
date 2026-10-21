@@ -421,7 +421,7 @@ Deno.serve(async (request) => {
           throw error;
         }
       }));
-      providerMetadata.screeningBatchReports=results.map(result=>({id:result.id,status:result.status,candidates:'candidates' in result?result.candidates.length:0}));
+      providerMetadata.screeningBatchReports=results.map(result=>({id:result.id,status:result.status,candidates:'candidates' in result&&Array.isArray(result.candidates)?result.candidates.length:0}));
       const pending=Array.isArray(providerMetadata.pendingScreeningBatches)?providerMetadata.pendingScreeningBatches as number[][]:[];
       const waiting=results.some(result=>result.status==='queued'||result.status==='in_progress');
       const waitExpired=(waiting&&reviewWaitExpired(providerMetadata.screeningStartedAt??job.created_at))||(pending.length>0&&reviewWaitExpired(providerMetadata.screeningQueueStartedAt));
