@@ -47,3 +47,9 @@ it('uses reviewed evidence to classify an ambiguous source without inventing rel
 it('requests explicit pilot decisions with source IDs constrained to supplied clips',async()=>{
  vi.stubGlobal('Deno',{env:{get:()=> 'test'}});const fetcher=vi.fn(async()=>Response.json({id:'review',status:'queued'}));vi.stubGlobal('fetch',fetcher);await startNativeVideoScreening({brief,requestedCount:10,sources:[source(1)]});const body=JSON.parse(String((fetcher.mock.calls[0] as unknown as [unknown,RequestInit])[1].body));expect(body.response_format.json_schema.schema.required).toContain('screeningDecisions');expect(body.response_format.json_schema.schema.properties.screeningDecisions.items.properties.sourceId.enum).toEqual([1]);
 });
+
+it('preserves useful search metadata and recomputes engagement when a partial detail response changes views',()=>{
+ const original={...source(999),engagement:collectEngagement({views:100000,likes:5000},'test')};
+ const partial={...source(999),title:'TikTok public creator video',snippet:'',publishedAt:null,engagement:collectEngagement({views:1000000},'test')};
+ const [merged]=mergePool([original],[partial],brief);expect(merged.publishedAt).toBe(original.publishedAt);expect(merged.snippet).toBe(original.snippet);expect(merged.engagement?.rate).toBe(0.5);expect(shortlist([merged],brief)).toHaveLength(0);
+});

@@ -176,7 +176,7 @@ function researchInstructions(brief: ResearchBrief, requestedCount: number, cand
 
 export function nativeScreeningInstructions(brief: ResearchBrief, requestedCount: number, candidateTarget: number, sources: ResearchSource[]): string {
  const strict=actionEvidenceInstruction(brief);
- const pilot=brief.discoveryPilot?'\nFor every supplied source return one screeningDecisions entry. accepted means the available evidence establishes a substantive audience-relevant topic; also return an opportunity. rejected means the evidence establishes an off-topic or excluded subject. needs_content_review means a vague caption or insufficient metadata does not establish the topic; do not invent an opportunity for it. A missing AI keyword alone is not proof of irrelevance. Use supplied reviewed transcript/frames when present; if relevance remains unsupported, return needs_content_review. Source platform selection is controlled only by researchSourcePlatforms; platform names in saved descriptive screening prose are legacy guidance, not additional restrictions. Never reject Instagram or YouTube solely because saved prose mentions TikTok.':'';
+ const pilot=brief.discoveryPilot?'\nFor every supplied source return one screeningDecisions entry; keep each reason under 100 characters. accepted means the available evidence establishes a substantive audience-relevant topic; also return an opportunity. rejected means the evidence establishes an off-topic or excluded subject. needs_content_review means a vague caption or insufficient metadata does not establish the topic; do not invent an opportunity for it. A missing AI keyword alone is not proof of irrelevance. Use supplied reviewed transcript/frames when present; if relevance remains unsupported, return needs_content_review. Source platform selection is controlled only by researchSourcePlatforms; platform names in saved descriptive screening prose are legacy guidance, not additional restrictions. Never reject Instagram or YouTube solely because saved prose mentions TikTok.':'';
  return nativeScreeningBase(brief,requestedCount,candidateTarget,sources)+(strict?`\n\nThe following explicit profile format requirement takes precedence over the general Watch first allowance above: ${strict}`:'')+pilot;
 }
 function nativeScreeningBase(brief: ResearchBrief, requestedCount: number, candidateTarget: number, sources: ResearchSource[]): string {
@@ -263,15 +263,15 @@ export async function startNativeVideoScreening(input: {
   if (!sources.length) throw new Error("NATIVE_SOURCES_MISSING");
   // Ranking and story deduplication happen after screening; ask for a buffer.
   // Otherwise one duplicate can turn a Find 10 run into nine or fewer ideas.
-  const candidateTarget = Math.min(sources.length, input.requestedCount * 2, 20);
+  const candidateTarget = Math.min(sources.length, brief.discoveryPilot?input.requestedCount:input.requestedCount * 2, brief.discoveryPilot?10:20);
   const compactSchema:Record<string,any> = structuredClone(candidateJsonSchema);
-  if(brief.discoveryPilot){compactSchema.required.push('screeningDecisions');compactSchema.properties.screeningDecisions={type:'array',maxItems:sources.length,items:{type:'object',additionalProperties:false,required:['sourceId','outcome','reason'],properties:{sourceId:{type:'integer',enum:sources.map(s=>s.providerSourceId)},outcome:{type:'string',enum:['accepted','rejected','needs_content_review']},reason:{type:'string',minLength:1,maxLength:300}}}};}
+  if(brief.discoveryPilot){compactSchema.required.push('screeningDecisions');compactSchema.properties.screeningDecisions={type:'array',maxItems:sources.length,items:{type:'object',additionalProperties:false,required:['sourceId','outcome','reason'],properties:{sourceId:{type:'integer',enum:sources.map(s=>s.providerSourceId)},outcome:{type:'string',enum:['accepted','rejected','needs_content_review']},reason:{type:'string',minLength:1,maxLength:160}}}};}
   compactSchema.properties.opportunities.maxItems = candidateTarget;
   Object.assign(compactSchema.properties.opportunities.items.properties.sourceIds.items, {
     enum: sources.map((source) => source.providerSourceId),
   });
   for (const key of ['factualSummary','whyAudienceCares','creatorConnection','recommendedAngle'] as const) {
-    compactSchema.properties.opportunities.items.properties[key].maxLength = 240;
+    compactSchema.properties.opportunities.items.properties[key].maxLength = brief.discoveryPilot?160:240;
   }
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
@@ -283,7 +283,7 @@ export async function startNativeVideoScreening(input: {
       // Reasoning shares the output budget; leave room for the final JSON.
       reasoning: { effort: "low" },
       max_steps: 1,
-      max_output_tokens: Math.min(24000, 8000 + candidateTarget * 400),
+      max_output_tokens: brief.discoveryPilot?6000:Math.min(24000, 8000 + candidateTarget * 400),
       response_format: {
         type: "json_schema",
         json_schema: { name: "native_video_opportunities", schema: compactSchema },

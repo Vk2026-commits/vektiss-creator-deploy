@@ -1,5 +1,5 @@
 import type {ResearchBrief,ResearchSource} from '../../../src/domain/research.ts';
-import {discoveryFiltersSchema,engagementFailure} from '../../../src/domain/discovery-engagement.ts';
+import {discoveryFiltersSchema,engagementFailure,collectEngagement} from '../../../src/domain/discovery-engagement.ts';
 import {dedupeVideos,videoIdentity} from '../../../src/domain/discovery-pilot.ts';
 export const RAW_POOL_LIMIT=250;
 export function selectionReason(source:ResearchSource,brief:ResearchBrief,now=Date.now()):string|null{
@@ -31,8 +31,8 @@ export function prioritize(sources:ResearchSource[],brief:ResearchBrief):Researc
 export function mergePool(old:ResearchSource[],incoming:ResearchSource[],brief:ResearchBrief):ResearchSource[]{
  // Keep compact source records once, rather than duplicating per-query groups.
  const byId=new Map(old.map(s=>[videoIdentity(s.url),s]));
- for(const s of incoming){const id=videoIdentity(s.url);const previous=byId.get(id);byId.set(id,previous?{...previous,...s,engagement:s.engagement?{...s.engagement,views:s.engagement.views??previous.engagement?.views??null,likes:s.engagement.likes??previous.engagement?.likes??null,comments:s.engagement.comments??previous.engagement?.comments??null,shares:s.engagement.shares??previous.engagement?.shares??null,rate:s.engagement.rate??previous.engagement?.rate??null}:previous.engagement}:s);}
- return prioritize([...byId.values()],brief).slice(0,RAW_POOL_LIMIT).map(s=>({...s,title:s.title.slice(0,220),snippet:s.snippet.slice(0,650)}));
+ for(const s of incoming){const id=videoIdentity(s.url);const previous=byId.get(id);byId.set(id,previous?{...previous,...s,title:/public creator video$/.test(s.title)?previous.title:s.title,snippet:s.snippet||previous.snippet,publishedAt:s.publishedAt??previous.publishedAt,creator:s.creator??previous.creator,durationSeconds:s.durationSeconds??previous.durationSeconds,engagement:s.engagement?{...s.engagement,views:s.engagement.views??previous.engagement?.views??null,likes:s.engagement.likes??previous.engagement?.likes??null,comments:s.engagement.comments??previous.engagement?.comments??null,shares:s.engagement.shares??previous.engagement?.shares??null,rate:s.engagement.rate??previous.engagement?.rate??null}:previous.engagement}:s);}
+ return prioritize([...byId.values()],brief).slice(0,RAW_POOL_LIMIT).map(s=>({...s,title:s.title.slice(0,220),snippet:s.snippet.slice(0,650),engagement:s.engagement?{...s.engagement,rate:collectEngagement(s.engagement,s.engagement.provider).rate}:undefined}));
 }
 export function shortlist(pool:ResearchSource[],brief:ResearchBrief,excluded:string[]=[],limit=40):ResearchSource[]{
  const seen=new Set(excluded.map(videoIdentity));

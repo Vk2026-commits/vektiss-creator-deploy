@@ -214,6 +214,7 @@ Deno.serve(async (request) => {
       providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,contentReviewAccepted:decisions.filter(d=>d.outcome==='accepted').length,contentReviewRejected:decisions.filter(d=>d.outcome==='rejected').length,contentReviewUnresolved:decisions.filter(d=>d.outcome==='needs_content_review').length};
     }
     if(providerMetadata.stage==='pilot_inspection'){
+      if(Date.parse(String(providerMetadata.postReviewRetryAt))>Date.now())return reply(headers,{job},202);
       let check;try{check=await inspectPilot(String(job.id),request.headers.get('authorization')!);}catch{check={state:'failed' as const,reason:'Media inspection unavailable; watch original.'};}
       if(check.state==='pending'&&Date.now()-Date.parse(String(providerMetadata.inspectionStartedAt))<30*60*1000)return reply(headers,{job},202);
       const results=check.state==='completed'?check.results:[];
@@ -223,7 +224,17 @@ Deno.serve(async (request) => {
         if(reviewable.length){
           const reviewAt=new Date().toISOString();
           const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources',provider_metadata:{...providerMetadata,stage:'pilot_relevance_starting',postReviewStartedAt:reviewAt,postReviewSourceIds:reviewable.map(s=>s.providerSourceId),inspectionAllSources:merged.sources,inspectionCandidates:merged.candidates},updated_at:reviewAt}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claim.error)throw Error('POST_REVIEW_CLAIM');if(!claim.data)return reply(headers,{job},202);
-          const review=await startNativeVideoScreening({brief:brief.data,requestedCount:Number(job.requested_count),sources:reviewable});
+          let review:ProviderRun;
+          try{review=await startNativeVideoScreening({brief:brief.data,requestedCount:Number(job.requested_count),sources:reviewable});}
+          catch(error){
+            if(error instanceof Error&&error.message==='PROVIDER_HTTP_429'){
+              const queueStart=providerMetadata.postReviewQueueStartedAt??new Date().toISOString();
+              const next={...providerMetadata,stage:'pilot_inspection',postReviewQueueStartedAt:queueStart,postReviewRetryAt:new Date(Date.now()+30000).toISOString()};
+              if(reviewWaitExpired(queueStart)){next.stage='pilot_relevance';Object.assign(next,{postReviewRunId:undefined,postReviewSourceIds:reviewable.map(s=>s.providerSourceId),inspectionAllSources:merged.sources,inspectionCandidates:merged.candidates,relevanceReviewLimited:true});}
+              const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:'Relevance provider is rate limited; waiting to continue…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>postReviewStartedAt',reviewAt).select('*').maybeSingle();if(saved.error)throw Error('POST_REVIEW_BACKOFF');return reply(headers,{job:saved.data??job},202);
+            }
+            throw error;
+          }
           const next={...providerMetadata,stage:'pilot_relevance',postReviewRunId:review.id,postReviewSourceIds:reviewable.map(s=>s.providerSourceId),postReviewStartedAt:new Date().toISOString(),inspectionAllSources:merged.sources,inspectionCandidates:merged.candidates,reviewDiagnostics:check.state==='completed'?{inspected:check.inspectedCount,elapsedMs:check.elapsedMs,videoSampled:results.filter(r=>r.review.level==='video_sampled').length,transcriptReviewed:results.filter(r=>r.review.transcript).length,generationIds:results.flatMap(r=>r.review.generationIds)}:{inspected:0}};
           const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:'Checking audience relevance against reviewed content…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>postReviewStartedAt',reviewAt).select('*').maybeSingle();if(saved.error)throw Error('POST_REVIEW_SAVE');return reply(headers,{job:saved.data??job},202);
         }
@@ -400,6 +411,7 @@ Deno.serve(async (request) => {
     let providerRun: ProviderRun | CompletedResearchRun;
     if(inspectionRun)providerRun=inspectionRun;
     else if (providerMetadata.stage === "multi_screening") {
+      if(Date.parse(String(providerMetadata.screeningRetryAt))>Date.now())return reply(headers,{job},202);
       const runs = Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string; sourceIds: number[] }> : [];
       const results = await Promise.all(runs.map(async (run) => {
         const ids = new Set(run.sourceIds);
@@ -409,13 +421,16 @@ Deno.serve(async (request) => {
           throw error;
         }
       }));
-      const waitExpired=reviewWaitExpired(providerMetadata.screeningStartedAt??job.created_at);
-      if (results.some((result) => result.status === "queued" || result.status === "in_progress")&&!waitExpired) {
+      providerMetadata.screeningBatchReports=results.map(result=>({id:result.id,status:result.status,candidates:'candidates' in result?result.candidates.length:0}));
+      const pending=Array.isArray(providerMetadata.pendingScreeningBatches)?providerMetadata.pendingScreeningBatches as number[][]:[];
+      const waiting=results.some(result=>result.status==='queued'||result.status==='in_progress');
+      const waitExpired=(waiting&&reviewWaitExpired(providerMetadata.screeningStartedAt??job.created_at))||(pending.length>0&&reviewWaitExpired(providerMetadata.screeningQueueStartedAt));
+      if (waiting&&!waitExpired) {
         const updated = await db.from("creator_research_jobs").update({ phase: `Checking clip quality across platforms (round ${currentRound} of 3)…`, updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "researching").select("*").maybeSingle();
         return reply(headers, { job: updated.data ?? job }, 202);
       }
       const complete = results.filter((result): result is CompletedResearchRun => result.status === "completed" && "candidates" in result);
-      const pending=Array.isArray(providerMetadata.pendingScreeningBatches)?providerMetadata.pendingScreeningBatches as number[][]:[];
+
       if(waitExpired){providerMetadata.reviewLimited=true;providerMetadata.unavailableRound=currentRound;}
       if(pending.length&&!waitExpired){
         // Claim before launching: overlapping polls cannot submit the next batch twice.
@@ -427,12 +442,12 @@ Deno.serve(async (request) => {
         try{next=await startNativeVideoScreening({brief:brief.data,requestedCount:Number(job.requested_count),sources:suppliedSources!.filter(source=>ids.has(source.providerSourceId))});}
         catch(error){
           if(error instanceof Error&&error.message==='PROVIDER_HTTP_429'){
-            await db.from('creator_research_jobs').update({status:'researching',phase:'Review provider is busy; waiting to continue…'}).eq('id',job.id).eq('status','reviewing_sources');
+            await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,screeningQueueStartedAt:providerMetadata.screeningQueueStartedAt??new Date().toISOString(),screeningRetryAt:new Date(Date.now()+30000).toISOString()},phase:'Review provider is busy; waiting to continue…'}).eq('id',job.id).eq('status','reviewing_sources');
             return reply(headers,{job},202);
           }
           throw error;
         }
-        const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,screeningStartedAt:new Date().toISOString(),screeningRuns:[...runs,{id:next.id,sourceIds:pending[0]}],pendingScreeningBatches:pending.slice(1)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+        const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:{...providerMetadata,screeningStartedAt:new Date().toISOString(),screeningQueueStartedAt:undefined,screeningRetryAt:undefined,screeningRuns:[...runs,{id:next.id,sourceIds:pending[0]}],pendingScreeningBatches:pending.slice(1)},updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
         if(saved.error)throw Error(`PERSISTENCE_QUEUE_${saved.error.code}`);
         return reply(headers,{job:saved.data??job},202);
       }
