@@ -5,6 +5,13 @@ import type {ResearchBrief} from '../src/domain/research';
 const brief={sourceTopics:['AI services'],researchSourcePlatforms:['TikTok','Instagram','YouTube'],discoveryFilters:{mode:'engaged',maxAgeDays:90}} as ResearchBrief;
 const tt=(id:number)=>normalizeSC('TikTok',{aweme_id:String(id),desc:'AI paying client',author:{unique_id:'expert'},create_time:1792500000,statistics:{play_count:50000,digg_count:2000,comment_count:10},video:{duration:45000}})!;
 afterEach(()=>vi.unstubAllGlobals());
+it('uses safety profile searches instead of AI-income pilot defaults',()=>{
+ const safety={...brief,discoveryPilot:true,sourceTopics:['Practical personal-safety demonstrations'],contentPillars:['situational awareness'],audienceInterests:['personal safety'],researchSeekSituations:'',researchScreeningCriteria:'',researchSearchQueries:[]} as ResearchBrief;
+ const tasks=scrapeTasks(safety,'stephen');
+ expect(tasks.length).toBeGreaterThan(0);
+ expect(tasks.every(t=>! /AI|freelanc|income|client|revenue/i.test(t.query??''))).toBe(true);
+ expect(tasks.some(t=>/confrontation|interven|safety|security/i.test(t.query??''))).toBe(true);
+});
 it('normalizes current platform response shapes and preserves unknown counters',()=>{
  expect(tt(123).durationSeconds).toBe(45);expect(tt(123).engagement?.views).toBe(50000);
  const yt=normalizeSC('YouTube',{id:'abcdefghijk',title:'My first AI client',viewCountInt:50000});expect(yt?.engagement?.likes).toBeNull();expect(yt?.publishedAt).toBeNull();
