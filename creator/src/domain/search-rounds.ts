@@ -1,5 +1,9 @@
 import type {ProviderResearchCandidate,ResearchSource} from './research.ts';
 
+export function needsFilteredRefill(input:{pilot:boolean;filtered:boolean;sourceMode:string;accepted:number;requested:number;round:number;reviewLimited:boolean}) {
+ return !input.pilot && input.filtered && input.sourceMode==='videos' && input.accepted<input.requested && input.round<3 && !input.reviewLimited;
+}
+
 // Each provider response numbers sources independently. Preserve links when
 // merging a web-search round with previously screened native candidates.
 export function mergeSearchRound(

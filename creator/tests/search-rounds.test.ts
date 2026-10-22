@@ -1,5 +1,11 @@
 import {expect,it} from 'vitest';
-import {directVideoUrl,mergeSearchRound} from '../src/domain/search-rounds';
+import {directVideoUrl,mergeSearchRound,needsFilteredRefill} from '../src/domain/search-rounds';
+it('refills Stephen-style filtered shortfalls without bypassing bounded or pilot flows',()=>{
+ const input={pilot:false,filtered:true,sourceMode:'videos',accepted:1,requested:5,round:1,reviewLimited:false};
+ expect(needsFilteredRefill(input)).toBe(true);
+ expect(needsFilteredRefill({...input,accepted:0,round:2})).toBe(true);
+ for(const override of [{round:3},{accepted:5},{pilot:true},{filtered:false},{sourceMode:'articles'},{reviewLimited:true}])expect(needsFilteredRefill({...input,...override})).toBe(false);
+});
 it('retains prior clips and remaps colliding source ids in later rounds',()=>{
  const source={providerSourceId:1,title:'Incident',url:'https://www.instagram.com/reel/abc/',snippet:'',publishedAt:null,sourceType:'web'};
  const candidate={title:'Incident',factualSummary:'Footage',whyAudienceCares:'Safety',creatorConnection:'Security',recommendedAngle:'Explain',suggestedHook:'',category:'Safety',publishedAt:null,timelinessScore:50,relevanceScore:90,sourceIds:[1],uncertainty:'Watch'};

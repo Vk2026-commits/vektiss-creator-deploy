@@ -5,7 +5,7 @@ import {mergePool,shortlist,selectionDiagnostics,selectionReason} from '../_shar
 import {runSCTask,detailTasks,balancedSources,expansionTask,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
 import {engagementFailure,sourceCreator,creatorKey,attachBaseline} from '../../../src/domain/discovery-engagement.ts';
 import type {CreatorSource} from '../../../src/domain/discovery-pilot.ts';
-import {startWatchlistDiscovery} from '../_shared/platform-discovery.ts';
+import {startWatchlistDiscovery,startPlatformDiscovery} from '../_shared/platform-discovery.ts';
 import {inspectPilot,mergePilotEvidence} from '../_shared/discovery-inspection.ts';
 import {dedupeVideos,INSPECTION_LIMIT,canonicalVideo,videoIdentity} from '../../../src/domain/discovery-pilot.ts';
 import {providerText} from '../../../src/domain/provider-text.ts';
@@ -15,7 +15,7 @@ import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {completedSearchPhase,filteredSearchPhase} from '../../../src/domain/search-phase.ts';
-import {mergeSearchRound} from '../../../src/domain/search-rounds.ts';
+import {mergeSearchRound,needsFilteredRefill} from '../../../src/domain/search-rounds.ts';
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -582,6 +582,30 @@ Deno.serve(async (request) => {
       screeningRunIds: (Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string }> : []).map((run) => run.id),
     } : null;
     const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
+    // Filtered searches need native metrics in every round. Indexed links do
+    // not establish views/engagement, so refill through the native providers
+    // and pass the unchanged brief through the same qualification path.
+    if (needsFilteredRefill({pilot:Boolean(providerMetadata.pilot),filtered:Boolean(brief.data.discoveryFilters),sourceMode:brief.data.sourceMode,accepted:ranked.length,requested:requestedCount,round:currentRound,reviewLimited:Boolean(providerMetadata.reviewLimited)})) {
+      const nextRound = currentRound + 1;
+      const selected = brief.data.researchSourcePlatforms.filter((p): p is NativePlatform => p === 'TikTok' || p === 'Instagram' || p === 'YouTube');
+      const platforms: NativePlatform[] = [...new Set<NativePlatform>(selected.length ? selected : ['TikTok','Instagram','YouTube'])];
+      const launches = await Promise.allSettled(platforms.map(platform => startPlatformDiscovery({brief:brief.data,requestedCount,seed:String(job.id),round:nextRound,platform})));
+      const discoveryRuns = launches.flatMap(result => result.status === 'fulfilled' ? [{...result.value,state:'pending'}] : []);
+      if (discoveryRuns.length) {
+        const saved = await db.from('creator_research_jobs').update({
+          status:'researching',provider_response_id:discoveryRuns[0].id,
+          phase:`${ranked.length} of ${requestedCount} strong clips found; searching round ${nextRound} of 3 with your filters…`,
+          provider_metadata:{stage:'multi_discovery',round:nextRound,roundReports,discoveryRuns,
+            acceptedCountSoFar:ranked.length,accumulatedSources:providerRun.sources,accumulatedCandidates:providerRun.candidates,
+            accumulatedCost:providerCost(providerRun.usage)??0,launchFailures:launches.filter(result=>result.status==='rejected').length},
+          updated_at:new Date().toISOString(),
+        }).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+        if(saved.error)throw Error('PERSISTENCE_FILTERED_REFILL');
+        return reply(headers,{job:saved.data??job},202);
+      }
+      // Keep the accepted clips if every provider fails to start a refill.
+      providerMetadata.unavailableRound=nextRound;
+    }
     if (!providerMetadata.pilot && !brief.data.discoveryFilters && brief.data.sourceMode === "videos" && ranked.length < Number(job.requested_count) && currentRound < 3 && !providerMetadata.reviewLimited) {
       // A sparse or off-topic popular feed must not be the only retrieval route.
       // Use the next bounded round for domain-filtered indexed video search.
