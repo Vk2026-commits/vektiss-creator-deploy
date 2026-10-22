@@ -1,5 +1,11 @@
 import {expect,it} from 'vitest';
-import {directVideoUrl,mergeSearchRound,needsFilteredRefill,pendingReviewBatches} from '../src/domain/search-rounds';
+import {directVideoUrl,mergeSearchRound,needsFilteredRefill,pendingReviewBatches,canReviewMore} from '../src/domain/search-rounds';
+it('reviews unused pool after final rejection, stopping at target or bounded limits',()=>{
+ const input={accepted:1,requested:5,reviewed:40,remaining:49,round:1};
+ expect(canReviewMore(input)).toBe(true);
+ expect(canReviewMore({...input,reviewed:80,remaining:9,round:2})).toBe(true);
+ for(const change of [{accepted:5},{remaining:0},{reviewed:120},{round:3}])expect(canReviewMore({...input,...change})).toBe(false);
+});
 it('launches independent review batches without losing or repeating partial failures',()=>{
  const batches=[[1,2],[3,4],[5,6]];
  expect(pendingReviewBatches(batches,[true,true])).toEqual([[5,6]]);

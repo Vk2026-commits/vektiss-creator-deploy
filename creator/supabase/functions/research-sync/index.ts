@@ -15,7 +15,7 @@ import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {completedSearchPhase,filteredSearchPhase} from '../../../src/domain/search-phase.ts';
-import {mergeSearchRound,needsFilteredRefill,pendingReviewBatches} from '../../../src/domain/search-rounds.ts';
+import {mergeSearchRound,needsFilteredRefill,pendingReviewBatches,canReviewMore} from '../../../src/domain/search-rounds.ts';
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -137,8 +137,8 @@ Deno.serve(async (request) => {
       pool=pool.filter(s=>!knownIds.has(videoIdentity(s.url)));
       const remaining=40-ledger.length-(brief.data.discoveryFilters?.mode==='outliers'&&!providerMetadata.baselineRuns?5:0);
       let pending=tasks.filter(t=>!t.state);
-      const target=Math.min(40-screened.length,Math.max(Number(job.requested_count)*2,10));
-      const eligible=shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],Math.max(0,40-screened.length));
+      const target=Math.min(120-screened.length,Math.max(Number(job.requested_count)*2,10));
+      const eligible=shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],Math.max(0,Math.min(40,120-screened.length)));
       if(!pending.length&&remaining>0&&!scrapeUnavailable(ledger)&&eligible.length<target){
         const details=detailTasks(pool.filter(s=>!screened.includes(s.url)),tasks,Math.min(3,remaining),brief.data);
         const expansion=expansionTask(tasks);
@@ -146,7 +146,7 @@ Deno.serve(async (request) => {
         pending=details.length&&(!lastWasDetail||!expansion)?details:expansion?[expansion]:details;
         tasks.push(...pending);
       }
-      if(!pending.length||remaining<=0||scrapeUnavailable(ledger)||screened.length>=40){
+      if(eligible.length>=target||!pending.length||remaining<=0||scrapeUnavailable(ledger)||screened.length>=120){
         await db.from('creator_provider_costs').upsert({provider:'Scrape Creators',external_id:String(job.id),user_id:job.user_id,job_id:job.id,operation:'Discovery (credits in diagnostics)',status:scrapeUnavailable(ledger)?'LIMITED':'COMPLETED',cost_usd:null},{onConflict:'provider,external_id'});
         const next={...providerMetadata,stage:'multi_discovery',scPool:pool,scTasks:tasks,additionalSources:eligible,discoveryRuns:[],searchDiagnostics:{provider:'Scrape Creators',requests:ledger.length,credits:ledger.reduce((n,l)=>n+(l.credits??0),0),creditsRemaining:Math.min(...ledger.flatMap(l=>l.remaining===null?[]:[l.remaining])),unreportedCharges:ledger.filter(l=>l.credits===null).length,requestLimit:40,rawReturned:providerMetadata.scRawReturned??0,uniqueRetained:pool.length,stopReason:eligible.length>=target?'shortlist_ready':remaining<=0?'request_budget':scrapeUnavailable(ledger)?'provider_limited':'no_more_results'},engagementDiagnostics:selectionDiagnostics(pool,brief.data)};
         const saved=await db.from('creator_research_jobs').update({provider_metadata:next,phase:`${eligible.length} qualifying clips ready for relevance review`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').eq('provider_metadata->>stage','scrape_discovery_v2').select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_SHORTLIST');return reply(headers,{job:saved.data??job},202);
@@ -582,6 +582,25 @@ Deno.serve(async (request) => {
       screeningRunIds: (Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string }> : []).map((run) => run.id),
     } : null;
     const roundReports = currentReport ? [...priorReports, currentReport] : priorReports;
+    // Count final, deduplicated approvals, not provisional metadata matches.
+    // Reuse the already-paid candidate pool after content review rejects clips.
+    if(providerMetadata.selectionVersion===2){
+      const screened=providerMetadata.scScreenedUrls as string[]??[];
+      const unused=shortlist(nativeSources(providerMetadata.scPool),brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],40);
+      if(canReviewMore({accepted:ranked.length,requested:requestedCount,reviewed:screened.length,remaining:unused.length,round:currentRound})){
+        const next={...providerMetadata,stage:'scrape_discovery_v2',round:currentRound+1,roundReports,
+          accumulatedSources:providerRun.sources,accumulatedCandidates:ranked.map(r=>providerResearchCandidateSchema.strip().parse(r)),accumulatedCost:providerCost(providerRun.usage)??0,
+          pilotReviewed:false,scInFlight:[],reviewLimited:false,unavailableRound:undefined,
+          inspectionSources:undefined,inspectionAllSources:undefined,inspectionCandidates:undefined,
+          postReviewRunId:undefined,postReviewSourceIds:undefined,postReviewRetryAt:undefined,postReviewQueueStartedAt:undefined,
+          screeningRuns:[],pendingScreeningBatches:[],screeningQueueStartedAt:undefined,screeningRetryAt:undefined};
+        const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,
+          phase:`${ranked.length} of ${requestedCount} strong clips found; reviewing more existing candidates…`,updated_at:new Date().toISOString()})
+          .eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+        if(saved.error)throw Error('PERSISTENCE_POOL_REFILL');
+        return reply(headers,{job:saved.data??job},202);
+      }
+    }
     // Filtered searches need native metrics in every round. Indexed links do
     // not establish views/engagement, so refill through the native providers
     // and pass the unchanged brief through the same qualification path.

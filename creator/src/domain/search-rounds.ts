@@ -6,6 +6,10 @@ export function pendingReviewBatches<T>(batches:T[][],launched:boolean[]):T[][] 
  return batches.filter((_,index)=>launched[index]!==true);
 }
 
+export function canReviewMore(input:{accepted:number;requested:number;reviewed:number;remaining:number;round:number}) {
+ return input.accepted<input.requested && input.reviewed<120 && input.remaining>0 && input.round<3;
+}
+
 export function needsFilteredRefill(input:{pilot:boolean;filtered:boolean;sourceMode:string;accepted:number;requested:number;round:number;reviewLimited:boolean}) {
  return !input.pilot && input.filtered && input.sourceMode==='videos' && input.accepted<input.requested && input.round<3 && !input.reviewLimited;
 }
