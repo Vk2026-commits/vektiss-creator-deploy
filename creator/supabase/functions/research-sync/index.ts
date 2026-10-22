@@ -15,7 +15,7 @@ import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {completedSearchPhase,filteredSearchPhase} from '../../../src/domain/search-phase.ts';
-import {mergeSearchRound,needsFilteredRefill} from '../../../src/domain/search-rounds.ts';
+import {mergeSearchRound,needsFilteredRefill,pendingReviewBatches} from '../../../src/domain/search-rounds.ts';
 import {
   canonicalResearchUrl,
   providerResearchCandidateSchema,
@@ -379,7 +379,7 @@ Deno.serve(async (request) => {
       const batchSize = 22;
       const batches = Array.from({ length: Math.ceil(freshSources.length / batchSize) }, (_, index) => freshSources.slice(index * batchSize, (index + 1) * batchSize));
       const batchTarget = Math.max(3, Math.ceil(Number(job.requested_count) / batches.length) + 2);
-      const started = await Promise.allSettled(batches.slice(0,1).map((sources) =>
+      const started = await Promise.allSettled(batches.slice(0,2).map((sources) =>
         startNativeVideoScreening({ brief: brief.data, requestedCount: batchTarget, sources })));
       const screeningRuns = started.flatMap((result, index) => result.status === "fulfilled"
         ? [{ id: result.value.id, status: result.value.status, sourceIds: batches[index].map((source) => source.providerSourceId) }] : []);
@@ -391,7 +391,7 @@ Deno.serve(async (request) => {
           ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
           discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map(discoveryDiagnostics) : [discoveryDiagnostics({id:job.provider_response_id,platform:"TikTok",...discovery})],
           screeningStartedAt:new Date().toISOString(),screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
-          pendingScreeningBatches:batches.slice(screeningRuns.length?1:0).map(sources=>sources.map(source=>source.providerSourceId)),
+          pendingScreeningBatches:pendingReviewBatches(batches,started.map(result=>result.status==='fulfilled')).map(sources=>sources.map(source=>source.providerSourceId)),
           nativeSources: compactSources, retainedCandidates: priorCandidates,
           accumulatedSources: undefined, accumulatedCandidates: undefined,
           discoveredSourceCount: uniqueSources.length, freshSourceCount: freshSources.length, freshByPlatform,

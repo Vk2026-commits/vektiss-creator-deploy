@@ -1,5 +1,11 @@
 import type {ProviderResearchCandidate,ResearchSource} from './research.ts';
 
+// Two bounded requests run together; retain precisely the batches which did
+// not launch (including a partially rate-limited launch), never re-submit IDs.
+export function pendingReviewBatches<T>(batches:T[][],launched:boolean[]):T[][] {
+ return batches.filter((_,index)=>launched[index]!==true);
+}
+
 export function needsFilteredRefill(input:{pilot:boolean;filtered:boolean;sourceMode:string;accepted:number;requested:number;round:number;reviewLimited:boolean}) {
  return !input.pilot && input.filtered && input.sourceMode==='videos' && input.accepted<input.requested && input.round<3 && !input.reviewLimited;
 }

@@ -1,5 +1,13 @@
 import {expect,it} from 'vitest';
-import {directVideoUrl,mergeSearchRound,needsFilteredRefill} from '../src/domain/search-rounds';
+import {directVideoUrl,mergeSearchRound,needsFilteredRefill,pendingReviewBatches} from '../src/domain/search-rounds';
+it('launches independent review batches without losing or repeating partial failures',()=>{
+ const batches=[[1,2],[3,4],[5,6]];
+ expect(pendingReviewBatches(batches,[true,true])).toEqual([[5,6]]);
+ expect(pendingReviewBatches(batches,[false,true])).toEqual([[1,2],[5,6]]);
+ expect(pendingReviewBatches(batches,[true,false])).toEqual([[3,4],[5,6]]);
+ expect(pendingReviewBatches(batches,[false,false])).toEqual(batches);
+ expect(pendingReviewBatches(batches.slice(0,2),[true,true])).toEqual([]);
+});
 it('refills Stephen-style filtered shortfalls without bypassing bounded or pilot flows',()=>{
  const input={pilot:false,filtered:true,sourceMode:'videos',accepted:1,requested:5,round:1,reviewLimited:false};
  expect(needsFilteredRefill(input)).toBe(true);
