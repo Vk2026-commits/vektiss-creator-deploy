@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {TemplateChooser} from './TemplateChooser';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
 import {mediaFetch} from '../lib/media-fetch';
 import './edit-studio.css';
@@ -89,7 +90,7 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
   </fieldset>
   <fieldset disabled={busy}><legend>3. Choose your direction</legend>
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
-   {editTemplates.map(t=><label key={t.id} style={{display:'block',padding:'12px 0'}}><input type="radio" name="edit-style" checked={template===t.id} onChange={()=>{setTemplate(t.id);setPlan(null);}}/> <strong>{t.name}</strong> — {t.description}</label>)}
+   <TemplateChooser brand={brandValid?brand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
   </fieldset>
   <p>Generating a plan sends speech to the AI provider for transcription and planning and may incur a processing charge. It does not render a video or generate an avatar.</p>
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
