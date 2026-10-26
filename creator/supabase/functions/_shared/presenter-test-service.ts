@@ -70,7 +70,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   }
   const {data:script,error}=await db.from('creator_scripts').select('*').eq('id',command.script_id).eq('user_id',user).single();
   const plan=script?.brief?.production;
-  if(plan?.screenshot_story)validateStoryScript(plan.screenshot_story,fullScript(script));
+  if(plan?.screenshot_story&&!plan.setting)validateStoryScript(plan.screenshot_story,fullScript(script));
   if(error||!script||plan?.step!=='saved'||!plan.approved_at||plan.presenter!=='avatar')throw new PublicError('SAVE_PLAN','Save an approved avatar video plan first.',409);
   const {data:avatar,error:avatarError}=await db.from('avatar_profiles').select('*').eq('id',plan.avatar_id).eq('user_id',user).single();
   if(avatarError||!avatar||avatar.status!=='ready'||(!avatar.provider_voice_id&&!plan.voice?.id))throw new PublicError('AVATAR','Choose a ready presenter with a voice.',409);
