@@ -3,6 +3,7 @@ import {editTemplates} from '../domain/edit-templates';
 import type {EditBrand} from '../domain/edit-brand';
 import {templateSample,templateSampleSource} from '../domain/edit-template-samples';
 import {EditComposition} from './EditComposition';
+import {HyperframesSample} from './HyperframesSample';
 import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 
 const samples=editTemplates.map(t=>({...t,proposal:templateSample(t.id)}));
@@ -24,7 +25,7 @@ export function TemplateChooser({brand,selected,onSelect,aspectRatio='9:16'}:{br
  },[playing,replay]);
  function play(id:string){setFrame(0);setPlaying(id);setReplay(n=>n+1);}
  return <><p>Hover to preview five seconds, or tap Preview. Choose a style separately. Samples use your colors and captions; no AI calls or charges.</p><div className="template-grid">{samples.map((t,i)=><article className={`template-card ${selected===t.id?'is-selected':''}`} key={t.id} onPointerEnter={e=>{if(e.pointerType==='mouse'&&!reduced)play(t.id);}} onPointerLeave={()=>setPlaying(current=>current===t.id?null:current)}>
-  <div ref={i===0?root:undefined} className="template-demo" style={{aspectRatio:aspectRatio==='16:9'?'16/9':'9/16'}} aria-label={`${t.name} illustrative sample`}><div aria-hidden="true" style={{...dimensions,position:'relative',transform:`scale(${width/dimensions.width})`,transformOrigin:'top left'}}><EditComposition source={templateSampleSource} proposal={{...t.proposal,aspectRatio}} brand={brand} frame={playing===t.id?frame:45} media={placeholder}/></div></div>
+  <div ref={i===0?root:undefined} className="template-demo" style={{aspectRatio:aspectRatio==='16:9'?'16/9':'9/16'}} aria-label={`${t.name} illustrative sample`}><div aria-hidden="true" style={{...dimensions,position:'relative',transform:`scale(${width/dimensions.width})`,transformOrigin:'top left'}}>{t.id==='hyperframes-motion'?<HyperframesSample brand={brand} aspectRatio={aspectRatio} frame={playing===t.id?frame:45}/>:<EditComposition source={templateSampleSource} proposal={{...t.proposal,aspectRatio}} brand={brand} frame={playing===t.id?frame:45} media={placeholder}/>}</div></div>
   <h3>{t.name}</h3><p>{t.description}</p>
   <button type="button" className="button" onClick={()=>play(t.id)} aria-label={`Preview ${t.name}`}>Preview · 5 sec</button>
   {playing===t.id&&<button type="button" onClick={()=>setPlaying(null)}>Stop preview</button>}

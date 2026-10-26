@@ -9,6 +9,7 @@ import {editSourceSchema,validateEditProposal} from '../src/domain/edit-template
 import {mediaBinary} from './media-binaries';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 import {editDimensions} from '../src/domain/edit-format';
+import {hyperframesProject} from '../src/domain/hyperframes-project';
 const exec=promisify(execFile);
 export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),approvePreview:z.literal(true).optional()}).strict();
 export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},_receipt?:{version:number}|null){
@@ -32,8 +33,9 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent}),{mode:0o600});
-  await exec(process.execPath,[resolve(process.cwd(),'render/run.mjs'),jobFile],{timeout:1200000,maxBuffer:1024*1024});
+  const hyperframes=proposal.templateId==='hyperframes-motion';
+  await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand)}:{})}),{mode:0o600});
+  await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:1200000,maxBuffer:1024*1024});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);

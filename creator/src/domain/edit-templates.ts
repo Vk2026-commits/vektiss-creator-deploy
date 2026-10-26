@@ -1,8 +1,9 @@
 import {z} from 'zod';
 import {editAspectRatio} from './edit-format.ts';
 
-export const editTemplateId=z.enum(['premium-explainer','tier-list','walkthrough']);
+export const editTemplateId=z.enum(['premium-explainer','tier-list','walkthrough','hyperframes-motion']);
 export const editTemplates=[
+ {id:'hyperframes-motion',name:'HyperFrames Motion',description:'Animated statement cards, bold comparisons, and word-timed reveals alongside your presenter.',direction:'Use source-led headlines, concise animated cards, comparisons, statistics, and spotlight statements. Preserve the original presenter and speech. Prefer 2–3 short labels per scene, never invent numbers or claims. These are HTML motion scenes rendered with HyperFrames, not stock footage.'},
  {id:'premium-explainer',name:'Premium Explainer',description:'Topic-specific diagrams, purposeful motion, and a bottom presenter.',direction:'Choose an explanatory relationship from the actual speech. Prefer white/navy/blue, original diagrams, and a bottom presenter. Head-above-frame requires a verified matte. Vary layouts only when the idea benefits.'},
  {id:'tier-list',name:'Tier List',description:'Full-screen presenter, animated options, and a lower ranking board.',direction:'Keep the presenter full screen with a lower board. Introduce each option above the head, then move it into its stated tier. Reveal S last only when the source order permits it without cutting speech. Never invent or change ratings.'},
  {id:'walkthrough',name:'Walkthrough',description:'Clear screen actions, focused highlights, and restrained graphics.',direction:'Preserve important screen actions and demonstrations. Use supplied screen evidence; do not fabricate interfaces. Prefer a clear screen crop and restrained highlights over decorative graphics.'},
