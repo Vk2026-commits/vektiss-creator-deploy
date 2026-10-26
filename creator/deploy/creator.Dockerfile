@@ -28,6 +28,8 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/hosted.mjs ./hosted.mjs
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/render ./render
+COPY --from=build --chown=node:node /app/src/components/EditComposition.tsx ./src/components/EditComposition.tsx
+COPY --from=build --chown=node:node /app/src/domain ./src/domain
 RUN mkdir /data && chown node:node /data
 USER node
 ENV NODE_ENV=production PORT=8080 CREATOR_MEDIA_BIN=/usr/bin CREATOR_DATA_DIR=/data
