@@ -37,6 +37,7 @@ export async function createSavedDraft(input:unknown,authorization:string,config
  }
  if(action==='summarize'){
   next={...next,title:suggestedVideoTitle(next.title,result.title),brief:{...brief,source:result.source,source_summary:result.summary,stage:'source',clarified:false,questions:[],summary:'',production:undefined}};
+  if(brief.template_workflow){next.brief.stage='perspective';await save();return snapshot;}
   if(!snapshot.body.trim())await save();action='generate';result=await ai(action,next.brief);
  }else if(action==='clarify'){
   const questions=z.array(z.string().max(1000)).parse(result.questions);

@@ -26,6 +26,9 @@ export function speechIdentity(s:ScriptInput){
  const p={...s.brief.production} as Record<string,unknown>;
  for(const key of ['step','approved_at','render','voice_preview_approval','avatar_preview','article_capture','video_background','background_framing','presenter_position','presenter_size','presenter_placement','presenter_sizing','presenter_framing','presenter_framing_amount','presenter_framing_position','visual_notes','captions','style'])delete p[key];
  p.voice_engine??='auto';p.voice_speed??=1;
+ delete p.edit_template;delete p.edit_brand;delete p.studio_background;
+ // Only original-setting footage differs from a reusable transparent cutout.
+ p.setting=p.setting==='original'?'original':'cutout';
  return JSON.stringify({hook:s.hook,body:s.body,cta:s.cta,profile:s.content_profile_id,settings:Object.fromEntries(Object.entries(p).sort(([a],[b])=>a.localeCompare(b)))});
 }
 export function reusablePresenter(parent:Script|undefined,draft:ScriptInput){

@@ -95,7 +95,9 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // A new test revision is needed to certify the current look. Full-render
   // revisions remain unchanged so existing paid outputs are still recoverable.
   if(scope==='test')Object.assign(snapshot,{verification_version:1,look_thumbnail_url:avatar.thumbnail_url});
+  if(scope==='full'&&plan.setting==='original')Object.assign(snapshot,{background_mode:'original'});
   if(!snapshot.script.trim())throw new PublicError('SCRIPT','The script is empty.');
+  if(scope==='full'&&plan.edit_template&&snapshot.script.trim().split(/\s+/).length>400)throw new PublicError('SCRIPT','Template videos support up to three minutes. Shorten this script to 400 words or fewer before rendering.');
   // Size, article and save timestamps do not change the paid presenter asset.
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify({connection_id:avatar.connection_id,snapshot})));
   const revision=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
@@ -105,7 +107,7 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   const verification=await avatarVerification(db,user,avatar,plan.avatar_engine??'avatar_iv',snapshot.aspect_ratio);
   if(command.action==='prepare_test')return {revision,snapshot,estimate,verification,job:prior.data?await displayJob(prior.data):null,estimated_seconds:Math.ceil(snapshot.script.split(/\s+/).length/2.5)};
   if(command.revision!==revision)throw new PublicError('STALE','The saved plan or presenter changed. Review the test again.',409);
-  if(scope==='full'&&!verification&&!command.unverified_background_acknowledged&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose an optional paid test or acknowledge the unverified avatar background before confirming the full paid video.',409);
+  if(scope==='full'&&plan.setting!=='original'&&!verification&&!command.unverified_background_acknowledged&&(!prior.data||prior.data.status==='failed'))throw new PublicError('AVATAR_TEST_REQUIRED','Choose an optional paid test or acknowledge the unverified avatar background before confirming the full paid video.',409);
   if(prior.data){
    if(!command.retry_of||prior.data.id!==command.retry_of||prior.data.status!=='failed')return displayJob(prior.data);
    // Retain the failed attempt for audit; atomically free the revision for one new reservation.
@@ -118,12 +120,12 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
   // Read credentials BEFORE reserving, but reserve durably BEFORE any paid call.
   const key=await keyFor(user,avatar.connection_id);
   const id=crypto.randomUUID();
-  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate,...(scope==='full'&&!verification?{unverified_background_acknowledged_at:new Date().toISOString()}:{}),...(scope==='full'&&verification?{verified_frame:verification}: {})}}).select('*').single();
+  const reserved=await db.from('creator_presenter_tests').insert({id,user_id:user,script_id:script.id,revision,connection_id:avatar.connection_id,snapshot:{...snapshot,cost_estimate:estimate,...(scope==='full'&&plan.setting!=='original'&&!verification?{unverified_background_acknowledged_at:new Date().toISOString()}:{}),...(scope==='full'&&verification?{verified_frame:verification}: {})}}).select('*').single();
   if(reserved.error)throw new PublicError('EXISTS','A test may already be starting. Refresh its status; do not submit again.',409);
   try{
    const result=await providerVideo(key,'',testPayload(snapshot));
    if(typeof result.video_id!=='string'||!result.video_id)throw Error('UNKNOWN_SUBMISSION');
-   const saved=await db.from('creator_presenter_tests').update({provider_video_id:result.video_id,status:'pending',output_format:typeof result.output_format==='string'?result.output_format:null,message:result.output_format==='webm'?null:'Provider format not confirmed. Inspect output before using it as a cutout.'}).eq('id',id).select('*').single();
+   const saved=await db.from('creator_presenter_tests').update({provider_video_id:result.video_id,status:'pending',output_format:typeof result.output_format==='string'?result.output_format:null,message:result.output_format==='webm'||plan.setting==='original'?null:'Provider format not confirmed. Inspect output before using it as a cutout.'}).eq('id',id).select('*').single();
    if(saved.error)throw Error('STORAGE');return saved.data;
   }catch(error){
    const rejected=error instanceof PublicError&&error.code==='RENDER_REJECTED';

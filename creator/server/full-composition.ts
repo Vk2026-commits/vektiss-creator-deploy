@@ -18,7 +18,7 @@ import {storyBackground} from './story-background';
 import {backgroundFilter} from '../src/domain/background-framing';
 import {reusablePresenter} from '../src/domain/video-versions';
 const exec=promisify(execFile);
-export const fullCompositionSchema=composeSchema.extend({capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional(),presenter_framing_position:z.number().int().min(0).max(100).optional()}).strict().refine(c=>[c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
+export const fullCompositionSchema=composeSchema.extend({original_setting:z.literal(true).optional(),capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional(),presenter_framing_position:z.number().int().min(0).max(100).optional()}).strict().refine(c=>[c.original_setting,c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
 export function alphaBounds(log:string,w:number,h:number,padding=8){
  const boxes=[...log.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].map(m=>m.slice(1).map(Number));
  if(!boxes.length)throw Error('No transparent presenter detected.');
@@ -75,6 +75,15 @@ export async function fullComposition(root:string,input:unknown,authorization:st
  const ffmpeg=mediaBinary('ffmpeg');const ffprobe=mediaBinary('ffprobe');
  const probe=JSON.parse((await exec(ffprobe,['-v','error','-show_streams','-show_format','-of','json',source])).stdout);
  const stream=probe.streams.find((s:{codec_type:string})=>s.codec_type==='video');
+ if(c.original_setting){
+  if(job.snapshot?.background_mode!=='original')throw Error('This saved render is a cutout, not an original-setting video. Your footage is preserved.');
+  const duration=Number(probe.format.duration);if(!Number.isFinite(duration)||duration<=0||duration>1200||!stream||!probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio'))throw Error('Unsupported original-setting video: expected video with audio.');
+  if(String(stream.tags?.alpha_mode??stream.tags?.ALPHA_MODE)==='1'||/yuva|rgba|bgra/.test(stream.pix_fmt??''))throw Error('Provider returned a cutout instead of the original setting. No replacement render was started.');
+  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
+  const temp=resolve(folder,`${id}.partial.mp4`);
+  await exec(ffmpeg,['-v','error','-y','-i',source,'-vf',`scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,setsar=1`,'-map','0:v:0','-map','0:a:0','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-movflags','+faststart',temp],{timeout:600000});
+  await rename(temp,output);const result={id,script_id:c.script_id,job_id:c.job_id,format:c.format,setting:'original',duration,created_at:new Date().toISOString()};await writeFile(meta,JSON.stringify(result),{mode:0o600});return result;
+ }
  if(stream?.codec_name!=='vp9'||String(stream.tags?.alpha_mode??stream.tags?.ALPHA_MODE)!=='1')throw Error('Transparent VP9 presenter required; no new paid render was started.');
  const cleanup=presenterCleanup(c.job_id,sourceBytes,stream.width,stream.height);
  const duration=Number(probe.format.duration);if(!Number.isFinite(duration)||duration<=0||duration>1200)throw Error('Unsupported presenter duration.');

@@ -7,6 +7,7 @@ import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 import {researchSourceSchema} from './research.ts';
 export const briefSchema = z.object({
+  template_workflow:z.boolean().optional(),
   delivery_preferences:deliveryProfileSchema.optional(),
   cta_override:ctaSchema.nullable().optional(),
   cta_selection:ctaSelectionSchema.optional(),

@@ -46,8 +46,8 @@ function SavedVideo({jobId,scriptId,plan,sourceKind='article'}:FinishedProps){
   const loader=useRef<(()=>Promise<string>)|null>(null),controllerRef=useRef<AbortController|null>(null),action=useRef(false);
   const lastAction=useRef<'play'|'download'>('play');
   const [download,setDownload]=useState<{received:number;total:number|null}|null>(null);
-  const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
-  const presenterOnly=sourceKind==='article'&&!captureId;
+  const captureId=plan.setting==='studio'?plan.studio_background?.id:sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
+  const presenterOnly=plan.setting==='original'||sourceKind==='article'&&!captureId;
   const savedExportId=completedExportId(plan);
   useEffect(()=>{if(!captureId&&!presenterOnly)return;const controller=new AbortController();controllerRef.current=controller;let posterUrl='';let live=true;setUrl('');setPoster('');setError('');setDownload(null);setReady(false);loader.current=null;
   function openExport(exportId:string){

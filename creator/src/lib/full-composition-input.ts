@@ -5,6 +5,10 @@ import {storyRevisionInput} from '../domain/screenshot-story';
 export type CompositionSourceKind='article'|'video'|'graphic';
 
 export async function fullCompositionInput({jobId,scriptId,plan,sourceKind}:{jobId:string;scriptId:string;plan:VideoPlan;sourceKind:CompositionSourceKind}){
+ if(plan.setting){
+  if(plan.setting==='studio'&&!plan.studio_background)throw Error('Choose your studio background before exporting.');
+  return {job_id:jobId,script_id:scriptId,...(plan.setting==='original'?{original_setting:true}:{capture_id:plan.studio_background!.id,background_framing:plan.background_framing}),size:plan.presenter_size,position:plan.presenter_position,format:plan.format,...(plan.setting==='studio'?{placement:plan.presenter_placement,presenter_framing:plan.presenter_framing,presenter_framing_amount:plan.presenter_framing_amount,presenter_framing_position:plan.presenter_framing_position}:{})};
+ }
  const captureId=sourceKind==='video'?plan.video_background?.id:plan.article_capture?.id;
  const presenterOnly=sourceKind==='article'&&!captureId;
  const storyRevision=plan.screenshot_story

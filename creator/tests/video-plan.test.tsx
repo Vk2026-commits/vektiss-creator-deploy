@@ -8,7 +8,7 @@ import { scriptSchema } from '../src/domain/scripts';
 const script=scriptSchema.parse({content_profile_id:'profile',title:'Test',hook:'A hook',body:'A clear message.',cta:'Save this.'});
 const props={script,preview:true,busy:false,onChange:()=>{},onSave:()=>{},onEdit:()=>{}};
 it('keeps presenter selection and placement visible for video sources',()=>{
- const html=renderToStaticMarkup(<VideoPlan {...props} script={{...script,brief:{...script.brief,kind:'video'}}} plan={{...newVideoPlan(),step:'visuals',presenter_size:65}}/>);
+ const html=renderToStaticMarkup(<VideoPlan {...props} script={{...script,brief:{...script.brief,kind:'video'}}} plan={{...newVideoPlan(),presenter:'avatar',step:'visuals',presenter_size:65}}/>);
  expect(html).toContain('presenter-picker');
  expect(html).not.toContain('<summary>Presenter:');
  for(const position of ['Bottom left','Bottom middle','Bottom right'])expect(html).toContain(position);
@@ -23,7 +23,7 @@ it('loads older plans with a safe presenter placement default',()=>{
  expect(videoPlanSchema.safeParse({...older,presenter_position:'top-center'}).success).toBe(false);
 });
 it('shows gesture controls and clearly labels the screenshot preview boundary',()=>{
- const html=renderToStaticMarkup(<VideoPlan {...props} plan={{...newVideoPlan(),step:'visuals'}}/>);
+ const html=renderToStaticMarkup(<VideoPlan {...props} plan={{...newVideoPlan(),presenter:'avatar',step:'visuals'}}/>);
  for(const position of ['Bottom left','Bottom middle','Bottom right'])expect(html).toContain(position);
  expect(html).toContain('Capture article screenshot');
  expect(html).toContain('Preview a mobile screenshot');

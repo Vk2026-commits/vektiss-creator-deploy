@@ -1,5 +1,6 @@
 import {reviewDiscovery} from './discovery-review';
 import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
+import {readStudio,saveStudio} from './studio-setting';
 import {renderTemplatePlan} from './template-render';
 import {readEditBrand,saveEditBrand} from './edit-brand';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
@@ -127,6 +128,11 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(path.startsWith(`${prefix}/template-`)&&process.env.CREATOR_EDIT_STUDIO!=='true')return json(res,503,{error:'Edit Studio is not enabled on this server.'});
+   if(path===`${prefix}/template-studio`){
+    if(req.method==='GET')return json(res,200,await readStudio(root));
+    if(req.method==='PUT'){const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>8192)return json(res,413,{error:'Studio settings are too large.'});chunks.push(chunk);}try{return json(res,200,await saveStudio(root,JSON.parse(Buffer.concat(chunks).toString())));}catch{return json(res,400,{error:'Studio could not save. Reload and select an uploaded image owned by this account.'});}}
+    return json(res,405,{error:'Method not allowed'});
+   }
    if(path===`${prefix}/template-brand`){
     if(req.method==='GET')return json(res,200,await readEditBrand(root));
     if(req.method==='PUT'){
@@ -200,7 +206,7 @@ export function hostedHandler(c:HostingConfig){
      try{
       if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input);
       else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
-      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id']},authorization,c);
+      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
       else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
       else if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);

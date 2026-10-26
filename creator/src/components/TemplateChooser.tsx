@@ -8,7 +8,7 @@ const samples=editTemplates.map(t=>({...t,proposal:templateSample(t.id)}));
 const placeholder=<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color:'#fff',background:'#27364b'}}><svg width="300" height="380" viewBox="0 0 300 380"><circle cx="150" cy="90" r="65" fill="#a7b6c9"/><path d="M20 370V250a130 130 0 0 1 260 0v120" fill="#7c8fa9"/></svg><span style={{fontSize:30}}>SAMPLE PRESENTER</span></div>;
 export function TemplateChooser({brand,selected,onSelect}:{brand:EditBrand;selected:string;onSelect:(id:string)=>void}){
  const [playing,setPlaying]=useState<string|null>(null),[frame,setFrame]=useState(45),[replay,setReplay]=useState(0);
- const [reduced,setReduced]=useState(()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+ const [reduced,setReduced]=useState(()=>typeof window!=='undefined'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
  const root=useRef<HTMLDivElement>(null),[width,setWidth]=useState(210);
  useEffect(()=>{const query=window.matchMedia('(prefers-reduced-motion: reduce)');const change=()=>{setReduced(query.matches);setPlaying(null);};query.addEventListener('change',change);return()=>query.removeEventListener('change',change);},[]);
  useEffect(()=>{const observer=new ResizeObserver(entries=>setWidth(entries[0].contentRect.width));if(root.current)observer.observe(root.current);return()=>observer.disconnect();},[]);

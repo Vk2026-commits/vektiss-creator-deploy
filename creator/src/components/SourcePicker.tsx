@@ -81,8 +81,8 @@ export function SourcePicker({brief,profileId,disabled,busy=false,scope,onSource
   setConflict(false);recoveryWrite(key,JSON.stringify(checkpoint));void run(checkpoint,upload);
  }
 if((storyFiles.length||brief.screenshot_story||recoveryRead(`${key}:story-pending`))&&onStory)return <ScreenshotStory files={storyFiles} initial={brief.screenshot_story} notes={text} profileId={profileId} projectId={brief.cost_project_id} scope={key} onProcessing={onProcessing} onSave={screenshot_story=>onSource({kind:'graphic',screenshot_story,notes:text,url:'',prepared_source:undefined,graphic_capture:undefined})} onComplete={onStory} onCancel={()=>{setStoryFiles([]);recoveryWrite(`${key}:story-pending`,null);onSource({screenshot_story:undefined});}}/>;
- return <section aria-label="Add your reaction source" aria-busy={!!working} className="reaction-source-picker">
-  {!working&&<h2 ref={reviewHeading} tabIndex={-1} className="source-review-heading">{resolved?'Review your source':'What would you like to react to?'}</h2>}
+ return <section aria-label={brief.template_workflow?'Add your research source':'Add your reaction source'} aria-busy={!!working} className="reaction-source-picker">
+  {!working&&<h2 ref={reviewHeading} tabIndex={-1} className="source-review-heading">{resolved?'Review your source':brief.template_workflow?'What would you like to talk about?':'What would you like to react to?'}</h2>}
   {working?null:!resolved?<><div className="source-composer" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();selectFiles(Array.from(e.dataTransfer.files));}}>
    {file&&<div className="source-attachment"><MediaPreview file={file}/><span>{file.name}</span><button type="button" aria-label="Remove attachment" disabled={locked} onClick={()=>{setFile(null);setConflict(false);}}>×</button></div>}
    <textarea aria-label="Source link and optional direction" placeholder="Paste a link or add a video or screenshot…" rows={3} maxLength={12000} value={text} disabled={locked} onChange={e=>{setText(e.target.value);setConflict(false);}} onPaste={e=>{const files=Array.from(e.clipboardData.files);if(files.length){e.preventDefault();selectFiles(files);}}}/>

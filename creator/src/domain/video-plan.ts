@@ -3,6 +3,7 @@ import {voiceEngineSchema,voiceSpeedSchema} from './voice-settings.ts';
 import {avatarFramingSchema} from './avatar-framing.ts';
 import {screenshotStorySchema} from './screenshot-story.ts';
 import {backgroundFramingSchema} from './background-framing.ts';
+import {editBrandSchema} from './edit-brand.ts';
 export const presenterPositions=['bottom-left','bottom-center','bottom-right','middle-left','middle-right'] as const;
 export const graphicCaptureSchema=z.object({id:z.string().uuid(),title:z.string().max(2000),source_url:z.string().max(2000),caption:z.string().max(2000).optional(),context:z.string().max(4000).optional()});
 // Anchors may extend outside the frame; the canvas/export crops the overflow.
@@ -35,6 +36,10 @@ export function videoRenderProgress(render:VideoRender|undefined){
  return states[render.status];
 }
 export const videoPlanSchema=z.object({
+ setting:z.enum(['original','studio']).optional(),
+ studio_background:graphicCaptureSchema.optional(),
+ edit_template:z.enum(['recommend','premium-explainer','tier-list','walkthrough']).optional(),
+ edit_brand:editBrandSchema.optional(),
  step:z.enum(['approve','presenter','visuals','review','saved']),
  approved_at:z.string().nullable(),
  presenter:z.enum(['self','avatar']),

@@ -13,7 +13,7 @@ import {readEditBrand} from './edit-brand';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
-export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional()}).strict();
+export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional()}).strict();
 
 // root is supplied by the authenticated hosted router, never by the caller.
 export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string}){
@@ -42,7 +42,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
- const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,2])).digest('hex');
+ const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,2,...(options.brand?[options.brand]:[])])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));
@@ -50,7 +50,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
  const output=await response.json(),proposal=editProposalSchema.parse(output.proposal);
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
- const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
+ const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
  const temp=`${saved}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;
 }

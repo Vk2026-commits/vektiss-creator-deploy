@@ -6,6 +6,7 @@ import {sourceWorkflow} from './source-workflow';
 import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
 import {renderTemplatePlan} from './template-render';
 import {readEditBrand,saveEditBrand} from './edit-brand';
+import {readStudio,saveStudio} from './studio-setting';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {captureArticle} from './article-capture';
@@ -28,6 +29,9 @@ export function capturePlugin():Plugin{
    try{
     if(path.startsWith('/api/local-capture/template-')){
      if(process.env.CREATOR_EDIT_STUDIO!=='true'){res.statusCode=503;res.end(JSON.stringify({error:'Edit Studio is not enabled on this server.'}));return;}
+     if(path.endsWith('/template-studio')&&(req.method==='GET'||req.method==='PUT')){
+      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>8192)throw Error('Studio settings are too large.');chunks.push(chunk);}res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='GET'?await readStudio(server.config.root):await saveStudio(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));return;
+     }
      if(path.endsWith('/template-brand')&&(req.method==='GET'||req.method==='PUT')){
       const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)throw Error('Brand settings are too large.');chunks.push(chunk);}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='GET'?await readEditBrand(server.config.root):await saveEditBrand(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));return;
@@ -58,7 +62,7 @@ export function capturePlugin():Plugin{
       await mkdir(directory,{recursive:true});const body=Buffer.concat(chunks);await writeFile(file,body,{mode:0o600});
       const handler=path.endsWith('/source-resolve')?resolveSource:path.endsWith('/source-workflow')?sourceWorkflow:graphicSource;
       const config={supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY};
-      const result=path.endsWith('/template-edit')?await templateEdit(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id']},req.headers.authorization??'',config):await handler(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',config);
+      const result=path.endsWith('/template-edit')?await templateEdit(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},req.headers.authorization??'',config):await handler(server.config.root,file,type,type==='application/json'?JSON.parse(body.toString()):null,req.headers['x-profile-id'],req.headers.authorization??'',config);
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
      }catch(e){res.statusCode=422;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e instanceof Error?e.message:'Could not save graphic.'}));}
      finally{active=false;await unlink(file).catch(()=>{});}return;

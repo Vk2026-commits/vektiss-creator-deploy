@@ -6,21 +6,21 @@ import './edit-studio.css';
 import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../domain/edit-brand';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
-export function EditStudio({profileId,preview=false}:{profileId:string|null;preview?:boolean}){
+export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:()=>void}){
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
- const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState('');
- const [template,setTemplate]=useState('recommend'),[plan,setPlan]=useState<Plan|null>(null);
+ const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
+ const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;mode:string;version:number}|null>(null);
  const [approved,setApproved]=useState(false);
  const pending=useRef(false);
- const [brand,setBrand]=useState<EditBrand>(defaultEditBrand);
+ const [brand,setBrand]=useState<EditBrand>(initialBrand??defaultEditBrand);
  const [brandRecord,setBrandRecord]=useState({version:0,savedAt:'',brand:defaultEditBrand});
  const [brandLoaded,setBrandLoaded]=useState(preview);
  const brandDirty=JSON.stringify(brand)!==JSON.stringify(brandRecord.brand);
  const brandValid=editBrandSchema.safeParse(brand).success;
- useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/template-brand').then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not load.');if(live){setBrandRecord(data);setBrand(data.brand);setBrandLoaded(true);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
+ useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/template-brand').then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not load.');if(live){setBrandRecord({...data,brand:initialBrand??data.brand});setBrand(initialBrand??data.brand);setBrandLoaded(true);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
  async function saveBrand(){
   if(preview||pending.current||!brandLoaded||!brandValid)return;
   pending.current=true;setBusy(true);setError('');
@@ -34,10 +34,10 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
   if(preview||pending.current||!profileId||(!file&&!exportId))return;
   pending.current=true;setBusy(true);setError('');setPlan(null);
   try{
-   const headers:Record<string,string>=file?{'Content-Type':file.type,'X-Edit-Template':template,'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
+   const headers:Record<string,string>=file?{'Content-Type':file.type,'X-Edit-Template':template,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
-   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId})},`edit:v2:${profileId}:${identity}:${template}`);
+   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand})},`edit:v3:${profileId}:${identity}:${template}:${JSON.stringify(brand)}`);
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
    const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
@@ -70,7 +70,8 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
  }
  return <section className="edit-studio">
   <span className="eyebrow">EDIT STUDIO · PREVIEW</span><h1>Choose the style. Let the story guide the visuals.</h1>
-  <p>Use an uploaded recording or a completed Creator video. Your original speech stays unchanged.</p>
+  <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
+  {onCreateAvatar&&<div><button type="button" className="button primary" onClick={onCreateAvatar}>Use my avatar · create a script →</button><p>Choose your Content Profile, topic or Discover source, approve your script, then choose the avatar and its setting. Or upload your own footage below.</p></div>}
   {!profileId&&<p role="alert">Select a Content Profile first.</p>}
   <fieldset disabled={busy}><legend>1. Choose your source</legend>
    <label>Upload a video (MP4 or WebM, up to 3 minutes and 500 MB)<input type="file" accept="video/mp4,video/webm" onChange={e=>{const next=e.target.files?.[0]??null;if(next&&next.size>500*1024*1024){setError('Choose a video smaller than 500 MB.');e.target.value='';return;}setFile(next);setExportId('');setPlan(null);}}/></label>
