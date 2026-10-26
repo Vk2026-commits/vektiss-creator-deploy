@@ -1,5 +1,6 @@
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
 import {editPlannerMessages} from '../../../server/edit-planner.ts';
+import {editResponseFormat,normalizeEditResponse} from '../../../src/domain/edit-response-format.ts';
 import {editSourceSchema,editProposalSchema,validateEditProposal} from '../../../src/domain/edit-templates.ts';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -99,13 +100,15 @@ Deno.serve(async request=>{
    if(error)throw Error('PERSISTENCE');
   }
   if(form&&editing){
+   progress('edit-planning');
    const source=editSourceSchema.parse(JSON.parse(String(form.get('source'))));
    const template=String(form.get('template'));
    const messages=editPlannerMessages(source,template);
-   const response=await trackedFetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model:writingModel,store:false,max_tokens:6000,response_format:{type:'json_object'},messages})});
+   const response=await trackedFetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model:writingModel,store:false,max_tokens:12000,response_format:editResponseFormat(source,template),messages})});
    if(!response.ok)throw Error('PROVIDER');
    const data=await response.json();if(data.choices?.[0]?.finish_reason!=='stop')throw Error('PROVIDER');
-   const parsed=editProposalSchema.parse(JSON.parse(data.choices[0].message.content));
+   progress('edit-plan-validation');
+   const parsed=editProposalSchema.parse(normalizeEditResponse(JSON.parse(data.choices[0].message.content)));
    const proposal=validateEditProposal(parsed,source,template==='recommend'?parsed.templateId:template as typeof parsed.templateId);
    await persist({feature:'edit-plan',proposal},data.usage);return respond({proposal,generationId});
   }
