@@ -29,6 +29,7 @@ COPY --from=build --chown=node:node /app/hosted.mjs ./hosted.mjs
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/render ./render
 COPY --from=build --chown=node:node /app/src/components/EditComposition.tsx ./src/components/EditComposition.tsx
+COPY --from=build --chown=node:node /app/src/components/RichEditComposition.tsx ./src/components/RichEditComposition.tsx
 COPY --from=build --chown=node:node /app/src/domain ./src/domain
 RUN mkdir /data && chown node:node /data
 USER node

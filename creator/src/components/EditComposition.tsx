@@ -1,9 +1,11 @@
 import type {ReactNode} from 'react';
 import {defaultEditBrand, type EditBrand} from '../domain/edit-brand';
 import type {EditSource, EditProposal} from '../domain/edit-templates';
+import {RichEditComposition} from './RichEditComposition';
 function interpolate(value:number,[start,end]:number[],[low,high]:number[],_options?:unknown){return low+(high-low)*Math.max(0,Math.min(1,(value-start)/(end-start)));}
 
 export function EditComposition({source,proposal,brand=defaultEditBrand,frame,media}:{source:EditSource;proposal:EditProposal;brand?:EditBrand;frame:number;media:ReactNode}){
+ if(proposal.rendererVersion===2)return <RichEditComposition source={source} proposal={proposal} brand={brand} frame={frame} media={media}/>;
  const palette={navy:brand.text,blue:brand.primary,paper:brand.background,ink:brand.text};
  const time=frame/30;
  const beat=proposal.beats.find((b:any,i:number)=>time>=(i===0?0:source.words[b.firstWord].start)&&time<(i===proposal.beats.length-1?source.duration:source.words[proposal.beats[i+1].firstWord].start))??proposal.beats[0];

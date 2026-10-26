@@ -16,17 +16,19 @@ export const editSourceSchema=z.object({
 });
 export type EditSource=z.infer<typeof editSourceSchema>;
 const beat=z.object({
+ scene:z.enum(['process','timeline','comparison','network','statistic','document','spotlight']).optional(),
  firstWord:z.number().int().nonnegative(),lastWord:z.number().int().nonnegative(),
  layout:z.enum(['presenter','bottom-presenter','split','full-graphic']),
  visual:z.enum(['presenter','diagram','comparison','steps','typography','tier-board','screen-focus']),
  headline:z.string().max(100),purpose:z.string().min(1).max(600),
  illustration:z.string().max(1200),motion:z.string().max(600),
  graphics:z.object({
-  nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D']).optional()}).strict()).max(6),
+  nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
   links:z.array(z.object({from:z.number().int().min(0).max(5),to:z.number().int().min(0).max(5)}).strict()).max(8),
  }).strict().optional(),
 }).strict();
 export const editProposalSchema=z.object({
+ rendererVersion:z.literal(2).optional(),
  version:z.literal(1),templateId:editTemplateId,sourceRevision:z.string().min(1).max(200),
  beats:z.array(beat).min(1).max(100),
 }).strict();
@@ -43,6 +45,8 @@ export function validateEditProposal(raw:unknown,source:EditSource,templateId:z.
   if(b.firstWord!==next||b.lastWord<b.firstWord||b.lastWord>=source.words.length)throw Error('EDIT_SPEECH_COVERAGE');
   if(templateId==='walkthrough'&&b.visual==='tier-board'||templateId!=='tier-list'&&b.visual==='tier-board')throw Error('EDIT_TEMPLATE_MISMATCH');
   if(b.graphics?.links.some(l=>l.from>=b.graphics!.nodes.length||l.to>=b.graphics!.nodes.length))throw Error('EDIT_GRAPHIC_LINK');
+  if(b.graphics?.nodes.some(n=>n.revealWord!==undefined&&(n.revealWord<b.firstWord||n.revealWord>b.lastWord)))throw Error('EDIT_REVEAL_WORD');
+  if(plan.rendererVersion===2&&b.graphics&&((b.scene==='statistic'&&b.graphics.nodes.length>3)||((b.scene==='comparison'||b.scene==='document')&&b.graphics.nodes.length>4)))throw Error('EDIT_SCENE_DENSITY');
   next=b.lastWord+1;
  }
  if(next!==source.words.length)throw Error('EDIT_SPEECH_COVERAGE');
