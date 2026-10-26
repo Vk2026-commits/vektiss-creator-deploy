@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
 import {mediaFetch} from '../lib/media-fetch';
 import './edit-studio.css';
-import {defaultEditBrand,captionStyles,type EditBrand} from '../domain/edit-brand';
+import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../domain/edit-brand';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
 export function EditStudio({profileId,preview=false}:{profileId:string|null;preview?:boolean}){
@@ -18,9 +18,10 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
  const [brandRecord,setBrandRecord]=useState({version:0,savedAt:'',brand:defaultEditBrand});
  const [brandLoaded,setBrandLoaded]=useState(preview);
  const brandDirty=JSON.stringify(brand)!==JSON.stringify(brandRecord.brand);
+ const brandValid=editBrandSchema.safeParse(brand).success;
  useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/template-brand').then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not load.');if(live){setBrandRecord(data);setBrand(data.brand);setBrandLoaded(true);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
  async function saveBrand(){
-  if(preview||pending.current||!brandLoaded)return;
+  if(preview||pending.current||!brandLoaded||!brandValid)return;
   pending.current=true;setBusy(true);setError('');
   try{const r=await mediaFetch('/api/local-capture/template-brand',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseVersion:brandRecord.version,brand})});const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not save.');setBrandRecord(data);setBrand(data.brand);}
   catch(e){setError(e instanceof Error?e.message:'Brand settings could not save.');}finally{pending.current=false;setBusy(false);}
@@ -76,13 +77,15 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
   </fieldset>
   <fieldset disabled={busy||!brandLoaded}><legend>2. Brand colors & captions</legend>
    <p>Saved for your creator account. New plans use these defaults; existing edits keep their saved look.</p>
-   <div className="edit-brand-colors">{([['primary','Brand accent'],['background','Background'],['text','Text']] as const).map(([key,label])=><label key={key}>{label}<input type="color" aria-label={label} value={brand[key]} onChange={e=>setBrand({...brand,[key]:e.target.value})}/><span>{brand[key].toUpperCase()}</span></label>)}</div>
+   <div className="edit-brand-colors">{([['primary','Brand accent'],['background','Background'],['text','Text']] as const).map(([key,label])=><div key={key}><label>{label}<input type="color" aria-label={label} value={/^#[0-9a-f]{6}$/i.test(brand[key])?brand[key]:brandRecord.brand[key]} onChange={e=>setBrand({...brand,[key]:e.target.value.toUpperCase()})}/></label><label><span className="sr-only">{label} hex code</span><input type="text" aria-label={`${label} hex code`} aria-invalid={!/^#[0-9a-f]{6}$/i.test(brand[key])} aria-describedby="brand-hex-help" placeholder="#671816" value={brand[key]} spellCheck={false} autoComplete="off" onChange={e=>{const value=e.target.value.trim();setBrand({...brand,[key]:/^[0-9a-f]{6}$/i.test(value)?`#${value.toUpperCase()}`:value.toUpperCase()});}}/></label></div>)}</div>
+   <p id="brand-hex-help">Type or paste a six-digit hex code, with or without # (for example, #671816).</p>
+   {!brandValid&&<p role="alert">Complete each color with six hexadecimal digits (0–9 or A–F) before saving.</p>}
    <label>Caption style<select value={brand.captionStyle} onChange={e=>setBrand({...brand,captionStyle:e.target.value as EditBrand['captionStyle']})}>{captionStyles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
    <p>{captionStyles.find(s=>s.id===brand.captionStyle)?.description}</p>
    <div className={`edit-caption-sample caption-${brand.captionStyle}`} style={{background:brand.background,color:brand.text,borderColor:brand.primary}} aria-label="Caption style sample">{brand.captionStyle==='none'?'Captions turned off':<>Create <span style={{color:brand.captionStyle==='highlight'?brand.primary:brand.text}}>real value</span> with your ideas.</>}</div>
-   <button className="button primary" disabled={preview||!brandDirty} onClick={()=>void saveBrand()}>Save brand defaults</button>
+   <button className="button primary" disabled={preview||!brandDirty||!brandValid} onClick={()=>void saveBrand()}>Save brand defaults</button>
    <p role="status">{brandDirty?'Unsaved brand changes':brandRecord.savedAt?`Brand defaults saved at ${new Date(brandRecord.savedAt).toLocaleString()}`:'Default colors — customize and save your brand.'} Saving does not make an AI call or start a render.</p>
-   {plan&&<button className="button" onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setApproved(false);}}>Apply these settings to this edit</button>}
+   {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setApproved(false);}}>Apply these settings to this edit</button>}
   </fieldset>
   <fieldset disabled={busy}><legend>3. Choose your direction</legend>
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
@@ -91,7 +94,7 @@ export function EditStudio({profileId,preview=false}:{profileId:string|null;prev
   <p>Generating a plan sends speech to the AI provider for transcription and planning and may incur a processing charge. It does not render a video or generate an avatar.</p>
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
-  <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{busy?'Working…':'Generate edit plan'}</button>
+  <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{busy?'Working…':'Generate edit plan'}</button>
   {error&&<p role="alert">{error}</p>}
   {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. This is a storyboard, not a rendered video.</p>
    <p>This edit: {captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p>
