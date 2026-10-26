@@ -11,26 +11,23 @@ import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 import {editDimensions} from '../src/domain/edit-format';
 const exec=promisify(execFile);
 export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),approvePreview:z.literal(true).optional()}).strict();
-export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},receipt:{version:number}|null){
- if(input.version!==plan.version)throw Error('The edit plan changed. Reload and preview the current version.');
- if(input.mode==='final'&&(!input.approvePreview||receipt?.version!==input.version))throw Error('Preview and approve this version before exporting.');
+export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},_receipt?:{version:number}|null){
+ if(input.version!==plan.version)throw Error('The edit plan changed. Reload the current version before exporting.');
 }
 export async function renderTemplatePlan(root:string,raw:unknown){
  const input=templateRenderRequest.parse(raw),plan=await readTemplatePlan(root,input.id);
  const folder=resolve(root,'edit/template-plans');
- let receipt=null;try{receipt=JSON.parse(await readFile(resolve(folder,`${input.id}.preview.json`),'utf8'));}catch{/* No preview yet. */}
- checkRenderApproval(input,plan,receipt);
- if(input.mode==='final')await stat(resolve(root,'edit/template-previews',`${z.string().regex(/^[a-f0-9]{64}$/).parse(receipt.exportId)}.mp4`));
+ checkRenderApproval(input,plan);
  const revision=z.string().regex(/^[a-f0-9]{64}$/).parse(plan.proposal.sourceRevision);
  const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(folder,`${revision}.source.json`),'utf8')));
  const proposal=validateEditProposal(plan.proposal,source,plan.proposal.templateId);
  if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
- const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,2])).digest('hex');
+ const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,3])).digest('hex');
  const outputFolder=resolve(root,input.mode==='preview'?'edit/template-previews':'edit/compositions');await mkdir(outputFolder,{recursive:true});
  const output=resolve(outputFolder,`${id}.mp4`);
- const result={id,planId:input.id,version:input.version,mode:input.mode,duration:input.mode==='preview'?Math.min(8,source.duration):source.duration};
+ const result={id,planId:input.id,version:input.version,mode:input.mode,duration:source.duration};
  try{await stat(output);if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});return result;}catch{/* Not rendered yet. */}
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
@@ -44,7 +41,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
   const dimensions=editDimensions(proposal.aspectRatio),scale=input.mode==='preview'?.5:1;
   if(video?.width!==dimensions.width*scale||video?.height!==dimensions.height*scale||!probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')||Math.abs(Number(probe.format.duration)-result.duration)>.2)throw Error('Rendered media did not pass export checks.');
   // Reject a concurrently changed plan rather than attaching stale output.
-  checkRenderApproval(input,await readTemplatePlan(root,input.id),receipt);
+  checkRenderApproval(input,await readTemplatePlan(root,input.id));
   await rename(muxed,output);
   if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});
   return result;

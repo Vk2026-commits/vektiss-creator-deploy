@@ -1,0 +1,10 @@
+import {expect,it} from 'vitest';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {EditSceneControls} from '../src/components/EditSceneControls';
+import {removeSceneNode,setSceneVisual,type EditBeat} from '../src/domain/edit-scene-controls';
+const beat:EditBeat={firstWord:0,lastWord:2,visual:'diagram',layout:'bottom-presenter',headline:'An idea',purpose:'Explain',illustration:'Diagram',motion:'Reveal',graphics:{nodes:[{label:'A',shape:'box',x:50,y:50},{label:'B',shape:'box',x:50,y:50},{label:'C',shape:'box',x:50,y:50}],links:[{from:0,to:1},{from:0,to:2}]}};
+it('removes graphics without changing speech anchors',()=>{const b=setSceneVisual(beat,'presenter');expect(b.graphics).toBeUndefined();expect(b.headline).toBe('');expect(b.firstWord).toBe(0);expect(b.lastWord).toBe(2);expect(beat.graphics?.nodes).toHaveLength(3);});
+it('reindexes surviving diagram links when an element is removed',()=>{const b=removeSceneNode(beat,1);expect(b.graphics?.nodes.map(n=>n.label)).toEqual(['A','C']);expect(b.graphics?.links).toEqual([{from:0,to:1}]);});
+it('returns to presenter when the last element is removed',()=>expect(removeSceneNode({...beat,graphics:{nodes:[beat.graphics!.nodes[0]],links:[]}},0).visual).toBe('presenter'));
+it('switches scene style without inventing claims or changing speech',()=>{const b=setSceneVisual(beat,'statistic');expect(b.graphics?.nodes.map(n=>n.label)).toEqual(['A','B','C']);expect(b.lastWord).toBe(2);expect(b.scene).toBe('statistic');});
+it('shows editable controls with no paid or preview requirement',()=>{const html=renderToStaticMarkup(<EditSceneControls beat={beat} busy={false} onChange={()=>{}}/>);expect(html).toContain('Add element');expect(html).toContain('Presenter only');expect(html).not.toContain('approve');});

@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
+import {EditSceneControls} from './EditSceneControls';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
 import {mediaFetch} from '../lib/media-fetch';
 import './edit-studio.css';
@@ -15,7 +16,6 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;mode:string;version:number}|null>(null);
- const [approved,setApproved]=useState(false);
  const pending=useRef(false);
  const [brand,setBrand]=useState<EditBrand>(initialBrand??defaultEditBrand);
  const [brandRecord,setBrandRecord]=useState({version:0,savedAt:'',brand:defaultEditBrand});
@@ -29,7 +29,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   try{const r=await mediaFetch('/api/local-capture/template-brand',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseVersion:brandRecord.version,brand})});const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not save.');setBrandRecord(data);setBrand(data.brand);}
   catch(e){setError(e instanceof Error?e.message:'Brand settings could not save.');}finally{pending.current=false;setBusy(false);}
  }
- useEffect(()=>{setRendered(null);setApproved(false);},[plan?.id,plan?.version]);
+ useEffect(()=>{setRendered(null);},[plan?.id,plan?.version]);
  useEffect(()=>()=>{if(rendered)URL.revokeObjectURL(rendered.url);},[rendered]);
  useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/exports').then(async r=>{if(!r.ok)throw Error('Completed videos could not load.');const data=await r.json();if(live)setExports(data);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
  async function generate(){
@@ -47,6 +47,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  }
  async function save(){
   if(!plan||pending.current)return;
+  if(plan.proposal.beats.some(b=>b.visual!=='presenter'&&(!b.graphics?.nodes.length||b.graphics.nodes.some(n=>!n.label.trim())))){setError('Add text to each graphic, or choose Presenter only for sections without elements.');return;}
   pending.current=true;setBusy(true);setError('');
   try{
    const body=JSON.stringify({id:plan.id,baseVersion:plan.version??1,proposal:plan.proposal,brand:plan.brand??defaultEditBrand});
@@ -55,23 +56,23 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   }catch(e){setError(e instanceof Error?e.message:'Could not save the edit plan.');}
   finally{pending.current=false;setBusy(false);}
  }
- function editLabel(index:number,node:number,value:string){
-  setPlan(previous=>previous?{...previous,proposal:{...previous.proposal,beats:previous.proposal.beats.map((b,i)=>i===index&&b.graphics?{...b,graphics:{...b.graphics,nodes:b.graphics.nodes.map((n,j)=>j===node?{...n,label:value}:n)}}:b)}}:null);setDirty(true);setApproved(false);
+ function editBeat(index:number,beat:EditProposal['beats'][number]){
+  setPlan(previous=>previous?{...previous,proposal:{...previous.proposal,rendererVersion:2,beats:previous.proposal.beats.map((b,i)=>i===index?beat:b)}}:null);setDirty(true);setRendered(null);
  }
  async function render(mode:'preview'|'final'){
   if(!plan||dirty||pending.current)return;
   pending.current=true;setBusy(true);setError('');
   try{
-   const body=JSON.stringify({id:plan.id,version:plan.version,mode,...(mode==='final'?{approvePreview:approved}:{})});
+   const body=JSON.stringify({id:plan.id,version:plan.version,mode});
    const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},body);
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
    const video=await mediaFetch(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`);if(!video.ok)throw Error('The render is saved, but its download could not load. Try again.');
-   setRendered({url:URL.createObjectURL(await video.blob()),mode,version:plan.version});setApproved(false);
+   setRendered({url:URL.createObjectURL(await video.blob()),mode,version:plan.version});
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
   finally{pending.current=false;setBusy(false);}
  }
  return <section className="edit-studio">
-  <span className="eyebrow">EDIT STUDIO · PREVIEW</span><h1>Choose the style. Let the story guide the visuals.</h1>
+  <span className="eyebrow">EDIT STUDIO</span><h1>Your talking-head video. Your visuals.</h1>
   <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
   {onCreateAvatar&&<div><button type="button" className="button primary" onClick={onCreateAvatar}>Use my avatar · create a script →</button><p>Choose your Content Profile, topic or Discover source, approve your script, then choose the avatar and its setting. Or upload your own footage below.</p></div>}
   {!profileId&&<p role="alert">Select a Content Profile first.</p>}
@@ -89,11 +90,11 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <div className={`edit-caption-sample caption-${brand.captionStyle}`} style={{background:brand.background,color:brand.text,borderColor:brand.primary}} aria-label="Caption style sample">{brand.captionStyle==='none'?'Captions turned off':<>Create <span style={{color:brand.captionStyle==='highlight'?brand.primary:brand.text}}>real value</span> with your ideas.</>}</div>
    <button className="button primary" disabled={preview||!brandDirty||!brandValid} onClick={()=>void saveBrand()}>Save brand defaults</button>
    <p role="status">{brandDirty?'Unsaved brand changes':brandRecord.savedAt?`Brand defaults saved at ${new Date(brandRecord.savedAt).toLocaleString()}`:'Default colors — customize and save your brand.'} Saving does not make an AI call or start a render.</p>
-   {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setApproved(false);}}>Apply these settings to this edit</button>}
+   {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setRendered(null);}}>Apply these settings to this edit</button>}
   </fieldset>
   <fieldset disabled={busy}><legend>3. Choose your direction</legend>
-   <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setApproved(false);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
-   <p>Changing format adapts the layout without a new AI or avatar call. Save an existing plan and approve a fresh preview before exporting.</p>
+   <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
+   <p>Changing format adapts the layout without a new AI or avatar call. Save your changes, then export. Previewing is optional.</p>
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
    <TemplateChooser aspectRatio={plan?.proposal.aspectRatio??aspectRatio} brand={brandValid?brand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
   </fieldset>
@@ -104,11 +105,13 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   {error&&<p role="alert">{error}</p>}
   {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. This is a storyboard, not a rendered video.</p>
    <p>This edit: {captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p>
-   {plan.storyboard.map((b,i)=><article key={i} style={{padding:'16px 0',borderBottom:'1px solid #dce5ef'}}><h3>{b.start.toFixed(1)}–{b.end.toFixed(1)}s · {b.headline||`Scene ${i+1}`}</h3><blockquote>{b.spokenText}</blockquote><p><strong>Visual direction:</strong> {b.illustration}</p><p><strong>Why:</strong> {b.purpose}</p><p><strong>Motion:</strong> {b.motion}</p>{plan.proposal.beats[i].graphics?.nodes.map((n,j)=><label key={j}>Graphic label {j+1}<input disabled={busy} minLength={1} maxLength={45} value={n.label} onChange={e=>editLabel(i,j,e.target.value)}/></label>)}</article>)}
+   <p>AI suggests the first edit. Change the elements below, or choose presenter only for any section.</p>
+   {plan.storyboard.map((b,i)=><article key={i} style={{padding:'16px 0',borderBottom:'1px solid #dce5ef'}}><h3>{b.start.toFixed(1)}–{b.end.toFixed(1)}s · {plan.proposal.beats[i].headline||`Scene ${i+1}`}</h3><blockquote>{b.spokenText}</blockquote><p><strong>Visual direction:</strong> {plan.proposal.beats[i].illustration}</p><p><strong>Why:</strong> {b.purpose}</p><EditSceneControls beat={plan.proposal.beats[i]} busy={busy} onChange={beat=>editBeat(i,beat)}/></article>)}
    <button className="button primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy?'Working…':'Save edit plan'}</button><p>Saving makes no AI call and does not start a render.</p>
-   <button className="button primary" disabled={busy||dirty} onClick={()=>void render('preview')}>Render 8-second preview</button>
+   <button className="button" disabled={busy||dirty} onClick={()=>void render('preview')}>Preview full video · optional</button>
+   <button className="button primary" disabled={busy||dirty} onClick={()=>void render('final')}>Export full video</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>
-   {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Draft preview — first 8 seconds':`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='preview'&&rendered.version===plan.version&&<><label><input type="checkbox" checked={approved} disabled={busy||dirty} onChange={e=>setApproved(e.target.checked)}/> I approve this preview and the full storyboard for a final MP4 export.</label><button className="button primary" disabled={!approved||busy||dirty} onClick={()=>void render('final')}>Export full video</button></>}{rendered.mode==='final'&&<a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a>}</>}
+   {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Full-video draft preview · reduced resolution':`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='final'&&<a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a>}</>}
   </section>}
  </section>;
 }
