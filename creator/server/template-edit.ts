@@ -11,34 +11,49 @@ import {editSourceSchema,editProposalSchema,editTemplateId,validateEditProposal,
 import {DraftError} from './script-draft';
 import {readEditBrand} from './edit-brand';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
+import {editTranscriptWords} from './edit-transcript';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
 export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional()}).strict();
 
 // root is supplied by the authenticated hosted router, never by the caller.
 export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string}){
+ let phase='profile';
+ try{
  const options=templateEditOptions.parse(raw);
  const headers={Authorization:authorization,apikey:c.publicKey};
  const owner=await fetch(`${c.supabaseUrl}/rest/v1/content_profiles?id=eq.${options.profileId}&select=id`,{headers,signal:AbortSignal.timeout(15000)});
  if(!owner.ok||(await owner.json()).length!==1)throw new DraftError('Select one of your Content Profiles before editing.');
  const original=options.exportId?resolve(root,'edit/compositions',`${options.exportId}.mp4`):file;
+ phase='source';
  if(!options.exportId&&!['video/mp4','video/webm'].includes(type))throw Error('VIDEO_FORMAT');
  const folder=resolve(root,'edit/template-plans');await mkdir(folder,{recursive:true,mode:0o700});
  const bytes=await readFile(original),revision=createHash('sha256').update(bytes).digest('hex');
  const sourceFile=resolve(folder,`${revision}.mp4`),sourceCache=resolve(folder,`${revision}.source.json`);
  let source;
  try{source=editSourceSchema.parse(JSON.parse(await readFile(sourceCache,'utf8')));}catch{
+  phase='media';
   const media=await prepareMedia(createReadStream(original),p=>copyFile(p,sourceFile));
   if(!media.hasAudio)throw new DraftError('This video has no audio track to plan from. Choose a recording with speech.');
   const probe=await exec(mediaBinary('ffprobe'),['-v','error','-protocol_whitelist','file,pipe','-show_format','-of','json',sourceFile],{timeout:30000});
   const duration=z.coerce.number().positive().max(180).parse(JSON.parse(probe.stdout).format.duration);
+  const transcriptCache=resolve(folder,`${revision}.transcript.json`);
+  let transcript:unknown;
+  try{transcript=JSON.parse(await readFile(transcriptCache,'utf8'));}catch{
+  phase='audio';
   const audio=resolve(folder,`${revision}.mp3`);
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',sourceFile,'-vn','-ac','1','-ar','16000','-b:a','32k',audio],{timeout:120000});
   const body=new FormData();body.set('action','story-alignment');body.set('profileId',options.profileId);body.set('file',new Blob([new Uint8Array(await readFile(audio))],{type:'audio/mpeg'}),'speech.mp3');
+  phase='transcription';
   let response;try{response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});}finally{await unlink(audio).catch(()=>{});}
   if(!response.ok)throw new DraftError('Speech timing could not finish. Your original video is unchanged.');
-  const transcript=await response.json();
-  source=editSourceSchema.parse({assetId:randomUUID(),revision,kind:options.exportId?'avatar':'upload',duration,words:transcript.words.map((w:{start:number;end:number;word:string})=>({start:w.start,end:w.end,text:w.word}))});
+  transcript=await response.json();
+  // Save the provider result before validation, so retries do not pay to transcribe again.
+  const temp=`${transcriptCache}.${randomUUID()}.tmp`;
+  await writeFile(temp,JSON.stringify(transcript),{mode:0o600});await rename(temp,transcriptCache);
+  }
+  phase='timing';
+  source=editSourceSchema.parse({assetId:randomUUID(),revision,kind:options.exportId?'avatar':'upload',duration,words:editTranscriptWords(transcript,duration)});
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
@@ -46,13 +61,33 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));
+ phase='planning';
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
+ phase='plan-validation';
  const output=await response.json(),proposal=editProposalSchema.parse(output.proposal);
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
+ phase='saving';
  const temp=`${saved}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;
+ }catch(error){
+  // Never log speech, bearer tokens, media paths, or provider response bodies.
+  console.error('template-edit-failed',{phase,name:error instanceof Error?error.name:'unknown',issues:error instanceof z.ZodError?error.issues.map(i=>({code:i.code,path:i.path})):undefined});
+  if(error instanceof DraftError)throw error;
+  const messages:Record<string,string>={
+   profile:'Could not verify the Content Profile. Sign in and try again.',
+   source:'The selected source could not be opened. Select the completed video again or upload the original recording.',
+   media:'The video could not be read. Choose an MP4 or WebM with speech, no longer than 3 minutes.',
+   audio:'The audio track could not be prepared. Your source is preserved; try an MP4 with a playable audio track.',
+   transcription:'Speech timing did not finish. Your source and existing videos are unchanged.',
+   timing:'Speech timing needs repair. The transcript is saved; retrying this source will reuse it without another transcription.',
+   planning:'The AI edit planner did not finish. Your transcript is saved for retry; no avatar was regenerated.',
+   'plan-validation':'The AI edit plan failed validation. Your transcript is saved; no video or avatar was regenerated.',
+   saving:'The edit plan could not be saved. Your source and existing videos are unchanged.',
+  };
+  throw new DraftError(messages[phase]);
+ }
 }
 
 const planId=z.string().regex(/^[a-f0-9]{64}$/);
