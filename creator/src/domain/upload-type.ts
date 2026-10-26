@@ -7,3 +7,9 @@ export function sourceUploadType(file:{name:string;type:string}):string|null{
  if(supported.includes(mime))return mime;
  return extensions[file.name.split('.').pop()?.toLowerCase()??'']??null;
 }
+
+export function editVideoUploadType(file:{name:string;type:string}):string{
+ const type=sourceUploadType(file);
+ if(type!=='video/mp4'&&type!=='video/webm')throw Error('Choose an MP4 or WebM video. For an iPhone MOV recording, export it as MP4 first.');
+ return type;
+}

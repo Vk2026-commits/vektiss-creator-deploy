@@ -3,6 +3,7 @@ import {TemplateChooser} from './TemplateChooser';
 import {EditSceneControls} from './EditSceneControls';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
 import {mediaFetch} from '../lib/media-fetch';
+import {editVideoUploadType} from '../domain/upload-type';
 import './edit-studio.css';
 import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../domain/edit-brand';
 import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
@@ -36,7 +37,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   if(preview||pending.current||!profileId||(!file&&!exportId))return;
   pending.current=true;setBusy(true);setError('');setPlan(null);
   try{
-   const headers:Record<string,string>=file?{'Content-Type':file.type,'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
+   const headers:Record<string,string>=file?{'Content-Type':editVideoUploadType(file),'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
    const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio})},`edit:v5:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}`);
