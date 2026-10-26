@@ -16,7 +16,7 @@ try{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const sourceUrl=`http://127.0.0.1:${server.address().port}/${token}`;
  const serveUrl=await bundle({entryPoint:resolve(dirname(fileURLToPath(import.meta.url)),'index.tsx'),outDir:temp,publicDir:null,webpackOverride:config=>process.env.CREATOR_REMOTION_MODULES?{...config,resolve:{...config.resolve,modules:[process.env.CREATOR_REMOTION_MODULES,'node_modules']}}:config});
- const inputProps={sourceUrl,source:job.source,proposal:job.proposal};
+ const inputProps={sourceUrl,source:job.source,proposal:job.proposal,brand:job.brand};
  const browserExecutable=process.env.CREATOR_CHROMIUM_PATH||undefined;
  const composition=await selectComposition({serveUrl,id:'CreatorEdit',inputProps,browserExecutable});
  await renderMedia({serveUrl,composition,inputProps,browserExecutable,outputLocation:job.output,codec:'h264',pixelFormat:'yuv420p',concurrency:2,scale:job.preview?0.5:1,crf:job.preview?26:18,frameRange:job.preview?[0,Math.min(composition.durationInFrames-1,239)]:undefined});

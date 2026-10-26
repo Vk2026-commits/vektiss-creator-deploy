@@ -13,3 +13,9 @@
 .edit-studio [role=status]{padding:15px;border-radius:12px;background:#e7f8f2;color:#17614e}
 .edit-studio video{display:block;border-radius:14px;background:#10263d;margin-top:20px}
 @media(max-width:600px){.edit-studio{padding:12px;margin:0}.edit-studio fieldset{padding:16px}.edit-studio .button{width:100%;margin-right:0}}
+.edit-brand-colors{display:flex;gap:24px;flex-wrap:wrap}
+.edit-brand-colors label{display:grid;gap:8px;min-width:130px}
+.edit-brand-colors input[type=color]{width:80px;height:48px;padding:4px;cursor:pointer}
+.edit-caption-sample{max-width:540px;padding:24px;margin:16px 0;border:1px solid;border-radius:16px;text-align:center;font-size:24px;font-weight:800;line-height:1.4}
+.edit-caption-sample.caption-clean{font-weight:500;font-size:20px;border-radius:4px}
+.edit-caption-sample.caption-bold{text-transform:uppercase;font-size:28px;border-bottom-width:8px}

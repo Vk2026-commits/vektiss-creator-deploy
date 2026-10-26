@@ -22,5 +22,18 @@ it.skipIf(process.env.CREATOR_RENDER_QA!=='1')('renders a private synthetic prev
   expect((await readFile(resolve(root,'edit/template-previews',`${result.id}.mp4`))).length).toBeGreaterThan(1000);
   expect(await readFile(resolve(folder,`${revision}.mp4`))).toEqual(bytes);
   expect(JSON.parse(await readFile(resolve(folder,`${id}.preview.json`),'utf8')).version).toBe(1);
+  const originalPlan=JSON.parse(await readFile(resolve(folder,`${id}.json`),'utf8'));
+  const frameHashes=new Set<string>();
+  for(const [index,captionStyle] of ['highlight','clean','bold','none'].entries()){
+   const version=index+2;
+   await writeFile(resolve(folder,`${id}.json`),JSON.stringify({...originalPlan,version,brand:{primary:'#A82958',background:'#FFF8EE',text:'#202030',captionStyle}}));
+   const styled=await renderTemplatePlan(root,{id,version,mode:'preview'});
+   expect(styled.id).not.toBe(result.id);
+   const frame=resolve(root,`${captionStyle}.png`);
+   execFileSync(mediaBinary('ffmpeg'),['-v','error','-ss','0.5','-i',resolve(root,'edit/template-previews',`${styled.id}.mp4`),'-frames:v','1',frame]);
+   frameHashes.add(createHash('sha256').update(await readFile(frame)).digest('hex'));
+   if(process.env.CREATOR_RENDER_QA_STILLS)await writeFile(resolve(process.env.CREATOR_RENDER_QA_STILLS,`${captionStyle}.png`),await readFile(frame));
+  }
+  expect(frameHashes.size).toBe(4);
  }finally{await rm(root,{recursive:true,force:true});}
-},180000);
+},300000);

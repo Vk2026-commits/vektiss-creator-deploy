@@ -9,6 +9,8 @@ import {prepareMedia} from './prepare-media';
 import {mediaBinary} from './media-binaries';
 import {editSourceSchema,editProposalSchema,editTemplateId,validateEditProposal,editStoryboard} from '../src/domain/edit-templates';
 import {DraftError} from './script-draft';
+import {readEditBrand} from './edit-brand';
+import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
 export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional()}).strict();
@@ -48,7 +50,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
  const output=await response.json(),proposal=editProposalSchema.parse(output.proposal);
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
- const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
+ const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
  const temp=`${saved}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;
 }
@@ -58,14 +60,14 @@ export async function readTemplatePlan(root:string,id:unknown){
  return JSON.parse(await readFile(resolve(root,'edit/template-plans',`${planId.parse(id)}.json`),'utf8'));
 }
 export async function saveTemplatePlan(root:string,raw:unknown){
- const input=z.object({id:planId,baseVersion:z.number().int().positive(),proposal:editProposalSchema}).strict().parse(raw);
+ const input=z.object({id:planId,baseVersion:z.number().int().positive(),proposal:editProposalSchema,brand:editBrandSchema.optional()}).strict().parse(raw);
  const previous=await readTemplatePlan(root,input.id);
  if((previous.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
  // Use the persisted source, never a transcript or filename supplied by the client.
  const revision=planId.parse(previous.proposal.sourceRevision);
  const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(root,'edit/template-plans',`${revision}.source.json`),'utf8')));
  const proposal=validateEditProposal(input.proposal,source,previous.proposal.templateId);
- const result={...previous,proposal,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
+ const result={...previous,brand:input.brand??previous.brand??defaultEditBrand,proposal,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
  const saved=resolve(root,'edit/template-plans',`${input.id}.json`),temp=`${saved}.${randomUUID()}.tmp`;
  await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;

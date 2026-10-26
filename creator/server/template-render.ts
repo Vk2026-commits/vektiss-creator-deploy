@@ -7,6 +7,7 @@ import {z} from 'zod';
 import {readTemplatePlan} from './template-edit';
 import {editSourceSchema,validateEditProposal} from '../src/domain/edit-templates';
 import {mediaBinary} from './media-binaries';
+import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 const exec=promisify(execFile);
 export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),approvePreview:z.literal(true).optional()}).strict();
 export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},receipt:{version:number}|null){
@@ -24,7 +25,8 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const proposal=validateEditProposal(plan.proposal,source,plan.proposal.templateId);
  if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
- const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,1])).digest('hex');
+ const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
+ const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,2])).digest('hex');
  const outputFolder=resolve(root,input.mode==='preview'?'edit/template-previews':'edit/compositions');await mkdir(outputFolder,{recursive:true});
  const output=resolve(outputFolder,`${id}.mp4`);
  const result={id,planId:input.id,version:input.version,mode:input.mode,duration:input.mode==='preview'?Math.min(8,source.duration):source.duration};
@@ -32,7 +34,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  await writeFile(jobFile,JSON.stringify({source,proposal,sourceFile,preview:input.mode==='preview',output:silent}),{mode:0o600});
+  await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent}),{mode:0o600});
   await exec(process.execPath,[resolve(process.cwd(),'render/run.mjs'),jobFile],{timeout:1200000,maxBuffer:1024*1024});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});

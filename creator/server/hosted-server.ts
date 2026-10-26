@@ -1,6 +1,7 @@
 import {reviewDiscovery} from './discovery-review';
 import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
 import {renderTemplatePlan} from './template-render';
+import {readEditBrand,saveEditBrand} from './edit-brand';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,copyFile,open,unlink,readdir,stat,statfs,rename} from 'node:fs/promises';
@@ -126,6 +127,14 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(path.startsWith(`${prefix}/template-`)&&process.env.CREATOR_EDIT_STUDIO!=='true')return json(res,503,{error:'Edit Studio is not enabled on this server.'});
+   if(path===`${prefix}/template-brand`){
+    if(req.method==='GET')return json(res,200,await readEditBrand(root));
+    if(req.method==='PUT'){
+     const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)return json(res,413,{error:'Brand settings are too large.'});chunks.push(chunk);}
+     try{return json(res,200,await saveEditBrand(root,JSON.parse(Buffer.concat(chunks).toString())));}catch(error){return json(res,400,{error:error instanceof Error?error.message:'Could not save brand settings.'});}
+    }
+    return json(res,405,{error:'Method not allowed'});
+   }
    const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);const info=await stat(file);res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length',info.size);const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;}
    const templatePlan=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);

@@ -11,6 +11,20 @@ import {hostedHandler,validateHostingConfig,type HostingConfig} from '../server/
 vi.mock('node:fs/promises',async importOriginal=>({...await importOriginal<typeof import('node:fs/promises')>(),statfs:vi.fn(async()=>({bavail:10*1024*1024,bsize:4096}))}));
 vi.mock('../server/avatar-verification',async importOriginal=>({...await importOriginal<typeof import('../server/avatar-verification')>(),verifyAvatarMedia:vi.fn()}));
 const owner='11111111-1111-4111-8111-111111111111';
+it('saves brand settings only under the authenticated account and returns them on refresh',async()=>{
+ vi.stubEnv('CREATOR_EDIT_STUDIO','true');
+ try{
+  const {url,headers,config}=await setup();const route=url+'/api/local-capture/template-brand';
+  const brand={primary:'#AABBCC',background:'#FFFFFF',text:'#111111',captionStyle:'clean'};
+  expect((await realFetch(route,{headers:{'X-Creator-Capture':'1'}})).status).toBe(401);
+  const saved=await realFetch(route,{method:'PUT',headers,body:JSON.stringify({baseVersion:0,brand})});expect(saved.status).toBe(200);
+  expect((await (await realFetch(route,{headers})).json()).brand).toEqual(brand);
+  expect(JSON.parse(await readFile(join(config.data,owner,'edit/brand.json'),'utf8')).version).toBe(1);
+  expect((await realFetch(route,{method:'PUT',headers,body:JSON.stringify({baseVersion:0,brand})})).status).toBe(400);
+  vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({id:other}),{status:200}));
+  expect((await realFetch(route,{headers})).status).toBe(403);
+ }finally{vi.unstubAllEnvs();}
+});
 const other='22222222-2222-4222-8222-222222222222';
 let server:Server|undefined,dir='';const realFetch=globalThis.fetch;
 afterEach(async()=>{vi.restoreAllMocks();if(server)await new Promise<void>(r=>server!.close(()=>r()));if(dir)await rm(dir,{recursive:true,force:true});});

@@ -26,9 +26,12 @@ it('saves a validated scene edit without paid calls and rejects stale or speech-
   const request=vi.fn();vi.stubGlobal('fetch',request);
   const result=await saveTemplatePlan(root,{id,baseVersion:1,proposal:{...proposal,beats:[{...proposal.beats[0],illustration:'Show a customer receiving a useful solution'}]}});
   expect(result.version).toBe(2);expect(result.storyboard[0].spokenText).toBe('Value');
+  expect(result.brand.captionStyle).toBe('highlight');
   expect((await readTemplatePlan(root,id)).proposal.beats[0].illustration).toContain('customer');
   await expect(saveTemplatePlan(root,{id,baseVersion:1,proposal})).rejects.toThrow('This plan changed');
   await expect(saveTemplatePlan(root,{id,baseVersion:2,proposal:{...proposal,sourceRevision:'c'.repeat(64)}})).rejects.toThrow('EDIT_SOURCE_CHANGED');
+  const styled=await saveTemplatePlan(root,{id,baseVersion:2,proposal,brand:{primary:'#AA3311',background:'#FFFFFF',text:'#111111',captionStyle:'none'}});
+  expect(styled.version).toBe(3);expect((await readTemplatePlan(root,id)).brand.captionStyle).toBe('none');
   expect(request).not.toHaveBeenCalled();
  }finally{await rm(root,{recursive:true,force:true});}
 });

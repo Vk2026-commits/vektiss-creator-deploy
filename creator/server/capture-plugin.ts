@@ -5,6 +5,7 @@ import {resolveSource} from './source-resolve';
 import {sourceWorkflow} from './source-workflow';
 import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
 import {renderTemplatePlan} from './template-render';
+import {readEditBrand,saveEditBrand} from './edit-brand';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {captureArticle} from './article-capture';
@@ -27,6 +28,10 @@ export function capturePlugin():Plugin{
    try{
     if(path.startsWith('/api/local-capture/template-')){
      if(process.env.CREATOR_EDIT_STUDIO!=='true'){res.statusCode=503;res.end(JSON.stringify({error:'Edit Studio is not enabled on this server.'}));return;}
+     if(path.endsWith('/template-brand')&&(req.method==='GET'||req.method==='PUT')){
+      const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)throw Error('Brand settings are too large.');chunks.push(chunk);}
+      res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='GET'?await readEditBrand(server.config.root):await saveEditBrand(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));return;
+     }
      const match=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
      const preview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
      if(req.method==='GET'&&preview){res.setHeader('Content-Type','video/mp4');res.end(await readFile(resolve(server.config.root,'edit/template-previews',`${preview[1]}.mp4`)));return;}
