@@ -1,7 +1,8 @@
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
 import {editPlannerMessages} from '../../../server/edit-planner.ts';
 import {editResponseFormat,normalizeEditResponse} from '../../../src/domain/edit-response-format.ts';
-import {editSourceSchema,editProposalSchema,validateEditProposal} from '../../../src/domain/edit-templates.ts';
+import {repairEditPlan,editPlanDiagnostic} from '../../../src/domain/edit-plan-repair.ts';
+import {editSourceSchema,editProposalSchema} from '../../../src/domain/edit-templates.ts';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
@@ -103,13 +104,39 @@ Deno.serve(async request=>{
    progress('edit-planning');
    const source=editSourceSchema.parse(JSON.parse(String(form.get('source'))));
    const template=String(form.get('template'));
+   const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([source,template]))))).map(x=>x.toString(16).padStart(2,'0')).join('');
+   // Look up only this owner's exact source/profile/style. Never repeat a paid call
+   // when a previously captured candidate can be repaired locally.
+   const previous=await db.from('creator_ai_generations').select('id,result').eq('user_id',auth.user.id).eq('profile_id',profileId).contains('result',{feature:'edit-plan-candidate',fingerprint}).order('created_at',{ascending:false}).limit(1).maybeSingle();
+   if(previous.error)throw Error('PERSISTENCE');
+   if(previous.data?.result?.candidate){
+    try{
+     const candidate=editProposalSchema.parse(normalizeEditResponse(previous.data.result.candidate));
+     const proposal=repairEditPlan(candidate,source,template==='recommend'?candidate.templateId:template as typeof candidate.templateId);
+     await persist({feature:'edit-plan',proposal,recoveredFrom:previous.data.id},null);
+     return respond({proposal,generationId});
+    }catch(error){
+     console.error('edit-plan-rejected',{requestId,reason:editPlanDiagnostic(error),cached:true});
+     // Stop rather than silently paying for another attempt at an unsafe repair.
+     throw Error('EDIT_PLAN_REVIEW_REQUIRED');
+    }
+   }
    const messages=editPlannerMessages(source,template);
    const response=await trackedFetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model:writingModel,store:false,max_tokens:12000,response_format:editResponseFormat(source,template),messages})});
    if(!response.ok)throw Error('PROVIDER');
    const data=await response.json();if(data.choices?.[0]?.finish_reason!=='stop')throw Error('PROVIDER');
    progress('edit-plan-validation');
-   const parsed=editProposalSchema.parse(normalizeEditResponse(JSON.parse(data.choices[0].message.content)));
-   const proposal=validateEditProposal(parsed,source,template==='recommend'?parsed.templateId:template as typeof parsed.templateId);
+   const rawCandidate=JSON.parse(data.choices[0].message.content);
+   const captured=await db.from('creator_ai_generations').update({result:{feature:'edit-plan-candidate',fingerprint,candidate:rawCandidate}}).eq('id',generationId!);
+   if(captured.error)throw Error('PERSISTENCE');
+   let proposal;
+   try{
+    const parsed=editProposalSchema.parse(normalizeEditResponse(rawCandidate));
+    proposal=repairEditPlan(parsed,source,template==='recommend'?parsed.templateId:template as typeof parsed.templateId);
+   }catch(error){
+    console.error('edit-plan-rejected',{requestId,reason:editPlanDiagnostic(error),cached:false});
+    throw error;
+   }
    await persist({feature:'edit-plan',proposal},data.usage);return respond({proposal,generationId});
   }
   if(form&&visual){
