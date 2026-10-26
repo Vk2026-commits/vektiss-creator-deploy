@@ -1,4 +1,6 @@
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
+import {editPlannerMessages} from '../../../server/edit-planner.ts';
+import {editSourceSchema,editProposalSchema,validateEditProposal} from '../../../src/domain/edit-templates.ts';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
@@ -53,6 +55,7 @@ Deno.serve(async request=>{
   progress('read-body');
   const blob=await bounded(request,multipart?12*1024*1024:150000);
   const form=multipart?await new Response(blob,{headers:{'content-type':request.headers.get('content-type')!}}).formData():null;
+  if(form?.get('action')==='edit-plan'&&Deno.env.get('CREATOR_EDIT_STUDIO')!=='true')return respond({code:'NOT_ENABLED'},503);
   const input=form?null:command.parse(JSON.parse(await blob.text()));
   const profileId=input?.profileId ?? z.string().uuid().parse(form?.get('profileId'));
   const projectId=z.string().uuid().optional().parse(input?.brief.cost_project_id??form?.get('projectId')??undefined);
@@ -69,10 +72,11 @@ Deno.serve(async request=>{
   const boundary=form?.get('action')==='video-boundary';
   const graphic=form?.get('action')==='graphic-analysis';
   const alignment=form?.get('action')==='story-alignment';
+  const editing=form?.get('action')==='edit-plan';
   const visual=form?.get('action')==='video-analysis'||boundary||graphic;
   const writingModel=input?.action==='generate'&&safetyProfile?'gpt-4.1-2025-04-14':'gpt-4o-mini';
-  const usageModel=alignment?'whisper-1':form&&!visual?'gpt-4o-mini-transcribe':writingModel;
-  const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
+  const usageModel=editing?writingModel:alignment?'whisper-1':form&&!visual?'gpt-4o-mini-transcribe':writingModel;
+  const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(editing?'generate':alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
   if(recordError)throw Error('PERSISTENCE');
   let providerUsage:unknown=null;
   const providerRequests:unknown[]=[];
@@ -93,6 +97,17 @@ Deno.serve(async request=>{
    usage=providerUsage??usage;
    const {error}=await db.from('creator_ai_generations').update({result,usage:usage??null,estimated_cost_usd:openAICost(usageModel,usage),pricing_version:PRICING_VERSION,status:'complete'}).eq('id',generationId!);
    if(error)throw Error('PERSISTENCE');
+  }
+  if(form&&editing){
+   const source=editSourceSchema.parse(JSON.parse(String(form.get('source'))));
+   const template=String(form.get('template'));
+   const messages=editPlannerMessages(source,template);
+   const response=await trackedFetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model:writingModel,store:false,max_tokens:6000,response_format:{type:'json_object'},messages})});
+   if(!response.ok)throw Error('PROVIDER');
+   const data=await response.json();if(data.choices?.[0]?.finish_reason!=='stop')throw Error('PROVIDER');
+   const parsed=editProposalSchema.parse(JSON.parse(data.choices[0].message.content));
+   const proposal=validateEditProposal(parsed,source,template==='recommend'?parsed.templateId:template as typeof parsed.templateId);
+   await persist({feature:'edit-plan',proposal},data.usage);return respond({proposal,generationId});
   }
   if(form&&visual){
    const discoveryJobId=form.get('discoveryJobId');

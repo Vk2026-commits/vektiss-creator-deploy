@@ -1,0 +1,15 @@
+.edit-studio{max-width:1050px;margin:20px auto;padding:28px;color:#172d45;line-height:1.6}
+.edit-studio h1{font-size:clamp(28px,3vw,44px);line-height:1.12;letter-spacing:-1.3px;max-width:850px;margin:12px 0 20px}
+.edit-studio p{color:#536a82;margin:16px 0}
+.edit-studio fieldset{border:1px solid #d5e4f4;border-radius:20px;background:white;padding:22px;margin:28px 0;min-width:0}
+.edit-studio legend{font-size:14px;font-weight:750;letter-spacing:.03em;padding:0 10px;color:#246dc2}
+.edit-studio label{display:block;margin:12px 0;line-height:1.5}
+.edit-studio input:not([type=radio]):not([type=checkbox]),.edit-studio select,.edit-studio textarea{display:block;width:100%;max-width:100%;padding:12px 16px;margin:8px 0;border:1px solid #c9d9ec;border-radius:10px;background:#f8fbff;color:#172d45;font:inherit}
+.edit-studio input[type=radio],.edit-studio input[type=checkbox]{accent-color:#1688ff;width:18px;height:18px;vertical-align:middle;margin-right:10px}
+.edit-studio input::file-selector-button{background:#e7f1ff;color:#1765bd;border:0;border-radius:8px;padding:9px 15px;margin-right:12px;font-weight:700}
+.edit-studio .button{margin:8px 12px 8px 0;min-height:48px}
+.edit-studio blockquote{border-left:3px solid #1688ff;margin:18px 0;padding:12px 20px;background:#eef5ff;border-radius:0 10px 10px 0}
+.edit-studio [role=alert]{color:#a03325;background:#fff1ed;padding:15px;border-radius:12px}
+.edit-studio [role=status]{padding:15px;border-radius:12px;background:#e7f8f2;color:#17614e}
+.edit-studio video{display:block;border-radius:14px;background:#10263d;margin-top:20px}
+@media(max-width:600px){.edit-studio{padding:12px;margin:0}.edit-studio fieldset{padding:16px}.edit-studio .button{width:100%;margin-right:0}}

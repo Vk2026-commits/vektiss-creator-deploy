@@ -608,7 +608,8 @@ Deno.serve(async (request) => {
       const nextRound = currentRound + 1;
       const selected = brief.data.researchSourcePlatforms.filter((p): p is NativePlatform => p === 'TikTok' || p === 'Instagram' || p === 'YouTube');
       const platforms: NativePlatform[] = [...new Set<NativePlatform>(selected.length ? selected : ['TikTok','Instagram','YouTube'])];
-      const launches = await Promise.allSettled(platforms.map(platform => startPlatformDiscovery({brief:brief.data,requestedCount,seed:String(job.id),round:nextRound,platform})));
+      const jobSeed = String(job.id);
+      const launches = await Promise.allSettled(platforms.map(platform => startPlatformDiscovery({brief:brief.data,requestedCount,seed:jobSeed,round:nextRound,platform})));
       const discoveryRuns = launches.flatMap(result => result.status === 'fulfilled' ? [{...result.value,state:'pending'}] : []);
       if (discoveryRuns.length) {
         const saved = await db.from('creator_research_jobs').update({

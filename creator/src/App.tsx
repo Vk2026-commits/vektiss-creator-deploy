@@ -14,6 +14,7 @@ import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
 import { UsageDashboard } from './components/UsageDashboard';
 import { SearchQualityAdmin } from './components/SearchQualityAdmin';
+import { EditStudio } from './components/EditStudio';
 import { AvatarCostHelp } from './components/AvatarCostHelp';
 import { Discover } from './components/Discover';
 import type { ResearchOpportunity } from './lib/research-client';
@@ -359,7 +360,7 @@ export function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs" | "search-quality";
+type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs" | "search-quality" | "edit-studio";
 function CreatorWorkspace({
   repo,
   userId,
@@ -543,6 +544,7 @@ function CreatorWorkspace({
             Avatar library
           </button>
           <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
+          {import.meta.env.VITE_EDIT_STUDIO==='true'&&<button className={page==='edit-studio'?'active':''} onClick={()=>setPage('edit-studio')}>Edit Studio</button>}
         </nav>
         {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button><button className={page === 'search-quality' ? 'active' : ''} onClick={() => setPage('search-quality')}><Sparkles size={18}/> Search Quality</button></nav></>}
         <span className="nav-caption upcoming-caption">COMING NEXT</span>
@@ -586,7 +588,7 @@ function CreatorWorkspace({
                 : page === "creator"
                   ? "Creator profile"
                   : page === "discover" ? "Discover"
-                  : page === "avatars" ? "Avatar library" : page === 'avatar-costs' ? 'Avatar costs' : page === 'costs' ? 'Global costs' : "Create video"}
+                  : page === 'edit-studio' ? 'Edit Studio' : page === "avatars" ? "Avatar library" : page === 'avatar-costs' ? 'Avatar costs' : page === 'costs' ? 'Global costs' : "Create video"}
             </strong>
           </div>
           <HeyGenBalanceBadge preview={preview}/>
@@ -652,6 +654,7 @@ function CreatorWorkspace({
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
+              {page === 'edit-studio' && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview}/>}
               {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
               {page === "profiles" && (
                 <>

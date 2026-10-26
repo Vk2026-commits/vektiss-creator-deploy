@@ -1,4 +1,6 @@
 import {reviewDiscovery} from './discovery-review';
+import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
+import {renderTemplatePlan} from './template-render';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,copyFile,open,unlink,readdir,stat,statfs,rename} from 'node:fs/promises';
@@ -123,8 +125,13 @@ export function hostedHandler(c:HostingConfig){
     const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
+   if(path.startsWith(`${prefix}/template-`)&&process.env.CREATOR_EDIT_STUDIO!=='true')return json(res,503,{error:'Edit Studio is not enabled on this server.'});
+   const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
+   if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);const info=await stat(file);res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length',info.size);const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;}
+   const templatePlan=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
+   if(req.method==='GET'&&templatePlan)return json(res,200,await readTemplatePlan(root,templatePlan[1]));
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/discovery-review','/source-resolve','/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
+   if(!['/template-render','/template-edit','/template-plan-save','/discovery-review','/source-resolve','/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
    const requestedId=req.headers['x-creator-job'];
    if(requestedId!==undefined&&(typeof requestedId!=='string'||!uuid.test(requestedId)))return json(res,400,{error:'Invalid job identifier.'});
    if(typeof requestedId==='string'){
@@ -147,11 +154,11 @@ export function hostedHandler(c:HostingConfig){
     const type=req.headers['content-type']?.split(';')[0]??'';
     const resolving=path.endsWith('/source-resolve');
     const graphic=path.endsWith('/graphic-source')||(resolving&&type.startsWith('image/'));
-    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||((path.endsWith('/source-workflow')||graphic||resolving)&&type!=='application/json');
+    const binary=path.endsWith('/prepare-video')||path.endsWith('/video-background')||path.endsWith('/video-frames')||((path.endsWith('/template-edit')||path.endsWith('/source-workflow')||graphic||resolving)&&type!=='application/json');
     const frameTimes=frameTimesHeader(req.headers['x-frame-times']);
     const sourceEnd=cutEndHeader(req.headers['x-source-end']);
     if(binary&&!(graphic?['image/png','image/jpeg','image/webp']:['video/mp4','video/webm']).includes(type)||!binary&&type!=='application/json')return json(res,415,{error:'Unsupported upload type.'});
-    const limit=binary?(graphic?10*1024*1024:SOURCE_MAX_BYTES):(graphic?32*1024:4096);
+    const limit=binary?(graphic?10*1024*1024:SOURCE_MAX_BYTES):path.endsWith('/template-plan-save')?512*1024:(graphic?32*1024:4096);
     if(Number(req.headers['content-length'])>limit)return json(res,413,{error:'Upload is too large.'});
     inputFile=resolve(jobs,`${id}.input`);const handle=await open(inputFile,'wx',0o600);let size=0;
     req.setTimeout(600000,()=>req.destroy());
@@ -182,7 +189,10 @@ export function hostedHandler(c:HostingConfig){
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
      try{
-      if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
+      if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input);
+      else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
+      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id']},authorization,c);
+      else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
       else if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(path.endsWith('/source-workflow'))job.result=await sourceWorkflow(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);

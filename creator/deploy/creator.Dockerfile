@@ -6,11 +6,14 @@ RUN pnpm install --frozen-lockfile
 COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
 COPY server ./server
+COPY render ./render
 COPY supabase/functions ./supabase/functions
 COPY public ./public
 COPY deploy/build-server.mjs ./deploy/build-server.mjs
 ARG VITE_SUPABASE_URL=https://meihyxdibqbqggogseon.supabase.co
 ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ARG VITE_EDIT_STUDIO=true
+ENV VITE_EDIT_STUDIO=$VITE_EDIT_STUDIO
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 RUN pnpm exec vite build && node deploy/build-server.mjs
 
@@ -24,6 +27,7 @@ COPY --chown=node:node server/avatar-thumbnail.py ./server/avatar-thumbnail.py
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/hosted.mjs ./hosted.mjs
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/render ./render
 RUN mkdir /data && chown node:node /data
 USER node
 ENV NODE_ENV=production PORT=8080 CREATOR_MEDIA_BIN=/usr/bin CREATOR_DATA_DIR=/data
