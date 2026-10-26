@@ -3,10 +3,12 @@ import {editTemplates} from '../domain/edit-templates';
 import type {EditBrand} from '../domain/edit-brand';
 import {templateSample,templateSampleSource} from '../domain/edit-template-samples';
 import {EditComposition} from './EditComposition';
+import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 
 const samples=editTemplates.map(t=>({...t,proposal:templateSample(t.id)}));
 const placeholder=<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color:'#fff',background:'#27364b'}}><svg width="300" height="380" viewBox="0 0 300 380"><circle cx="150" cy="90" r="65" fill="#a7b6c9"/><path d="M20 370V250a130 130 0 0 1 260 0v120" fill="#7c8fa9"/></svg><span style={{fontSize:30}}>SAMPLE PRESENTER</span></div>;
-export function TemplateChooser({brand,selected,onSelect}:{brand:EditBrand;selected:string;onSelect:(id:string)=>void}){
+export function TemplateChooser({brand,selected,onSelect,aspectRatio='9:16'}:{brand:EditBrand;selected:string;onSelect:(id:string)=>void;aspectRatio?:EditAspectRatio}){
+ const dimensions=editDimensions(aspectRatio);
  const [playing,setPlaying]=useState<string|null>(null),[frame,setFrame]=useState(45),[replay,setReplay]=useState(0);
  const [reduced,setReduced]=useState(()=>typeof window!=='undefined'&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
  const root=useRef<HTMLDivElement>(null),[width,setWidth]=useState(210);
@@ -22,7 +24,7 @@ export function TemplateChooser({brand,selected,onSelect}:{brand:EditBrand;selec
  },[playing,replay]);
  function play(id:string){setFrame(0);setPlaying(id);setReplay(n=>n+1);}
  return <><p>Hover to preview five seconds, or tap Preview. Choose a style separately. Samples use your colors and captions; no AI calls or charges.</p><div className="template-grid">{samples.map((t,i)=><article className={`template-card ${selected===t.id?'is-selected':''}`} key={t.id} onPointerEnter={e=>{if(e.pointerType==='mouse'&&!reduced)play(t.id);}} onPointerLeave={()=>setPlaying(current=>current===t.id?null:current)}>
-  <div ref={i===0?root:undefined} className="template-demo" aria-label={`${t.name} illustrative sample`}><div aria-hidden="true" style={{width:1080,height:1920,position:'relative',transform:`scale(${width/1080})`,transformOrigin:'top left'}}><EditComposition source={templateSampleSource} proposal={t.proposal} brand={brand} frame={playing===t.id?frame:45} media={placeholder}/></div></div>
+  <div ref={i===0?root:undefined} className="template-demo" style={{aspectRatio:aspectRatio==='16:9'?'16/9':'9/16'}} aria-label={`${t.name} illustrative sample`}><div aria-hidden="true" style={{...dimensions,position:'relative',transform:`scale(${width/dimensions.width})`,transformOrigin:'top left'}}><EditComposition source={templateSampleSource} proposal={{...t.proposal,aspectRatio}} brand={brand} frame={playing===t.id?frame:45} media={placeholder}/></div></div>
   <h3>{t.name}</h3><p>{t.description}</p>
   <button type="button" className="button" onClick={()=>play(t.id)} aria-label={`Preview ${t.name}`}>Preview · 5 sec</button>
   {playing===t.id&&<button type="button" onClick={()=>setPlaying(null)}>Stop preview</button>}

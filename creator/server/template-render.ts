@@ -8,6 +8,7 @@ import {readTemplatePlan} from './template-edit';
 import {editSourceSchema,validateEditProposal} from '../src/domain/edit-templates';
 import {mediaBinary} from './media-binaries';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
+import {editDimensions} from '../src/domain/edit-format';
 const exec=promisify(execFile);
 export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),approvePreview:z.literal(true).optional()}).strict();
 export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},receipt:{version:number}|null){
@@ -40,7 +41,8 @@ export async function renderTemplatePlan(root:string,raw:unknown){
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);
   const video=probe.streams.find((s:{codec_type:string})=>s.codec_type==='video');
-  if(video?.width!==(input.mode==='preview'?540:1080)||video?.height!==(input.mode==='preview'?960:1920)||!probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')||Math.abs(Number(probe.format.duration)-result.duration)>.2)throw Error('Rendered media did not pass export checks.');
+  const dimensions=editDimensions(proposal.aspectRatio),scale=input.mode==='preview'?.5:1;
+  if(video?.width!==dimensions.width*scale||video?.height!==dimensions.height*scale||!probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')||Math.abs(Number(probe.format.duration)-result.duration)>.2)throw Error('Rendered media did not pass export checks.');
   // Reject a concurrently changed plan rather than attaching stale output.
   checkRenderApproval(input,await readTemplatePlan(root,input.id),receipt);
   await rename(muxed,output);

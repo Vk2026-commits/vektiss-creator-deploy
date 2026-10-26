@@ -206,7 +206,7 @@ export function hostedHandler(c:HostingConfig){
      try{
       if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input);
       else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
-      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
+      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],aspectRatio:req.headers['x-edit-aspect-ratio'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
       else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
       else if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);

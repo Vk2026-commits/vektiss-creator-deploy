@@ -12,9 +12,10 @@ import {DraftError} from './script-draft';
 import {readEditBrand} from './edit-brand';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 import {editTranscriptWords} from './edit-transcript';
+import {editAspectRatio} from '../src/domain/edit-format';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
-export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional()}).strict();
+export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional()}).strict();
 
 // root is supplied by the authenticated hosted router, never by the caller.
 export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string}){
@@ -57,7 +58,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
- const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,3,...(options.brand?[options.brand]:[])])).digest('hex');
+ const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,3,options.aspectRatio??'9:16',...(options.brand?[options.brand]:[])])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));
@@ -65,7 +66,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
  phase='plan-validation';
- const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2});
+ const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16'});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
  phase='saving';

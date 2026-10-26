@@ -8,6 +8,7 @@ function PeopleMark({color,size=90}:{color:string;size?:number}){return <svg wid
 export function sceneFor(beat:Beat){return beat.scene??(beat.visual==='comparison'?'comparison':beat.visual==='steps'?'process':beat.visual==='typography'?'spotlight':'network');}
 export function RichEditComposition({source,proposal,brand,frame,media}:{source:EditSource;proposal:EditProposal;brand:EditBrand;frame:number;media:ReactNode}){
  const time=frame/30;
+ const wide=proposal.aspectRatio==='16:9';
  const index=Math.max(0,proposal.beats.findIndex((b,i)=>time>=(i===0?0:source.words[b.firstWord].start)&&time<(i===proposal.beats.length-1?source.duration:source.words[proposal.beats[i+1].firstWord].start)));
  const beat=proposal.beats[index],nodes=beat.graphics?.nodes??[];
  const start=index===0?0:source.words[beat.firstWord].start;
@@ -23,12 +24,12 @@ export function RichEditComposition({source,proposal,brand,frame,media}:{source:
  const animated=(i:number):CSSProperties=>({opacity:reveal(i),transform:`translateY(${(1-reveal(i))*24}px)`});
  const activeWord=source.words.findIndex(w=>w.start<=time&&time<w.end);
  const caption=activeWord<0?[]:source.words.slice(Math.floor(activeWord/4)*4,Math.floor(activeWord/4)*4+4);
- const graphicTop=full?300:125;
+ const graphicTop=wide?85:full?300:125;
  const framedMedia=isValidElement<{style?:CSSProperties}>(media)?cloneElement(media,{style:{...media.props.style,objectFit:proposal.templateId==='walkthrough'?'contain':'cover',objectPosition:'center'}}):media;
  return <div data-renderer="2" data-scene={scene} style={{position:'absolute',inset:0,background:paper,color:ink,fontFamily:'Arial, sans-serif',overflow:'hidden'}}>
   <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 90% 0%, ${accent}20, transparent 65%)`}}/>
-  {!full&&<div style={{position:'absolute',...(presenter?{inset:0}:{left:38,right:38,top:1060,bottom:60}),overflow:'hidden',borderRadius:presenter?0:36,background:ink}}>{framedMedia}</div>}
-  {!presenter&&<section style={{position:'absolute',top:graphicTop,left:72,right:72,opacity:entrance,transform:`translateY(${(1-entrance)*18}px)`}}>
+  {!full&&<div style={{position:'absolute',...(presenter?{inset:0}:wide?{left:1040,right:55,top:90,bottom:140}:{left:38,right:38,top:1060,bottom:60}),overflow:'hidden',borderRadius:presenter?0:36,background:ink}}>{framedMedia}</div>}
+  {!presenter&&<section style={{position:'absolute',top:graphicTop,left:wide?(full?492:60):72,width:936,opacity:entrance,transformOrigin:'top left',transform:`translateY(${(1-entrance)*18}px) scale(${wide&&!full?.94:1})`}}>
    <div style={{display:'flex',alignItems:'center',gap:18,marginBottom:28}}><span style={{height:6,width:64,background:accent,borderRadius:8}}/><span style={{fontSize:20,fontWeight:700,letterSpacing:4,color:accent}}>KEY IDEA · {String(index+1).padStart(2,'0')}</span></div>
    <h2 style={{fontSize:64,lineHeight:1.03,letterSpacing:-2,margin:'0 0 48px',maxWidth:900}}>{beat.headline}</h2>
    <div style={{position:'relative',height:full?950:650}}>
@@ -48,6 +49,6 @@ export function RichEditComposition({source,proposal,brand,frame,media}:{source:
    </div>
   </section>}
   {presenter&&beat.headline&&<div style={{position:'absolute',top:125,left:65,right:65,textAlign:'center',opacity:entrance}}><span style={{background:paper,color:ink,fontSize:58,fontWeight:900,lineHeight:1.2,padding:'12px 24px',boxDecorationBreak:'clone'}}>{beat.headline}</span></div>}
-  {brand.captionStyle!=='none'&&caption.length>0&&<div style={{position:'absolute',bottom:presenter?180:full?180:130,left:80,right:80,textAlign:'center',fontSize:brand.captionStyle==='bold'?56:44,fontWeight:brand.captionStyle==='clean'?500:800,lineHeight:1.35,textTransform:brand.captionStyle==='bold'?'uppercase':'none'}}><span style={{background:paper,color:ink,padding:'12px 20px',borderRadius:12,boxDecorationBreak:'clone',boxShadow:`0 4px 18px ${ink}20`}}>{caption.map((w,i)=><span key={i} style={{color:brand.captionStyle==='highlight'&&w===source.words[activeWord]?accent:ink}}>{w.text}{' '}</span>)}</span></div>}
+  {brand.captionStyle!=='none'&&caption.length>0&&<div style={{position:'absolute',bottom:wide?45:presenter?180:full?180:130,left:80,right:80,textAlign:'center',fontSize:brand.captionStyle==='bold'?56:44,fontWeight:brand.captionStyle==='clean'?500:800,lineHeight:1.35,textTransform:brand.captionStyle==='bold'?'uppercase':'none'}}><span style={{background:paper,color:ink,padding:'12px 20px',borderRadius:12,boxDecorationBreak:'clone',boxShadow:`0 4px 18px ${ink}20`}}>{caption.map((w,i)=><span key={i} style={{color:brand.captionStyle==='highlight'&&w===source.words[activeWord]?accent:ink}}>{w.text}{' '}</span>)}</span></div>}
  </div>;
 }

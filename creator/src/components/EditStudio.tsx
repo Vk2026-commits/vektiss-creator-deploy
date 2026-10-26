@@ -4,12 +4,14 @@ import {editTemplates,type EditProposal, type editStoryboard} from '../domain/ed
 import {mediaFetch} from '../lib/media-fetch';
 import './edit-studio.css';
 import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../domain/edit-brand';
+import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
 export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:()=>void}){
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
  const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
  const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
+ const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>('9:16');
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;mode:string;version:number}|null>(null);
@@ -34,10 +36,10 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   if(preview||pending.current||!profileId||(!file&&!exportId))return;
   pending.current=true;setBusy(true);setError('');setPlan(null);
   try{
-   const headers:Record<string,string>=file?{'Content-Type':file.type,'X-Edit-Template':template,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
+   const headers:Record<string,string>=file?{'Content-Type':file.type,'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
-   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand})},`edit:v4:${profileId}:${identity}:${template}:${JSON.stringify(brand)}`);
+   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio})},`edit:v5:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}`);
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
    const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
@@ -90,8 +92,10 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setApproved(false);}}>Apply these settings to this edit</button>}
   </fieldset>
   <fieldset disabled={busy}><legend>3. Choose your direction</legend>
+   <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setApproved(false);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
+   <p>Changing format adapts the layout without a new AI or avatar call. Save an existing plan and approve a fresh preview before exporting.</p>
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
-   <TemplateChooser brand={brandValid?brand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
+   <TemplateChooser aspectRatio={plan?.proposal.aspectRatio??aspectRatio} brand={brandValid?brand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
   </fieldset>
   <p>Generating a plan sends speech to the AI provider for transcription and planning and may incur a processing charge. It does not render a video or generate an avatar.</p>
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
@@ -104,7 +108,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <button className="button primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy?'Working…':'Save edit plan'}</button><p>Saving makes no AI call and does not start a render.</p>
    <button className="button primary" disabled={busy||dirty} onClick={()=>void render('preview')}>Render 8-second preview</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>
-   {rendered&&<><video controls src={rendered.url} style={{maxWidth:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Draft preview — first 8 seconds':'Finished 1080 × 1920 MP4'}</p>{rendered.mode==='preview'&&rendered.version===plan.version&&<><label><input type="checkbox" checked={approved} disabled={busy||dirty} onChange={e=>setApproved(e.target.checked)}/> I approve this preview and the full storyboard for a final MP4 export.</label><button className="button primary" disabled={!approved||busy||dirty} onClick={()=>void render('final')}>Export full video</button></>}{rendered.mode==='final'&&<a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a>}</>}
+   {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Draft preview — first 8 seconds':`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='preview'&&rendered.version===plan.version&&<><label><input type="checkbox" checked={approved} disabled={busy||dirty} onChange={e=>setApproved(e.target.checked)}/> I approve this preview and the full storyboard for a final MP4 export.</label><button className="button primary" disabled={!approved||busy||dirty} onClick={()=>void render('final')}>Export full video</button></>}{rendered.mode==='final'&&<a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a>}</>}
   </section>}
  </section>;
 }
