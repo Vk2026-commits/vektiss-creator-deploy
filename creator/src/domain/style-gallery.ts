@@ -1,4 +1,5 @@
 export const styleGallery={
+ 'popout-explainer':{name:'Pop-out Explainer',summary:'Your presenter steps outside the frame while ideas build above them.',effects:['Head outside the frame','Connected diagrams','Editorial cards'],bestFor:'Premium educational explanations'},
  'animated-explainer':{name:'Animated Explainer',summary:'Watch ideas connect as each part of your explanation unfolds.',effects:['Drawing connectors','Progressive diagrams','Word-timed reveals'],bestFor:'Teaching processes and relationships'},
  'charts-comparisons':{name:'Charts & Comparisons',summary:'Compare alternatives clearly, with charts grounded in your speech.',effects:['Animated bars','Comparison panels','Source-backed figures'],bestFor:'Comparisons and numerical explanations'},
  'glass-cards':{name:'Glass Cards',summary:'Dark frosted cards over your full-screen presenter, with your brand color.',effects:['Frosted glass','Smooth card reveals','Stable captions'],bestFor:'Talking-head explainers and product stories'},

@@ -35,9 +35,9 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  const hyperframes=['hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','animated-explainer','charts-comparisons'].includes(proposal.templateId);
+  const hyperframes=['hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons'].includes(proposal.templateId);
   await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos)}:{})}),{mode:0o600});
-  await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:proposal.templateId==='paper-cutout'?2400000:1200000,maxBuffer:1024*1024});
+  await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:1024*1024});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);

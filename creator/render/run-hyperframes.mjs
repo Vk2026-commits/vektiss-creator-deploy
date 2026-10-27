@@ -8,12 +8,13 @@ const job=JSON.parse(await readFile(process.argv[2],'utf8'));
 const folder=await mkdtemp(join(dirname(process.argv[2]),'hyperframes-'));
 try{
  await copyFile(job.sourceFile,join(folder,'source.mp4'));
- if(job.proposal?.templateId==='paper-cutout'){
+ if(['paper-cutout','popout-explainer'].includes(job.proposal?.templateId)){
   // Source paths are assigned by the server after ownership and revision checks.
   // Keep the expensive matte across retries and brand/style changes.
-  const matte=job.sourceFile+'.presenter-v2.webm';
+  const popout=job.proposal.templateId==='popout-explainer';
+  const matte=job.sourceFile+(popout?'.presenter-clean-v1.webm':'.presenter-v2.webm');
   let cached=false;try{cached=(await stat(matte)).size>0;}catch{}
-  if(!cached)await exec(process.env.CREATOR_PYTHON??'python3',[resolve('render/prepare-presenter-matte.py'),job.sourceFile,matte],{timeout:1200000,maxBuffer:1024*1024});
+  if(!cached)await exec(process.env.CREATOR_PYTHON??'python3',[resolve('render/prepare-presenter-matte.py'),job.sourceFile,matte,...(popout?['--no-outline']:[])],{timeout:1200000,maxBuffer:1024*1024});
   await copyFile(matte,join(folder,'presenter.webm'));
  }
  await writeFile(join(folder,'index.html'),job.html,{mode:0o600});

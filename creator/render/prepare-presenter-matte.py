@@ -76,7 +76,7 @@ def paper_outline(image, alpha):
     return result
 
 
-def prepare(source, output, limit=None):
+def prepare(source, output, limit=None, outline=True):
     if not source.is_file() or source.resolve() == output.resolve():
         raise ValueError('PRESENTER_MATTE_INVALID_SOURCE')
     model = Path(os.environ['CREATOR_MATTE_MODEL'])
@@ -116,7 +116,11 @@ def prepare(source, output, limit=None):
                 break
             image = Image.frombytes('RGB', (width, height), bytes(raw))
             alpha, previous = person_alpha(image, session, previous)
-            image = paper_outline(image, alpha)
+            if outline:
+                image = paper_outline(image, alpha)
+            else:
+                image = image.convert("RGBA")
+                image.putalpha(alpha)
             encoder.stdin.write(image.tobytes())
             frames += 1
             if frames % 150 == 0:
@@ -142,7 +146,8 @@ if __name__ == '__main__':
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--limit', type=float, help='Local proof only; production passes full source')
+    parser.add_argument('--no-outline', action='store_true')
     args = parser.parse_args()
     if args.limit is not None and (not math.isfinite(args.limit) or args.limit <= 0):
         parser.error('--limit must be positive')
-    prepare(args.source, args.output, args.limit)
+    prepare(args.source, args.output, args.limit, not args.no_outline)
