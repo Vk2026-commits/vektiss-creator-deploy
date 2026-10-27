@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certi
 RUN python3 -m venv /opt/thumbnail-python && /opt/thumbnail-python/bin/pip install --no-cache-dir numpy==2.2.6 Pillow==11.3.0 onnxruntime==1.22.1
 COPY deploy/thumbnail-model.py /tmp/thumbnail-model.py
 RUN python3 /tmp/thumbnail-model.py
+COPY deploy/matte-model.py /tmp/matte-model.py
+RUN python3 /tmp/matte-model.py
 WORKDIR /app
 COPY --chown=node:node server/avatar-thumbnail.py ./server/avatar-thumbnail.py
 COPY --from=build --chown=node:node /app/dist ./dist
@@ -36,5 +38,6 @@ USER node
 ENV NODE_ENV=production PORT=8080 CREATOR_MEDIA_BIN=/usr/bin CREATOR_DATA_DIR=/data
 ENV CREATOR_CHROMIUM_PATH=/usr/bin/chromium
 ENV CREATOR_PYTHON=/opt/thumbnail-python/bin/python CREATOR_PERSON_MODEL=/opt/creator-models/u2net_human_seg.onnx
+ENV CREATOR_MATTE_MODEL=/opt/creator-models/modnet.onnx
 EXPOSE 8080
 CMD ["node","hosted.mjs"]

@@ -13,6 +13,8 @@ import {readEditBrand} from './edit-brand';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 import {editTranscriptWords} from './edit-transcript';
 import {editAspectRatio} from '../src/domain/edit-format';
+import {discoverLogos} from './logo-assets';
+import {logoBrands,logoSuggestionSchema} from '../src/domain/logo-assets';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
 export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional()}).strict();
@@ -68,7 +70,8 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  phase='plan-validation';
  const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16'});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
- const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
+ const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
+ const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
  phase='saving';
  const temp=`${saved}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;
@@ -109,14 +112,33 @@ export async function readTemplatePlan(root:string,id:unknown){
  return JSON.parse(await readFile(resolve(root,'edit/template-plans',`${planId.parse(id)}.json`),'utf8'));
 }
 export async function saveTemplatePlan(root:string,raw:unknown){
- const input=z.object({id:planId,baseVersion:z.number().int().positive(),proposal:editProposalSchema,brand:editBrandSchema.optional()}).strict().parse(raw);
+ const input=z.object({id:planId,baseVersion:z.number().int().positive(),proposal:editProposalSchema,brand:editBrandSchema.optional(),logos:z.array(z.object({brandId:z.string(),status:z.enum(['pending','approved','omitted','unavailable']),replacementId:z.string().optional()}).strict()).max(8).optional()}).strict().parse(raw);
  const previous=await readTemplatePlan(root,input.id);
  if((previous.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
  // Use the persisted source, never a transcript or filename supplied by the client.
  const revision=planId.parse(previous.proposal.sourceRevision);
  const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(root,'edit/template-plans',`${revision}.source.json`),'utf8')));
  const proposal=validateEditProposal(input.proposal,source,previous.proposal.templateId);
- const result={...previous,brand:input.brand??previous.brand??defaultEditBrand,proposal,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
+ let logos=logoSuggestionSchema.array().max(8).parse(previous.logos??[]);
+ if(input.logos){
+  if(input.logos.length!==logos.length||new Set(input.logos.map(l=>l.brandId)).size!==logos.length||input.logos.some(l=>!logos.some(p=>p.brandId===l.brandId)))throw new DraftError('Logo suggestions changed. Reload this edit.');
+  logos=await Promise.all(logos.map(async savedLogo=>{
+   const decision=input.logos!.find(l=>l.brandId===savedLogo.brandId)!;
+   if(decision.replacementId&&decision.replacementId!==savedLogo.brandId){
+    const replacement=logoBrands.find(b=>b.id===decision.replacementId);
+    if(!replacement||logos.some(l=>l.brandId===replacement.id))throw new DraftError('Choose a different supported brand for this logo.');
+    const found=await discoverLogos(root,[{text:replacement.aliases[0]}]);
+    if(!found[0])throw new DraftError('This replacement could not be identified.');
+    return {...found[0],firstWord:savedLogo.firstWord};
+   }
+   if(decision.status==='approved'&&!savedLogo.assetId)throw new DraftError('This logo is unavailable. Omit it or select a replacement.');
+   return {...savedLogo,status:decision.status};
+  }));
+ }
+ if(new Set(logos.map(l=>l.brandId)).size!==logos.length)throw new DraftError('Choose a different replacement for each logo.');
+ const latest=await readTemplatePlan(root,input.id);
+ if((latest.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
+ const result={...previous,brand:input.brand??previous.brand??defaultEditBrand,proposal,logos,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
  const saved=resolve(root,'edit/template-plans',`${input.id}.json`),temp=`${saved}.${randomUUID()}.tmp`;
  await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;

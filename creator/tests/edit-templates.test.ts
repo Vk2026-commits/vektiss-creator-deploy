@@ -4,6 +4,12 @@ import {proposeEdit,editPlannerMessages} from '../server/edit-planner';
 const source:EditSource={kind:'upload',assetId:'00000000-0000-4000-8000-000000000001',revision:'r1',duration:4,words:[{start:.2,end:1,text:'Create'},{start:1.2,end:2,text:'value.'}]};
 const beat={firstWord:0,lastWord:1,layout:'bottom-presenter',visual:'diagram',headline:'Create value',purpose:'Show the transformation.',illustration:'A problem becomes a useful solution.',motion:'Reveal the solution on value.'};
 const plan={version:1,templateId:'premium-explainer',sourceRevision:'r1',beats:[beat]};
+it('directs Motion planning across the full recording with honest visual capabilities',()=>{
+ const text=editPlannerMessages(source,'hyperframes-motion').map(m=>m.content).join('\n');
+ expect(text).toContain('Plan the entire recording');
+ expect(text).toContain('floating perspective text cards (not screenshots)');
+ expect(text).toContain('visual:presenter means breathing room');
+});
 it.each(['avatar','upload'] as const)('uses the same validated planner for %s media',async kind=>{
  const generate=vi.fn().mockResolvedValue(plan);
  const result=await proposeEdit({...source,kind},'premium-explainer',generate);

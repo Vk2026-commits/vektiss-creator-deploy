@@ -5,6 +5,7 @@ import {resolveSource} from './source-resolve';
 import {sourceWorkflow} from './source-workflow';
 import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
 import {renderTemplatePlan} from './template-render';
+import {logoBytes} from './logo-assets';
 import {readEditBrand,saveEditBrand} from './edit-brand';
 import {readStudio,saveStudio} from './studio-setting';
 import {resolve} from 'node:path';
@@ -29,6 +30,8 @@ export function capturePlugin():Plugin{
    try{
     if(path.startsWith('/api/local-capture/template-')){
      if(process.env.CREATOR_EDIT_STUDIO!=='true'){res.statusCode=503;res.end(JSON.stringify({error:'Edit Studio is not enabled on this server.'}));return;}
+     const logo=path.match(/^\/api\/local-capture\/template-logos\/([a-f0-9]{64})$/);
+     if(req.method==='GET'&&logo){res.setHeader('Content-Type','image/png');res.end(await logoBytes(server.config.root,logo[1]));return;}
      if(path.endsWith('/template-studio')&&(req.method==='GET'||req.method==='PUT')){
       const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>8192)throw Error('Studio settings are too large.');chunks.push(chunk);}res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='GET'?await readStudio(server.config.root):await saveStudio(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));return;
      }

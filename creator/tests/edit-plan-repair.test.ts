@@ -8,9 +8,9 @@ it('derives contiguous end boundaries without losing or duplicating words',()=>{
  expect(fixed.beats.map(b=>b.headline)).toEqual(p.beats.map(b=>b.headline));
 });
 it('repairs invalid reveal/link metadata without inventing labels',()=>{
- const p=templateSample('hyperframes-motion');p.beats[0].graphics!.nodes[0].revealWord=8;p.beats[0].graphics!.links=[{from:0,to:5}];
+ const p=templateSample('hyperframes-motion');p.beats[1].graphics!.nodes[0].revealWord=1;p.beats[1].graphics!.links=[{from:0,to:5}];
  const fixed=repairEditPlan(p,source,p.templateId);
- expect(fixed.beats[0].graphics!.nodes[0].revealWord).toBeUndefined();expect(fixed.beats[0].graphics!.links).toEqual([]);
+ expect(fixed.beats[1].graphics!.nodes[0].revealWord).toBeUndefined();expect(fixed.beats[1].graphics!.links).toEqual([]);
 });
 it('rejects ambiguous order, stale sources and incompatible rankings',()=>{
  const p=templateSample('hyperframes-motion');p.beats[1].firstWord=0;

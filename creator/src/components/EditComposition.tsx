@@ -1,3 +1,4 @@
+import {captionWordAt} from '../domain/caption-timing';
 import type {ReactNode} from 'react';
 import {defaultEditBrand, type EditBrand} from '../domain/edit-brand';
 import type {EditSource, EditProposal} from '../domain/edit-templates';
@@ -13,7 +14,7 @@ export function EditComposition({source,proposal,brand=defaultEditBrand,frame,me
  const split=proposal.templateId==='premium-explainer'&&beat.visual!=='presenter';
  const tier=beat.visual==='tier-board';
  const nodes=beat.graphics?.nodes??[],links=beat.graphics?.links??[];
- const currentWord=source.words.findIndex((w:any)=>w.start<=time&&time<w.end);
+ const currentWord=captionWordAt(source.words,time);
  const captionStart=currentWord<0?-1:Math.floor(currentWord/5)*5;
  const caption=captionStart<0?[]:source.words.slice(captionStart,captionStart+5);
  return <div style={{position:'absolute',inset:0,background:palette.paper,fontFamily:'Arial, sans-serif',color:palette.ink}}>

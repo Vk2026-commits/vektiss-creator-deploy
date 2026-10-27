@@ -2,6 +2,7 @@ import {reviewDiscovery} from './discovery-review';
 import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
 import {readStudio,saveStudio} from './studio-setting';
 import {renderTemplatePlan} from './template-render';
+import {logoBytes} from './logo-assets';
 import {readEditBrand,saveEditBrand} from './edit-brand';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {createReadStream} from 'node:fs';
@@ -141,6 +142,8 @@ export function hostedHandler(c:HostingConfig){
     }
     return json(res,405,{error:'Method not allowed'});
    }
+   const logoMatch=path.match(/^\/api\/local-capture\/template-logos\/([a-f0-9]{64})$/);
+   if(req.method==='GET'&&logoMatch){res.setHeader('Content-Type','image/png');return res.end(await logoBytes(root,logoMatch[1]));}
    const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);const info=await stat(file);res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length',info.size);const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;}
    if(req.method==='GET'&&path===`${prefix}/template-plans`)return json(res,200,await listTemplatePlans(root));

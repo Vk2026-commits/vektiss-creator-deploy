@@ -1,3 +1,4 @@
+import {captionWordAt} from '../domain/caption-timing';
 import {cloneElement,isValidElement,type CSSProperties,type ReactNode} from 'react';
 import type {EditSource,EditProposal} from '../domain/edit-templates';
 import type {EditBrand} from '../domain/edit-brand';
@@ -22,7 +23,7 @@ export function RichEditComposition({source,proposal,brand,frame,media}:{source:
  const ink=brand.text,accent=brand.primary,paper=brand.background;
  const card:CSSProperties={background:paper,border:`2px solid ${accent}55`,borderRadius:28,boxShadow:`0 18px 45px ${ink}12`,padding:'28px 32px',fontSize:40,fontWeight:700,lineHeight:1.15};
  const animated=(i:number):CSSProperties=>({opacity:reveal(i),transform:`translateY(${(1-reveal(i))*24}px)`});
- const activeWord=source.words.findIndex(w=>w.start<=time&&time<w.end);
+ const activeWord=captionWordAt(source.words,time);
  const caption=activeWord<0?[]:source.words.slice(Math.floor(activeWord/4)*4,Math.floor(activeWord/4)*4+4);
  const graphicTop=wide?85:full?300:125;
  const framedMedia=isValidElement<{style?:CSSProperties}>(media)?cloneElement(media,{style:{...media.props.style,objectFit:proposal.templateId==='walkthrough'?'contain':'cover',objectPosition:'center'}}):media;

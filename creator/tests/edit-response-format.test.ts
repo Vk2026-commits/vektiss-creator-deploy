@@ -18,7 +18,7 @@ it('requires exact version, selected style, source revision and every timing/vis
 });
 it('normalizes nullable optional fields without changing speech coverage or hiding invalid fields',()=>{
  const plan=templateSample('hyperframes-motion');
- const wire={...plan,beats:plan.beats.map(b=>({...b,graphics:{...b.graphics,nodes:b.graphics!.nodes.map(n=>({...n,tier:null,revealWord:null}))}}))};
+ const wire={...plan,beats:plan.beats.map(b=>({...b,graphics:{...b.graphics,nodes:b.graphics!.nodes.map(n=>({...n,tier:n.tier??null,revealWord:n.revealWord??null}))}}))};
  expect(validateEditProposal(normalizeEditResponse(wire),templateSampleSource,plan.templateId)).toEqual(plan);
  expect(()=>validateEditProposal(normalizeEditResponse({...wire,version:2}),templateSampleSource,plan.templateId)).toThrow();
 });

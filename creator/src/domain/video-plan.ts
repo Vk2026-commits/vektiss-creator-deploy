@@ -38,7 +38,7 @@ export function videoRenderProgress(render:VideoRender|undefined){
 export const videoPlanSchema=z.object({
  setting:z.enum(['original','studio']).optional(),
  studio_background:graphicCaptureSchema.optional(),
- edit_template:z.enum(['recommend','premium-explainer','tier-list','walkthrough','hyperframes-motion']).optional(),
+ edit_template:z.enum(['recommend','premium-explainer','tier-list','walkthrough','hyperframes-motion','phone-mockup','paper-cutout','clean-tech']).optional(),
  edit_brand:editBrandSchema.optional(),
  step:z.enum(['approve','presenter','visuals','review','saved']),
  approved_at:z.string().nullable(),
