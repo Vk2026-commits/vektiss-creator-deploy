@@ -27,7 +27,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
  const logos=proposal.templateId==='clean-tech'?await approvedRenderLogos(root,plan.logos):[];
- const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,plan.logos??[],6])).digest('hex');
+ const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,plan.logos??[],7])).digest('hex');
  const outputFolder=resolve(root,input.mode==='preview'?'edit/template-previews':'edit/compositions');await mkdir(outputFolder,{recursive:true});
  const output=resolve(outputFolder,`${id}.mp4`);
  const result={id,planId:input.id,version:input.version,mode:input.mode,duration:source.duration};

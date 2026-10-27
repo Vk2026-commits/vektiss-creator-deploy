@@ -13,5 +13,13 @@ describe('pop-out explainer',()=>{
   expect(html).toContain('data-has-audio="false"');
   if(process.env.POPOUT_PROOF){mkdirSync(process.env.POPOUT_PROOF,{recursive:true});writeFileSync(process.env.POPOUT_PROOF+`/${aspectRatio==='9:16'?'index':'wide'}.html`,html);}
  });
- it('escapes model text',()=>{const plan=templateSample('popout-explainer');plan.beats[0].headline='<script>alert(1)</script>';const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);expect(html).not.toContain('<script>alert(1)</script>');expect(html).toContain('&lt;script&gt;');});
+ it('hides the timed matte in presenter and full-graphic scenes',()=>{
+  const base=templateSample('popout-explainer'),beat=base.beats[0];
+  const plan={...base,beats:[{...beat,firstWord:0,lastWord:1,visual:'presenter' as const,layout:'presenter' as const,graphics:{nodes:[],links:[]}},{...beat,firstWord:2,lastWord:4,graphics:{nodes:[],links:[]}},{...beat,firstWord:5,lastWord:6,layout:'full-graphic' as const,graphics:{nodes:[],links:[]}},{...beat,firstWord:7,lastWord:9,graphics:{nodes:[],links:[]}}]};
+  const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);
+  expect(html).toContain('#stage[data-mode="presenter"] #cutout-layer,#stage[data-mode="full"] #cutout-layer{display:none}');
+  expect(html).toContain('#stage[data-mode="full"] #room-layer{display:none}');
+  if(process.env.POPOUT_PROOF)writeFileSync(process.env.POPOUT_PROOF+'/mixed.html',html);
+ });
+ it('escapes model text' ,()=>{const plan=templateSample('popout-explainer');plan.beats[0].headline='<script>alert(1)</script>';const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);expect(html).not.toContain('<script>alert(1)</script>');expect(html).toContain('&lt;script&gt;');});
 });
