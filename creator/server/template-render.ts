@@ -27,7 +27,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
  const logos=proposal.templateId==='clean-tech'?await approvedRenderLogos(root,plan.logos):[];
- const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,plan.logos??[],5])).digest('hex');
+ const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,plan.logos??[],6])).digest('hex');
  const outputFolder=resolve(root,input.mode==='preview'?'edit/template-previews':'edit/compositions');await mkdir(outputFolder,{recursive:true});
  const output=resolve(outputFolder,`${id}.mp4`);
  const result={id,planId:input.id,version:input.version,mode:input.mode,duration:source.duration};
@@ -35,7 +35,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  const hyperframes=['hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons'].includes(proposal.templateId);
+  const hyperframes=['tier-list','hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons'].includes(proposal.templateId);
   await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos)}:{})}),{mode:0o600});
   await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:1024*1024});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.

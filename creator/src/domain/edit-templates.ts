@@ -12,7 +12,7 @@ export const editTemplates=[
  {id:'paper-cutout',name:'Paper Cutout',description:'A separated presenter with a paper outline, layered headlines, and tactile cards.',direction:'The renderer separates the presenter from the original background. Use concise source-led headlines and restrained paper cards. Keep room for the presenter. Do not invent images, claims, or numbers.'},
  {id:'hyperframes-motion',name:'HyperFrames Motion',description:'Animated statement cards, bold comparisons, and word-timed reveals alongside your presenter.',direction:'Use source-led headlines, concise animated cards, comparisons, statistics, and spotlight statements. Preserve the original presenter and speech. Prefer 2–3 short labels per scene, never invent numbers or claims. These are HTML motion scenes rendered with HyperFrames, not stock footage.'},
  {id:'premium-explainer',name:'Premium Explainer',description:'Topic-specific diagrams, purposeful motion, and a bottom presenter.',direction:'Choose an explanatory relationship from the actual speech. Prefer white/navy/blue, original diagrams, and a bottom presenter. Head-above-frame requires a verified matte. Vary layouts only when the idea benefits.'},
- {id:'tier-list',name:'Tier List',description:'Full-screen presenter, animated options, and a lower ranking board.',direction:'Keep the presenter full screen with a lower board. Introduce each option above the head, then move it into its stated tier. Reveal S last only when the source order permits it without cutting speech. Never invent or change ratings.'},
+ {id:'tier-list',name:'Tier List',description:'Full-screen presenter, animated options, and a lower ranking board.',direction:'Keep the presenter full screen with a lower board. Use a compact dark S–F tier board over the lower torso, keeping the face clear. Add each item once, with revealWord anchored to its spoken ranking; previously ranked items remain visible across beats. Never assign an unspoken tier. Reveal S last only when the source order permits it without cutting speech. Never invent or change ratings.'},
  {id:'walkthrough',name:'Walkthrough',description:'Clear screen actions, focused highlights, and restrained graphics.',direction:'Preserve important screen actions and demonstrations. Use supplied screen evidence; do not fabricate interfaces. Prefer a clear screen crop and restrained highlights over decorative graphics.'},
 ] as const;
 
@@ -32,7 +32,7 @@ const beat=z.object({
  headline:z.string().max(100),purpose:z.string().min(1).max(600),
  illustration:z.string().max(1200),motion:z.string().max(600),
  graphics:z.object({
-  nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
+  nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D','E','F']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
   chart:z.object({unit:z.string().max(30),items:z.array(z.object({label:z.string().min(1).max(45),value:z.number().finite().min(0).max(1e15),sourceWord:z.number().int().nonnegative()}).strict()).min(2).max(4)}).strict().optional(),
   links:z.array(z.object({from:z.number().int().min(0).max(5),to:z.number().int().min(0).max(5)}).strict()).max(8),
  }).strict().optional(),

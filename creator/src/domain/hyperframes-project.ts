@@ -1,3 +1,4 @@
+import {rankingProject} from './ranking-project.ts';
 import {popoutExplainerProject} from './popout-explainer-project.ts';
 import {animatedExplainerProject} from './animated-explainer-project.ts';
 import {chartsComparisonsProject} from './charts-comparisons-project.ts';
@@ -19,6 +20,7 @@ export function hyperframesProject(source:EditSource,raw:EditProposal,rawBrand:E
  const brand=editBrandSchema.parse(rawBrand);
  const {width,height}=editDimensions(plan.aspectRatio);
  const wide=width>height;
+ if(plan.templateId==='tier-list')return rankingProject(source,plan,brand,sample);
  if(plan.templateId==='popout-explainer')return popoutExplainerProject(source,plan,brand,sample);
  if(plan.templateId==='animated-explainer')return animatedExplainerProject(source,plan,brand,sample);
  if(plan.templateId==='charts-comparisons')return chartsComparisonsProject(source,plan,brand,sample);
