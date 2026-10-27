@@ -25,6 +25,7 @@ RUN python3 /tmp/thumbnail-model.py
 COPY deploy/matte-model.py /tmp/matte-model.py
 RUN python3 /tmp/matte-model.py
 WORKDIR /app
+COPY --chown=node:node licenses ./licenses
 COPY --chown=node:node server/avatar-thumbnail.py ./server/avatar-thumbnail.py
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/hosted.mjs ./hosted.mjs

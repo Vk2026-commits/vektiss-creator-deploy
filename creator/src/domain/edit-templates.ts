@@ -1,8 +1,11 @@
 import {z} from 'zod';
 import {editAspectRatio} from './edit-format.ts';
 
-export const editTemplateId=z.enum(['premium-explainer','tier-list','walkthrough','hyperframes-motion','phone-mockup','paper-cutout','clean-tech']);
+export const editTemplateId=z.enum(['premium-explainer','tier-list','walkthrough','hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','animated-explainer','charts-comparisons']);
 export const editTemplates=[
+ {id:'animated-explainer',name:'Animated Explainer',description:'Ideas build into connected diagrams while the presenter stays visible.',direction:'Use process, network and timeline diagrams with 2–4 short nodes and explicit links that explain the actual speech. Reveal each node when its idea is spoken, then draw its connections. Keep presenter breathing room. No invented relationships or data.'},
+ {id:'charts-comparisons',name:'Charts & Comparisons',description:'Clear alternatives and source-backed numerical comparisons.',direction:'Use concise comparison panels. Only add graphics.chart when the transcript explicitly states numeric digits with the same unit for all items. Each item needs sourceWord pointing to its exact number token. Unit must occur in the beat. Never invent figures, trends or proportions. Otherwise use equal-sized qualitative panels with nodes and no chart. Include nodes matching chart labels for editing compatibility.'},
+ {id:'glass-cards',name:'Glass Cards',description:'Full-screen presenter with dark translucent cards and crisp brand accents.',direction:'Use one concise glass card at a time over the lower torso, keeping the face and caption area clear. Alternate presenter-only beats with cards. Each card has one short headline and at most two short supporting labels. Prefer 4–8 second readable holds, not constant effects. Use only claims supported by the source.'},
  {id:'clean-tech',name:'Clean Tech Explainer',description:'Official logo suggestions, clear cards, and a presenter below the explanation.',direction:'Use clear short headlines and comparisons. Real logos are retrieved separately from official sites and require user approval; never invent logo artwork or asset URLs. Keep the presenter below the explanation; use presenter-only beats for breathing room. Use no more than two labels per graphic.'},
  {id:'phone-mockup',name:'Phone Mockup',description:'Your footage inside an animated phone with clear editorial callouts.',direction:'Show the original recording inside a phone frame. Use concise source-led headlines and a few short callouts. Never fabricate a screen recording, app interface, message, or testimonial.'},
  {id:'paper-cutout',name:'Paper Cutout',description:'A separated presenter with a paper outline, layered headlines, and tactile cards.',direction:'The renderer separates the presenter from the original background. Use concise source-led headlines and restrained paper cards. Keep room for the presenter. Do not invent images, claims, or numbers.'},
@@ -29,6 +32,7 @@ const beat=z.object({
  illustration:z.string().max(1200),motion:z.string().max(600),
  graphics:z.object({
   nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
+  chart:z.object({unit:z.string().max(30),items:z.array(z.object({label:z.string().min(1).max(45),value:z.number().finite().min(0).max(1e15),sourceWord:z.number().int().nonnegative()}).strict()).min(2).max(4)}).strict().optional(),
   links:z.array(z.object({from:z.number().int().min(0).max(5),to:z.number().int().min(0).max(5)}).strict()).max(8),
  }).strict().optional(),
 }).strict();
@@ -54,6 +58,18 @@ export function validateEditProposal(raw:unknown,source:EditSource,templateId:z.
   if(b.graphics?.links.some(l=>l.from>=b.graphics!.nodes.length||l.to>=b.graphics!.nodes.length))throw Error('EDIT_GRAPHIC_LINK');
   if(b.graphics?.nodes.some(n=>n.revealWord!==undefined&&(n.revealWord<b.firstWord||n.revealWord>b.lastWord)))throw Error('EDIT_REVEAL_WORD');
   if(plan.rendererVersion===2&&b.graphics&&((b.scene==='statistic'&&b.graphics.nodes.length>3)||((b.scene==='comparison'||b.scene==='document')&&b.graphics.nodes.length>4)))throw Error('EDIT_SCENE_DENSITY');
+  if(templateId==='charts-comparisons'&&(b.graphics?.nodes.length??0)>4)throw Error('EDIT_SCENE_DENSITY');
+  if(b.graphics?.chart){
+   if(templateId!=='charts-comparisons')throw Error('EDIT_CHART_TEMPLATE');
+   const chart=b.graphics.chart;
+   const spoken=source.words.slice(b.firstWord,b.lastWord+1).map(w=>w.text).join(' ').toLowerCase();
+   if(chart.unit&&!spoken.includes(chart.unit.toLowerCase()))throw Error('EDIT_CHART_UNIT');
+   for(const item of chart.items){
+    if(item.sourceWord<b.firstWord||item.sourceWord>b.lastWord)throw Error('EDIT_CHART_SOURCE');
+    const token=source.words[item.sourceWord].text.replace(/[, $£€%]/g,'').replace(/[.!?;:]$/,'');
+    if(!/^\d+(?:\.\d+)?$/.test(token)||Number(token)!==item.value)throw Error('EDIT_CHART_SOURCE');
+   }
+  }
   next=b.lastWord+1;
  }
  if(next!==source.words.length)throw Error('EDIT_SPEECH_COVERAGE');

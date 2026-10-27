@@ -1,3 +1,6 @@
+import {animatedExplainerProject} from './animated-explainer-project.ts';
+import {chartsComparisonsProject} from './charts-comparisons-project.ts';
+import {glassCardsProject} from './glass-cards-project.ts';
 import {editStoryboard, validateEditProposal, type EditSource, type EditProposal} from './edit-templates.ts';
 import {editBrandSchema, type EditBrand} from './edit-brand.ts';
 import {captionWordAt} from './caption-timing.ts';
@@ -15,6 +18,9 @@ export function hyperframesProject(source:EditSource,raw:EditProposal,rawBrand:E
  const brand=editBrandSchema.parse(rawBrand);
  const {width,height}=editDimensions(plan.aspectRatio);
  const wide=width>height;
+ if(plan.templateId==='animated-explainer')return animatedExplainerProject(source,plan,brand,sample);
+ if(plan.templateId==='charts-comparisons')return chartsComparisonsProject(source,plan,brand,sample);
+ if(plan.templateId==='glass-cards')return glassCardsProject(source,plan,brand,sample);
  if(plan.templateId==='clean-tech')return cleanTechProject(source,plan,brand,sample,logos);
  if(plan.templateId==='phone-mockup')return phoneMockupProject(source,plan,brand,sample);
  if(plan.templateId==='paper-cutout')return paperCutoutTreatment(talkingHeadProject(source,plan,brand,width,height,sample),brand,wide,sample);

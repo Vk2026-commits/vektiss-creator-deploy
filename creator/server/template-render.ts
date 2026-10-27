@@ -23,7 +23,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const revision=z.string().regex(/^[a-f0-9]{64}$/).parse(plan.proposal.sourceRevision);
  const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(folder,`${revision}.source.json`),'utf8')));
  const proposal=validateEditProposal(plan.proposal,source,plan.proposal.templateId);
- if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length&&!(b.visual==='typography'&&b.headline.trim())))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
+ if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length&&!b.graphics?.chart&&!(b.visual==='typography'&&b.headline.trim())))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
  const logos=proposal.templateId==='clean-tech'?await approvedRenderLogos(root,plan.logos):[];
@@ -35,7 +35,7 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  const hyperframes=['hyperframes-motion','phone-mockup','paper-cutout','clean-tech'].includes(proposal.templateId);
+  const hyperframes=['hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','animated-explainer','charts-comparisons'].includes(proposal.templateId);
   await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos)}:{})}),{mode:0o600});
   await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:proposal.templateId==='paper-cutout'?2400000:1200000,maxBuffer:1024*1024});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.

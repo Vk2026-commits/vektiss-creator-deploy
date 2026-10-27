@@ -60,7 +60,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  }
  async function save(){
   if(!plan||pending.current)return;
-  if(plan.proposal.beats.some(b=>b.visual!=='presenter'&&!(b.visual==='typography'&&b.headline.trim())&&(!b.graphics?.nodes.length||b.graphics.nodes.some(n=>!n.label.trim())))){setError('Add text to each graphic, or choose Presenter only for sections without elements.');return;}
+  if(plan.proposal.beats.some(b=>b.visual!=='presenter'&&!(b.visual==='typography'&&b.headline.trim())&&!b.graphics?.chart&&(!b.graphics?.nodes.length||b.graphics.nodes.some(n=>!n.label.trim())))){setError('Add text to each graphic, or choose Presenter only for sections without elements.');return;}
   pending.current=true;setBusy(true);setError('');
   try{
    const body=JSON.stringify({id:plan.id,baseVersion:plan.version??1,proposal:plan.proposal,brand:plan.brand??defaultEditBrand,...(plan.logos?{logos:plan.logos.map(({brandId,status,replacementId})=>({brandId,status,...(replacementId?{replacementId}:{})}))}:{})});
