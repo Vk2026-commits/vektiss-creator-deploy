@@ -11,3 +11,5 @@
 !supabase/functions/**
 !public/**
 !deploy/**
+
+!licenses/**
