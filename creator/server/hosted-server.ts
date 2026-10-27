@@ -1,5 +1,5 @@
 import {reviewDiscovery} from './discovery-review';
-import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
+import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
 import {readStudio,saveStudio} from './studio-setting';
 import {renderTemplatePlan} from './template-render';
 import {readEditBrand,saveEditBrand} from './edit-brand';
@@ -143,6 +143,7 @@ export function hostedHandler(c:HostingConfig){
    }
    const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);const info=await stat(file);res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length',info.size);const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;}
+   if(req.method==='GET'&&path===`${prefix}/template-plans`)return json(res,200,await listTemplatePlans(root));
    const templatePlan=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePlan)return json(res,200,await readTemplatePlan(root,templatePlan[1]));
    if(req.method!=='POST')return json(res,404,{error:'Not found'});

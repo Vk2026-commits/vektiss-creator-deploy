@@ -3,7 +3,7 @@ import {mkdir,readFile,writeFile,readdir,stat,copyFile,unlink} from 'node:fs/pro
 import {graphicSource} from './graphic-source';
 import {resolveSource} from './source-resolve';
 import {sourceWorkflow} from './source-workflow';
-import {templateEdit,readTemplatePlan,saveTemplatePlan} from './template-edit';
+import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
 import {renderTemplatePlan} from './template-render';
 import {readEditBrand,saveEditBrand} from './edit-brand';
 import {readStudio,saveStudio} from './studio-setting';
@@ -36,6 +36,7 @@ export function capturePlugin():Plugin{
       const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)throw Error('Brand settings are too large.');chunks.push(chunk);}
       res.setHeader('Content-Type','application/json');res.end(JSON.stringify(req.method==='GET'?await readEditBrand(server.config.root):await saveEditBrand(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));return;
      }
+     if(req.method==='GET'&&path==='/api/local-capture/template-plans'){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await listTemplatePlans(server.config.root)));return;}
      const match=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
      const preview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
      if(req.method==='GET'&&preview){res.setHeader('Content-Type','video/mp4');res.end(await readFile(resolve(server.config.root,'edit/template-previews',`${preview[1]}.mp4`)));return;}

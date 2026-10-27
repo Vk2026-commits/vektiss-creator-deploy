@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {templateEdit,templateEditOptions,saveTemplatePlan,readTemplatePlan} from '../server/template-edit';
+import {templateEdit,templateEditOptions,saveTemplatePlan,readTemplatePlan,listTemplatePlans} from '../server/template-edit';
 import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -32,6 +32,9 @@ it('saves a validated scene edit without paid calls and rejects stale or speech-
   await expect(saveTemplatePlan(root,{id,baseVersion:2,proposal:{...proposal,sourceRevision:'c'.repeat(64)}})).rejects.toThrow('EDIT_SOURCE_CHANGED');
   const styled=await saveTemplatePlan(root,{id,baseVersion:2,proposal,brand:{primary:'#AA3311',background:'#FFFFFF',text:'#111111',captionStyle:'none'}});
   expect(styled.version).toBe(3);expect((await readTemplatePlan(root,id)).brand.captionStyle).toBe('none');
+  await writeFile(join(folder,`${'c'.repeat(64)}.json`),'invalid');
+  expect(await listTemplatePlans(root)).toEqual([{id,savedAt:styled.savedAt,templateId:'premium-explainer',title:'Value'}]);
+  expect(await listTemplatePlans(join(root,'another-account'))).toEqual([]);
   expect(request).not.toHaveBeenCalled();
  }finally{await rm(root,{recursive:true,force:true});}
 });

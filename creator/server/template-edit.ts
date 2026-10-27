@@ -1,5 +1,5 @@
 import {createReadStream} from 'node:fs';
-import {mkdir,readFile,writeFile,copyFile,rename,unlink} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,copyFile,rename,unlink,readdir} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
 import {resolve} from 'node:path';
 import {execFile} from 'node:child_process';
@@ -92,6 +92,19 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
 }
 
 const planId=z.string().regex(/^[a-f0-9]{64}$/);
+export async function listTemplatePlans(root:string){
+ const folder=resolve(root,'edit/template-plans');
+ const names=await readdir(folder).catch((error)=>{if(error.code==='ENOENT')return [];throw error;});
+ const plans=await Promise.all(names.filter(name=>/^[a-f0-9]{64}\.json$/.test(name)).map(async name=>{
+  try{
+   const saved=await readTemplatePlan(root,name.slice(0,-5));
+   const proposal=editProposalSchema.parse(saved.proposal);
+   if(saved.id!==name.slice(0,-5))return null;
+   return {id:saved.id,savedAt:typeof saved.savedAt==='string'?saved.savedAt:'',templateId:proposal.templateId,title:proposal.beats[0]?.headline||'Untitled edit'};
+  }catch{return null;}
+ }));
+ return plans.filter(p=>p!==null).sort((a,b)=>b.savedAt.localeCompare(a.savedAt));
+}
 export async function readTemplatePlan(root:string,id:unknown){
  return JSON.parse(await readFile(resolve(root,'edit/template-plans',`${planId.parse(id)}.json`),'utf8'));
 }

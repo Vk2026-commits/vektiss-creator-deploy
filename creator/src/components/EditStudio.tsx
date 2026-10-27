@@ -18,6 +18,17 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;mode:string;version:number}|null>(null);
  const pending=useRef(false);
+ const [savedEdits,setSavedEdits]=useState<{id:string;savedAt:string;templateId:string;title:string}[]>([]);
+ const [savedError,setSavedError]=useState('');
+ const [savedLoading,setSavedLoading]=useState(!preview);
+ useEffect(()=>{if(preview)return;let live=true;setSavedLoading(true);void mediaFetch('/api/local-capture/template-plans').then(async r=>{if(!r.ok)throw Error('Saved edits could not load. Please reopen Edit Studio to retry.');const data=await r.json();if(live){setSavedEdits(data);setSavedError('');}}).catch(e=>{if(live)setSavedError(e.message);}).finally(()=>{if(live)setSavedLoading(false);});return()=>{live=false;};},[preview,plan?.id,plan?.version]);
+ async function openSavedEdit(id:string){
+  if(pending.current||dirty)return;
+  pending.current=true;setBusy(true);setError('');
+  try{const response=await mediaFetch(`/api/local-capture/template-plans/${id}`);if(!response.ok)throw Error('This saved edit could not open. Please try again.');const saved:Plan=await response.json();setPlan(saved);setTemplate(saved.proposal.templateId);setAspectRatio(saved.proposal.aspectRatio??'9:16');setDirty(false);}
+  catch(e){setError(e instanceof Error?e.message:'Saved edit could not open.');}
+  finally{pending.current=false;setBusy(false);}
+ }
  const [brand,setBrand]=useState<EditBrand>(initialBrand??defaultEditBrand);
  const [brandRecord,setBrandRecord]=useState({version:0,savedAt:'',brand:defaultEditBrand});
  const [brandLoaded,setBrandLoaded]=useState(preview);
@@ -75,6 +86,13 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  return <section className="edit-studio">
   <span className="eyebrow">EDIT STUDIO</span><h1>Your talking-head video. Your visuals.</h1>
   <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
+  <section aria-label="Saved edits"><h2>Saved edits</h2><p>Reopen an edit from this account on any device. Opening it does not generate a plan or start a render.</p>
+   {savedLoading&&<p role="status">Loading saved edits…</p>}
+   {savedError&&<p role="alert">{savedError}</p>}
+   {!savedLoading&&!savedError&&!savedEdits.length&&<p>No saved edits yet.</p>}
+   {dirty&&<p>Save your current edit before opening another.</p>}
+   {savedEdits.map(edit=><article key={edit.id}><h3>{edit.title}</h3><p>{editTemplates.find(t=>t.id===edit.templateId)?.name} · {edit.savedAt?new Date(edit.savedAt).toLocaleString():'Saved edit'}</p><button className="button" disabled={busy||dirty} onClick={()=>void openSavedEdit(edit.id)}>{plan?.id===edit.id?'Open edit shown below':'Open saved edit'}</button></article>)}
+  </section>
   {onCreateAvatar&&<div><button type="button" className="button primary" onClick={onCreateAvatar}>Use my avatar · create a script →</button><p>Choose your Content Profile, topic or Discover source, approve your script, then choose the avatar and its setting. Or upload your own footage below.</p></div>}
   {!profileId&&<p role="alert">Select a Content Profile first.</p>}
   <fieldset disabled={busy}><legend>1. Choose your source</legend>
