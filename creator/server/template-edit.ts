@@ -60,7 +60,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
- const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,3,options.aspectRatio??'9:16',...(options.brand?[options.brand]:[])])).digest('hex');
+ const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,4,options.aspectRatio??'9:16',...(options.brand?[options.brand]:[])])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));
