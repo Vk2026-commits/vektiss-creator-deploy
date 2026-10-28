@@ -22,10 +22,10 @@ function FilterNumber({value,onChange,min,max,step,disabled}:{value:number;onCha
    setDraft(displayNumber(next,step));onChange(next);
   }}/>
 }
-export function DiscoverFilters({value,onChange,disabled}:{value:DiscoveryFilters;onChange:(next:DiscoveryFilters)=>void;disabled:boolean}){
+export function DiscoverFilters({value,onChange,disabled,hidePlatforms=false}:{value:DiscoveryFilters;onChange:(next:DiscoveryFilters)=>void;disabled:boolean;hidePlatforms?:boolean}){
  const update=(patch:Partial<DiscoveryFilters>)=>onChange({...value,...patch});
  return <section className="discover-filters" aria-label="Clip search filters">
-  <div className="discovery-platforms" role="group" aria-label="Video platform">{(['all','YouTube','Instagram','TikTok'] as const).map(platform=><button type="button" key={platform} disabled={disabled} aria-pressed={value.platform===platform} className={value.platform===platform?'is-selected':''} onClick={()=>update({platform})}>{platform==='all'?'All platforms':platform}</button>)}</div>
+  {!hidePlatforms&&<div className="discovery-platforms" role="group" aria-label="Video platform">{(['all','YouTube','Instagram','TikTok'] as const).map(platform=><button type="button" key={platform} disabled={disabled} aria-pressed={value.platform===platform} className={value.platform===platform?'is-selected':''} onClick={()=>update({platform})}>{platform==='all'?'All platforms':platform}</button>)}</div>}
   <div className="discovery-filter-fields">
    <label>Find<select disabled={disabled} value={value.mode} onChange={e=>{const mode=e.target.value as DiscoveryFilters['mode'];update({mode,minViews:mode==='relevant'?0:Math.max(10000,value.minViews),minEngagementRate:mode==='relevant'?0:value.minEngagementRate||1});}}><option value="engaged">High engagement</option><option value="outliers">Creator outliers</option><option value="relevant">Relevant clips</option></select></label>
    <label>Minimum views<FilterNumber min={0} max={1e9} step={1000} disabled={disabled} value={value.minViews} onChange={minViews=>update({minViews})}/></label>

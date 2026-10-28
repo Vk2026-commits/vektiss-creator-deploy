@@ -19,7 +19,9 @@ describe('Discover profile selection',()=>{
     expect(html).toContain('Search ·');
     expect(html).toContain('<option value="safety" selected="">Safety with Steve</option>');
     expect(html).toContain('<option value="credit">Credit with Rose</option>');
-    expect(html).toContain('Quick picks made for Safety with Steve.');
+    expect(html).toContain('Find content to talk about.');
+    expect(html).toContain('<summary>Content profile: Safety with Steve</summary>');
+    expect(html.match(/class="discover-primary-find"/g)).toHaveLength(1);
   });
 
   it('does not offer archived profiles as search targets',()=>{
