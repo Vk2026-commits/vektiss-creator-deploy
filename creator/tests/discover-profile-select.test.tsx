@@ -15,6 +15,8 @@ describe('Discover profile selection',()=>{
     expect(html).toContain('What do you want to find?');
     expect(html.indexOf('id="discover-query"')).toBeLessThan(html.indexOf('discover-profile-choice'));
     expect(html).toContain('Use content profile');
+    expect(html).toContain('Add keyword');
+    expect(html).toContain('Search ·');
     expect(html).toContain('<option value="safety" selected="">Safety with Steve</option>');
     expect(html).toContain('<option value="credit">Credit with Rose</option>');
     expect(html).toContain('Quick picks made for Safety with Steve.');
