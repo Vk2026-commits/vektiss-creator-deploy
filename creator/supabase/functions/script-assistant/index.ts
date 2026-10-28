@@ -1,3 +1,4 @@
+import {EDIT_PLANNER_VERSION} from '../../../src/domain/edit-planner-version.ts';
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
 import {editPlannerMessages} from '../../../server/edit-planner.ts';
 import {editResponseFormat,normalizeEditResponse} from '../../../src/domain/edit-response-format.ts';
@@ -104,7 +105,7 @@ Deno.serve(async request=>{
    progress('edit-planning');
    const source=editSourceSchema.parse(JSON.parse(String(form.get('source'))));
    const template=String(form.get('template'));
-   const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([source,template]))))).map(x=>x.toString(16).padStart(2,'0')).join('');
+   const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([source,template,EDIT_PLANNER_VERSION]))))).map(x=>x.toString(16).padStart(2,'0')).join('');
    // Look up only this owner's exact source/profile/style. Never repeat a paid call
    // when a previously captured candidate can be repaired locally.
    const previous=await db.from('creator_ai_generations').select('id,result').eq('user_id',auth.user.id).eq('profile_id',profileId).contains('result',{feature:'edit-plan-candidate',fingerprint}).order('created_at',{ascending:false}).limit(1).maybeSingle();

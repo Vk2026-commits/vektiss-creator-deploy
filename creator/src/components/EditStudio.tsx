@@ -1,3 +1,4 @@
+import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-version';
 import {editStageLabels,type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
@@ -55,7 +56,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    const headers:Record<string,string>=file?{'Content-Type':editVideoUploadType(file),'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
-   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio})},`edit:v5:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}`);
+   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio})},`edit:planner${EDIT_PLANNER_VERSION}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}`);
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
    const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
@@ -81,7 +82,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'preparing'});
   try{
    const body=JSON.stringify({id:plan.id,version:plan.version,mode});
-   const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},body,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
+   const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},`render:v${EDIT_RENDER_VERSION}:${body}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
    setRenderProgress({stage:'finishing'});
    const video=await mediaFetch(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`);if(!video.ok)throw Error('The render is saved, but its download could not load. Try again.');

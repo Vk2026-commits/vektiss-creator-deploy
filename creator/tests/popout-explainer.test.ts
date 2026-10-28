@@ -19,7 +19,30 @@ describe('pop-out explainer',()=>{
   const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);
   expect(html).toContain('#stage[data-mode="presenter"] #cutout-layer,#stage[data-mode="full"] #cutout-layer{display:none}');
   expect(html).toContain('#stage[data-mode="full"] #room-layer{display:none}');
+  expect(html).toContain('[data-full="true"]{background:');
   if(process.env.POPOUT_PROOF)writeFileSync(process.env.POPOUT_PROOF+'/mixed.html',html);
  });
  it('escapes model text' ,()=>{const plan=templateSample('popout-explainer');plan.beats[0].headline='<script>alert(1)</script>';const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);expect(html).not.toContain('<script>alert(1)</script>');expect(html).toContain('&lt;script&gt;');});
+ it('uses approved words for editorial headline emphasis without adding a second presenter',()=>{
+  const plan=templateSample('popout-explainer');
+  plan.beats[0].headline='A thought becomes a video';
+  const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);
+  expect(html).toContain('<span>A thought</span> <em>becomes a video</em>');
+  expect(html).toContain('THE BIG PICTURE');
+  expect((html.match(/id="presenter"/g)??[])).toHaveLength(1);
+  expect((html.match(/id="cutout"/g)??[])).toHaveLength(1);
+  expect(html).toContain('#stage[data-mode="full"] #room-layer{display:none}');
+  expect(html).toContain('[data-full="true"]{background:');
+  expect(html).toContain('font-family:Georgia');
+ });
+ it('scales long approved headlines and retains graphics/caption safe areas',()=>{
+  const plan=templateSample('popout-explainer');
+  plan.beats[0].headline='Practical skills and experience can help people discover useful opportunities with AI';
+  const html=popoutExplainerProject(templateSampleSource,plan,defaultEditBrand);
+  expect(html).toContain('--headline-size:54px');
+  expect(html).toContain('height:29%');
+  expect(html).toContain('#captions{z-index:5;bottom:5%');
+  expect(html).not.toContain('font-size:NaN');
+ });
+
 });
