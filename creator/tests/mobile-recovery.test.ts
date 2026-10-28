@@ -9,6 +9,14 @@ beforeEach(()=>{
  storage.clear();
 });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();vi.unstubAllEnvs();vi.restoreAllMocks();});
+it('preserves download chunk headers through authenticated GET retries',async()=>{
+ vi.useFakeTimers();
+ const fetcher=vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockResolvedValueOnce(new Response('bytes'));
+ vi.stubGlobal('fetch',fetcher);
+ const work=mediaFetch('/api/local-capture/exports/'+ 'a'.repeat(64),{headers:{'X-Creator-Range':'bytes=0-4194303'}});
+ await vi.advanceTimersByTimeAsync(2000);expect((await work).ok).toBe(true);
+ for(const [,init] of fetcher.mock.calls){expect(init.headers.get('X-Creator-Range')).toBe('bytes=0-4194303');expect(init.headers.get('Authorization')).toBe('Bearer test');}
+});
 it('reopens an accepted export using only its saved poll URL',async()=>{
  vi.useFakeTimers();
  const body=JSON.stringify({job_id:'existing-paid-render'});

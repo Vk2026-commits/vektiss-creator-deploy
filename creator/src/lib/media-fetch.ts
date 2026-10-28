@@ -35,10 +35,10 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
   const downloading=/^\/api\/local-capture\/(exports|video-background)\/[a-f0-9-]+$/.test(url);
   return fetch(url,{...options,headers,signal:AbortSignal.any([signal,AbortSignal.timeout(options.method==='POST'||downloading?600000:30000)]),cache:'no-store'});
  }
- async function read(url:string){
+ async function read(url:string,options:RequestInit={}){
   // A disconnected status read is not a failed job. Only retry GETs.
   for(let attempt=0;;attempt++){
-   try{const response=await request(url);if(response.status<500)return response;}
+   try{const response=await request(url,options);if(response.status<500)return response;}
    catch(error){if(signal.aborted)throw error;if(!(error instanceof TypeError)&&!(error instanceof DOMException&&error.name==='TimeoutError'))throw error;}
    if(attempt>=4)throw Error('Connection interrupted. Your saved video is preserved. Reconnect and retry loading it; no new avatar render is needed.');
    await wait();
@@ -52,7 +52,7 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
  if(requestId&&retryOf&&/^[a-f0-9-]{36}$/.test(retryOf))headers.set('X-Creator-Retry-Of',retryOf);
  let response:Response;
  if(savedPoll&&!requestId){onAccepted?.();response=await read(savedPoll);}
- else if((init.method??'GET').toUpperCase()==='GET')response=await read(path);
+ else if((init.method??'GET').toUpperCase()==='GET')response=await read(path,init);
  else{
   try{response=await request(path,{...init,headers});}
   catch(error){if(!savedPoll||signal.aborted)throw error;response=await read(savedPoll);}
