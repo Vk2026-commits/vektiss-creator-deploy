@@ -1,3 +1,4 @@
+import {ILLUSTRATION_MODEL} from '../../../src/domain/edit-illustrations.ts';
 import {EDIT_PLANNER_VERSION} from '../../../src/domain/edit-planner-version.ts';
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
 import {editPlannerMessages} from '../../../server/edit-planner.ts';
@@ -58,7 +59,7 @@ Deno.serve(async request=>{
   progress('read-body');
   const blob=await bounded(request,multipart?12*1024*1024:150000);
   const form=multipart?await new Response(blob,{headers:{'content-type':request.headers.get('content-type')!}}).formData():null;
-  if(form?.get('action')==='edit-plan'&&Deno.env.get('CREATOR_EDIT_STUDIO')!=='true')return respond({code:'NOT_ENABLED'},503);
+  if(['edit-plan','edit-illustration'].includes(String(form?.get('action')))&&Deno.env.get('CREATOR_EDIT_STUDIO')!=='true')return respond({code:'NOT_ENABLED'},503);
   const input=form?null:command.parse(JSON.parse(await blob.text()));
   const profileId=input?.profileId ?? z.string().uuid().parse(form?.get('profileId'));
   const projectId=z.string().uuid().optional().parse(input?.brief.cost_project_id??form?.get('projectId')??undefined);
@@ -76,10 +77,11 @@ Deno.serve(async request=>{
   const graphic=form?.get('action')==='graphic-analysis';
   const alignment=form?.get('action')==='story-alignment';
   const editing=form?.get('action')==='edit-plan';
+  const illustrating=form?.get('action')==='edit-illustration';
   const visual=form?.get('action')==='video-analysis'||boundary||graphic;
   const writingModel=input?.action==='generate'&&safetyProfile?'gpt-4.1-2025-04-14':'gpt-4o-mini';
-  const usageModel=editing?writingModel:alignment?'whisper-1':form&&!visual?'gpt-4o-mini-transcribe':writingModel;
-  const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(editing?'generate':alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
+  const usageModel=illustrating?ILLUSTRATION_MODEL:editing?writingModel:alignment?'whisper-1':form&&!visual?'gpt-4o-mini-transcribe':writingModel;
+  const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(editing||illustrating?'generate':alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
   if(recordError)throw Error('PERSISTENCE');
   let providerUsage:unknown=null;
   const providerRequests:unknown[]=[];
@@ -100,6 +102,16 @@ Deno.serve(async request=>{
    usage=providerUsage??usage;
    const {error}=await db.from('creator_ai_generations').update({result,usage:usage??null,estimated_cost_usd:openAICost(usageModel,usage),pricing_version:PRICING_VERSION,status:'complete'}).eq('id',generationId!);
    if(error)throw Error('PERSISTENCE');
+  }
+  if(form&&illustrating){
+   const prompt=z.string().min(1).max(6000).parse(form.get('prompt'));
+   progress('edit-illustration');
+   const response=await trackedFetch('https://api.openai.com/v1/images/generations',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(150000),body:JSON.stringify({model:ILLUSTRATION_MODEL,prompt,n:1,size:'1024x1024',quality:'medium',background:'transparent',output_format:'png',moderation:'auto'})});
+   if(!response.ok)throw Error('IMAGE_PROVIDER');
+   const data=await response.json();
+   const image=z.string().min(1).max(17*1024*1024).parse(data.data?.[0]?.b64_json);
+   await persist({feature:'edit-illustration',model:ILLUSTRATION_MODEL,size:'1024x1024',quality:'medium',images:1},data.usage);
+   return respond({b64_json:image,generationId});
   }
   if(form&&editing){
    progress('edit-planning');

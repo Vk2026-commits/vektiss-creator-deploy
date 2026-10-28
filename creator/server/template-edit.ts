@@ -139,7 +139,8 @@ export async function saveTemplatePlan(root:string,raw:unknown){
  if(new Set(logos.map(l=>l.brandId)).size!==logos.length)throw new DraftError('Choose a different replacement for each logo.');
  const latest=await readTemplatePlan(root,input.id);
  if((latest.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
- const result={...previous,brand:input.brand??previous.brand??defaultEditBrand,proposal,logos,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
+ const illustrations=JSON.stringify(input.proposal)===JSON.stringify(previous.proposal)&&JSON.stringify(input.brand??previous.brand)===JSON.stringify(previous.brand)?previous.illustrations:[];
+ const result={...previous,illustrations,brand:input.brand??previous.brand??defaultEditBrand,proposal,logos,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
  const saved=resolve(root,'edit/template-plans',`${input.id}.json`),temp=`${saved}.${randomUUID()}.tmp`;
  await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;

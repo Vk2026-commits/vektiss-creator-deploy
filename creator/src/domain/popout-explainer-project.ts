@@ -1,3 +1,4 @@
+import type {RenderIllustration} from './edit-illustrations.ts';
 import {editorialScene,editorialSceneStyles,seekEditorialScene} from './editorial-scenes.ts';
 import {animatedExplainerProject} from './animated-explainer-project.ts';
 import {editStoryboard,type EditSource,type EditProposal} from './edit-templates.ts';
@@ -15,12 +16,12 @@ function editorialHeadline(text:string){
 
 // Both layers use identical geometry: only the room layer is clipped.
 // A clean alpha matte lets the presenter cross the panel edge without duplicating them.
-export function popoutExplainerProject(source:EditSource,plan:EditProposal,brand:EditBrand,sample=false){
+export function popoutExplainerProject(source:EditSource,plan:EditProposal,brand:EditBrand,sample=false,illustrations:RenderIllustration[]=[]){
  const wide=editDimensions(plan.aspectRatio).width>editDimensions(plan.aspectRatio).height;
  let html=animatedExplainerProject(source,plan,brand,sample);
  let i=0;const beats=editStoryboard(plan,source);
  let graphicIndex=0;
- html=html.replace(/<svg class="diagram"[\s\S]*?<\/svg>/g,()=>editorialScene(source,beats[graphicIndex++]));
+ html=html.replace(/<svg class="diagram"[\s\S]*?<\/svg>/g,()=>{const index=graphicIndex++,b=beats[index],image=illustrations.find(a=>a.beatIndex===index&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(a.dataUri));return image?`<svg class="diagram editorial-scene" viewBox="0 0 900 640" role="img" aria-label="AI-generated conceptual illustration"><g data-ed-reveal="${b.start}"><image href="${image.dataUri}" x="130" y="0" width="640" height="640" preserveAspectRatio="xMidYMid meet"/></g></svg>`:editorialScene(source,b);});
  html=html.replace('const words=',`const seekEditorialScene=${seekEditorialScene.toString()};const words=`);
  html=html.replace('if(!active)return;', 'if(!active)return;seekEditorialScene(s,t);');
  html=html.replace(/<section data-from=/g,()=>`<section data-kind="${beats[i++].scene??'process'}" data-from=`);

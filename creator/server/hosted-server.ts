@@ -1,3 +1,4 @@
+import {generateTemplateIllustrations} from './template-illustrations';
 import {serveMediaFile} from './serve-media-file';
 import type {EditProgress} from '../src/domain/edit-progress';
 import {reviewDiscovery} from './discovery-review';
@@ -151,7 +152,7 @@ export function hostedHandler(c:HostingConfig){
    const templatePlan=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePlan)return json(res,200,await readTemplatePlan(root,templatePlan[1]));
    if(req.method!=='POST')return json(res,404,{error:'Not found'});
-   if(!['/template-render','/template-edit','/template-plan-save','/discovery-review','/source-resolve','/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
+   if(!['/template-illustrations','/template-render','/template-edit','/template-plan-save','/discovery-review','/source-resolve','/graphic-source','/prepare-video','/video-import','/video-background','/video-frames','/full-compose','/script-draft','/source-workflow'].some(route=>path===prefix+route))return json(res,422,{error:'Unsupported media operation.'});
    const requestedId=req.headers['x-creator-job'];
    if(requestedId!==undefined&&(typeof requestedId!=='string'||!uuid.test(requestedId)))return json(res,400,{error:'Invalid job identifier.'});
    if(typeof requestedId==='string'){
@@ -212,6 +213,7 @@ export function hostedHandler(c:HostingConfig){
      const reportProgress=(progress:EditProgress)=>{const key=JSON.stringify(progress);if(key===lastProgress)return;lastProgress=key;job.progress=progress;progressWrites=progressWrites.then(()=>saveJob(metadata,{...job,progress})).catch(()=>{});};
      try{
       if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input,reportProgress);
+      else if(path.endsWith('/template-illustrations'))job.result=await generateTemplateIllustrations(root,input,authorization,c,undefined,reportProgress);
       else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
       else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],aspectRatio:req.headers['x-edit-aspect-ratio'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
       else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);

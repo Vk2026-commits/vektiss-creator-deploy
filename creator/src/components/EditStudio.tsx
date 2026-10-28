@@ -1,3 +1,4 @@
+import {illustrationScenes,ILLUSTRATION_OUTPUT_ESTIMATE,type SavedIllustration} from '../domain/edit-illustrations';
 import {loadMediaBlob} from '../lib/load-media-blob';
 import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-version';
 import {editStageLabels,type EditProgress} from '../domain/edit-progress';
@@ -11,7 +12,7 @@ import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../
 import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 import {LogoReview,type LogoChoice} from './LogoReview';
 
-type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
+type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
 export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:()=>void}){
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
  const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
@@ -73,6 +74,16 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   }catch(e){setError(e instanceof Error?e.message:'Could not save the edit plan.');}
   finally{pending.current=false;setBusy(false);}
  }
+ async function createIllustrations(){
+  if(!plan||!profileId||pending.current||dirty)return;
+  pending.current=true;setBusy(true);setError('');setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'illustrating',percent:0});
+  try{
+   const body=JSON.stringify({id:plan.id,version:plan.version,profileId,approveImageCharge:true});
+   const r=await mediaFetch('/api/local-capture/template-illustrations',{method:'POST',headers:{'Content-Type':'application/json'},body},`illustrations:${body}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);});
+   const data=await r.json();if(!r.ok)throw Error(data.error??'Illustrations could not finish.');setPlan(data);setRendered(null);
+  }catch(e){setError(e instanceof Error?e.message:'Illustrations could not finish.');}
+  finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
+ }
  async function render(mode:'preview'|'final'){
   if(!plan||dirty||pending.current||plan.logos?.some(l=>l.status==='pending'))return;
   pending.current=true;setBusy(true);setError('');
@@ -129,10 +140,17 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. Ready to preview or export.</p>
    <p>This edit: {captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p>
    <p>Your template controls the layout, graphics, and motion. The edit uses your speech to choose what appears and when.</p>
+   {illustrationScenes(plan.proposal).length>0&&<div className="edit-ai-illustrations">
+    <h3>Custom AI illustrations · optional</h3>
+    <p>The template chooses up to {illustrationScenes(plan.proposal).length} scenes and creates matching artwork. Your original presenter and speech stay unchanged.</p>
+    {plan.illustrations?.length?<p>{plan.illustrations.length} illustrations saved. Exports reuse these images without generating them again.</p>:<p>Estimated image output cost: ${(illustrationScenes(plan.proposal).length*ILLUSTRATION_OUTPUT_ESTIMATE).toFixed(3)} USD, plus prompt tokens. OpenAI reference estimate; actual charges may differ. This is separate from HeyGen.</p>}
+    {!plan.illustrations?.length&&<button className="button" disabled={busy||dirty||!profileId} onClick={()=>void createIllustrations()}>{busy?'Working…':'Create AI illustrations · paid'}</button>}
+    <p>You can also export immediately using the template’s existing graphics.</p>
+   </div>}
    {plan.proposal.templateId==='clean-tech'&&<LogoReview logos={plan.logos??[]} busy={busy} onChange={logos=>{setPlan({...plan,logos});setDirty(true);setRendered(null);}}/>}
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
    {dirty&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save asset choices'}</button><p>Save your asset choices before exporting.</p></>}
-   {renderProgress&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
+   {renderProgress&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='illustrating'?'Progress counts completed images. Each image can take a minute or more.':renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
    <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video · optional</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>

@@ -1,3 +1,4 @@
+import {generateTemplateIllustrations} from './template-illustrations';
 import type {Plugin} from 'vite';
 import {mkdir,readFile,writeFile,readdir,stat,copyFile,unlink} from 'node:fs/promises';
 import {graphicSource} from './graphic-source';
@@ -44,10 +45,10 @@ export function capturePlugin():Plugin{
      const preview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
      if(req.method==='GET'&&preview){res.setHeader('Content-Type','video/mp4');res.end(await readFile(resolve(server.config.root,'edit/template-previews',`${preview[1]}.mp4`)));return;}
      if(req.method==='GET'&&match){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await readTemplatePlan(server.config.root,match[1])));return;}
-     if(req.method==='POST'&&(path.endsWith('/template-plan-save')||path.endsWith('/template-render'))){
+     if(req.method==='POST'&&(path.endsWith('/template-illustrations')||path.endsWith('/template-plan-save')||path.endsWith('/template-render'))){
       if(active){res.statusCode=429;res.end();return;}
       active=true;
-      try{const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>512*1024)throw Error('Plan is too large.');chunks.push(chunk);}const handler=path.endsWith('/template-render')?renderTemplatePlan:saveTemplatePlan;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await handler(server.config.root,JSON.parse(Buffer.concat(chunks).toString()))));}
+      try{const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>512*1024)throw Error('Plan is too large.');chunks.push(chunk);}const handler=path.endsWith('/template-render')?renderTemplatePlan:saveTemplatePlan;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await (path.endsWith('/template-illustrations')?generateTemplateIllustrations(server.config.root,JSON.parse(Buffer.concat(chunks).toString()),req.headers.authorization??'',{supabaseUrl:server.config.env.VITE_SUPABASE_URL,publicKey:server.config.env.VITE_SUPABASE_PUBLISHABLE_KEY}):handler(server.config.root,JSON.parse(Buffer.concat(chunks).toString())))));}
       finally{active=false;}
       return;
      }

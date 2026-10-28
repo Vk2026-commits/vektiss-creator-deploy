@@ -1,3 +1,4 @@
+import type {RenderIllustration} from './edit-illustrations.ts';
 import {rankingProject} from './ranking-project.ts';
 import {popoutExplainerProject} from './popout-explainer-project.ts';
 import {animatedExplainerProject} from './animated-explainer-project.ts';
@@ -15,13 +16,13 @@ import type {RenderLogo} from './logo-assets.ts';
 // Local authoring bridge only. Never accept executable HTML or URLs from the model.
 export const HYPERFRAMES_VERSION='0.8.206';
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function hyperframesProject(source:EditSource,raw:EditProposal,rawBrand:EditBrand,sample=false,logos:RenderLogo[]=[]){
+export function hyperframesProject(source:EditSource,raw:EditProposal,rawBrand:EditBrand,sample=false,logos:RenderLogo[]=[],illustrations:RenderIllustration[]=[]){
  const plan=validateEditProposal(raw,source,raw.templateId);
  const brand=editBrandSchema.parse(rawBrand);
  const {width,height}=editDimensions(plan.aspectRatio);
  const wide=width>height;
  if(plan.templateId==='tier-list')return rankingProject(source,plan,brand,sample);
- if(plan.templateId==='popout-explainer')return popoutExplainerProject(source,plan,brand,sample);
+ if(plan.templateId==='popout-explainer')return popoutExplainerProject(source,plan,brand,sample,illustrations);
  if(plan.templateId==='animated-explainer')return animatedExplainerProject(source,plan,brand,sample);
  if(plan.templateId==='charts-comparisons')return chartsComparisonsProject(source,plan,brand,sample);
  if(plan.templateId==='glass-cards')return glassCardsProject(source,plan,brand,sample);
