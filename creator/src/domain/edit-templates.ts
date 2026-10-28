@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {editorialAssetIds} from './editorial-assets.ts';
 import {editAspectRatio} from './edit-format.ts';
 
 export const editTemplateId=z.enum(['premium-explainer','tier-list','walkthrough','hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons']);
@@ -32,7 +33,7 @@ const beat=z.object({
  headline:z.string().max(100),purpose:z.string().min(1).max(600),
  illustration:z.string().max(1200),motion:z.string().max(600),
  graphics:z.object({
-  nodes:z.array(z.object({label:z.string().min(1).max(45),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D','E','F']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
+  nodes:z.array(z.object({label:z.string().min(1).max(45),asset:z.enum(editorialAssetIds).optional(),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D','E','F']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
   chart:z.object({unit:z.string().max(30),items:z.array(z.object({label:z.string().min(1).max(45),value:z.number().finite().min(0).max(1e15),sourceWord:z.number().int().nonnegative()}).strict()).min(2).max(4)}).strict().optional(),
   links:z.array(z.object({from:z.number().int().min(0).max(5),to:z.number().int().min(0).max(5)}).strict()).max(8),
  }).strict().optional(),

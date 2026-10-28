@@ -3,7 +3,6 @@ import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-v
 import {editStageLabels,type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
-import {EditSceneControls} from './EditSceneControls';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
 import {mediaFetch} from '../lib/media-fetch';
 import {editVideoUploadType} from '../domain/upload-type';
@@ -74,9 +73,6 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   }catch(e){setError(e instanceof Error?e.message:'Could not save the edit plan.');}
   finally{pending.current=false;setBusy(false);}
  }
- function editBeat(index:number,beat:EditProposal['beats'][number]){
-  setPlan(previous=>previous?{...previous,proposal:{...previous.proposal,rendererVersion:2,beats:previous.proposal.beats.map((b,i)=>i===index?beat:b)}}:null);setDirty(true);setRendered(null);
- }
  async function render(mode:'preview'|'final'){
   if(!plan||dirty||pending.current||plan.logos?.some(l=>l.status==='pending'))return;
   pending.current=true;setBusy(true);setError('');
@@ -130,13 +126,12 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
   <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{busy?'Working…':'Generate edit plan'}</button>
   {error&&<p role="alert">{error}</p>}
-  {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. This is a storyboard, not a rendered video.</p>
+  {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. Ready to preview or export.</p>
    <p>This edit: {captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p>
-   <p>AI suggests the first edit. Change the elements below, or choose presenter only for any section.</p>
+   <p>Your template controls the layout, graphics, and motion. The edit uses your speech to choose what appears and when.</p>
    {plan.proposal.templateId==='clean-tech'&&<LogoReview logos={plan.logos??[]} busy={busy} onChange={logos=>{setPlan({...plan,logos});setDirty(true);setRendered(null);}}/>}
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
-   {plan.storyboard.map((b,i)=><article key={i} style={{padding:'16px 0',borderBottom:'1px solid #dce5ef'}}><h3>{b.start.toFixed(1)}–{b.end.toFixed(1)}s · {plan.proposal.beats[i].headline||`Scene ${i+1}`}</h3><blockquote>{b.spokenText}</blockquote><p><strong>Visual direction:</strong> {plan.proposal.beats[i].illustration}</p><p><strong>Why:</strong> {b.purpose}</p><EditSceneControls beat={plan.proposal.beats[i]} busy={busy} onChange={beat=>editBeat(i,beat)}/></article>)}
-   <button className="button primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save edit plan'}</button><p>Saving makes no AI call and does not start a render.</p>
+   {dirty&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save asset choices'}</button><p>Save your asset choices before exporting.</p></>}
    {renderProgress&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
    <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video · optional</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>

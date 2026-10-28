@@ -20,6 +20,18 @@ describe('editorial scene library',()=>{
   const html=editorialScene(templateSampleSource,beat);
   expect(html).toContain('&lt;script&gt;');expect(html).toContain('&lt;img');expect(html).toContain('data-ed-reveal="2"');expect(html).not.toContain('<script>');expect(html).not.toContain('<video');expect(html).not.toContain('<image');
  });
+ it('lands motion on the spoken anchor instead of starting late',()=>{
+  const node={dataset:{edReveal:'2'},style:{} as Record<string,string>,setAttribute:()=>{}};
+  const root={querySelectorAll:(s:string)=>s==='[data-ed-reveal]'?[node]:[]} as unknown as Element;
+  seekEditorialScene(root,1.7);expect(node.style.opacity).toBe('0');
+  seekEditorialScene(root,1.9);expect(Number(node.style.opacity)).toBeGreaterThan(.8);
+  seekEditorialScene(root,2);expect(node.style.opacity).toBe('1');
+ });
+ it('adds source-specific vector assets without inventing brand logos',()=>{
+  const html=editorialScene(templateSampleSource,{...base,scene:'process',graphics:{nodes:[{label:'Record video',shape:'box',x:50,y:50},{label:'AI learning',shape:'box',x:50,y:50}],links:[]}});
+  expect(html).toContain('data-editorial-asset="video"');expect(html).toContain('data-editorial-asset="ai"');
+  expect(html).not.toContain('https://');
+ });
  it('seeks backwards without retaining visible nodes or completed checks',()=>{
   const node={dataset:{edReveal:'2',edX:'10',edY:'20'},style:{} as Record<string,string>,setAttribute:(k:string,v:string)=>{attrs[k]=v;}};
   const path={dataset:{edDraw:'2.18'},style:{} as Record<string,string>};const attrs:Record<string,string>={};
