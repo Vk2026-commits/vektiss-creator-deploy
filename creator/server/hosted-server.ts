@@ -1,3 +1,4 @@
+import {serveMediaFile} from './serve-media-file';
 import type {EditProgress} from '../src/domain/edit-progress';
 import {reviewDiscovery} from './discovery-review';
 import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
@@ -125,8 +126,7 @@ export function hostedHandler(c:HostingConfig){
    if(req.method==='GET'&&mediaMatch){
     const [,kind,id]=mediaMatch;if(kind==='video-background'&&!uuid.test(id))return json(res,404,{error:'Not found'});
     const file=kind==='exports'?resolve(root,'edit/compositions',`${id}.mp4`):resolve(media,`${id}.video`);
-    const info=await stat(file);res.setHeader('Content-Length',info.size);res.setHeader('Content-Type',kind==='exports'?'video/mp4':await readFile(resolve(media,`${id}.mime`),'utf8'));
-    const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;
+    return await serveMediaFile(req,res,file,kind==='exports'?'video/mp4':await readFile(resolve(media,`${id}.mime`),'utf8'));
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(path.startsWith(`${prefix}/template-`)&&process.env.CREATOR_EDIT_STUDIO!=='true')return json(res,503,{error:'Edit Studio is not enabled on this server.'});
@@ -146,7 +146,7 @@ export function hostedHandler(c:HostingConfig){
    const logoMatch=path.match(/^\/api\/local-capture\/template-logos\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&logoMatch){res.setHeader('Content-Type','image/png');return res.end(await logoBytes(root,logoMatch[1]));}
    const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
-   if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);const info=await stat(file);res.setHeader('Content-Type','video/mp4');res.setHeader('Content-Length',info.size);const stream=createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);return;}
+   if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);return await serveMediaFile(req,res,file,'video/mp4');}
    if(req.method==='GET'&&path===`${prefix}/template-plans`)return json(res,200,await listTemplatePlans(root));
    const templatePlan=path.match(/^\/api\/local-capture\/template-plans\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePlan)return json(res,200,await readTemplatePlan(root,templatePlan[1]));

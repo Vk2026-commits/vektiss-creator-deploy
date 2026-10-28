@@ -1,3 +1,4 @@
+import {loadMediaBlob} from '../lib/load-media-blob';
 import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-version';
 import {editStageLabels,type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
@@ -85,8 +86,8 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},`render:v${EDIT_RENDER_VERSION}:${body}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
    setRenderProgress({stage:'finishing'});
-   const video=await mediaFetch(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`);if(!video.ok)throw Error('The render is saved, but its download could not load. Try again.');
-   setRendered({url:URL.createObjectURL(await video.blob()),mode,version:plan.version});
+   const blob=await loadMediaBlob(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`,mediaFetch,percent=>setRenderProgress({stage:'finishing',percent}));
+   setRendered({url:URL.createObjectURL(blob),mode,version:plan.version});
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
