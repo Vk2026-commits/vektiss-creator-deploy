@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import {AppUpdateNotice} from "./components/AppUpdateNotice";
 import { App } from "./App";
 import "./styles.css";
 import "./brand.css";
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
+      <AppUpdateNotice />
     </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -1894,3 +1894,5 @@ dialog::backdrop {
 .source-progress-card .draft-progress strong,.source-progress-card .draft-progress span,.source-progress-card .draft-progress small { color:white; }
 .source-progress-card > button { margin-top:16px; color:white; background:transparent; border:1px solid #ffffff66; border-radius:10px; padding:10px 16px; }
 .source-progress-pill { position:fixed; z-index:1200; bottom:24px; left:50%; transform:translateX(-50%); width:max-content; max-width:90vw; padding:14px 20px; border:1px solid #72b8ff; border-radius:16px; background:#086dea; color:white; box-shadow:0 8px 32px #0044aa55; }
+
+.app-update-notice{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;width:min(640px,calc(100% - 32px));display:grid;gap:8px;padding:18px 22px;background:#10263d;color:white;border-radius:16px;box-shadow:0 8px 32px #0003}.app-update-notice button{justify-self:start;padding:10px 16px;border-radius:8px;background:white;color:#10263d;border:0;font-weight:700}
