@@ -1,3 +1,5 @@
+import {renderTemplatePlan} from '../server/template-render';
+vi.mock('../server/template-render',()=>({renderTemplatePlan:vi.fn()}));
 import {afterEach,expect,it,vi} from 'vitest';
 import {createServer,type Server} from 'node:http';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
@@ -120,3 +122,17 @@ it('extracts frames through the authenticated job queue and returns JSON on poll
  for(let i=0;i<100;i++){await new Promise(r=>setTimeout(r,50));result=await realFetch(url+poll,{headers});if(result.status!==202)break;}
  expect(result.status).toBe(200);const output=await result.json();expect(output.duration).toBe(1);expect(output.frames.map((f:{time:number})=>f.time)).toEqual([0,.5]);
 },15000);
+
+it('persists measured render progress and serves it only to the job owner',async()=>{
+ vi.stubEnv('CREATOR_EDIT_STUDIO','true');let finish:()=>void=()=>{};
+ try{
+  const {url,headers}=await setup();
+  vi.mocked(renderTemplatePlan).mockImplementation(async(_root,_input,report)=>{report?.({stage:'separating',percent:35});await new Promise<void>(r=>{finish=r;});return {id:'a'.repeat(64),planId:'b'.repeat(64),version:1,mode:'final',duration:2};});
+  const started=await realFetch(url+'/api/local-capture/template-render',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({id:'b'.repeat(64),version:1,mode:'final'})});
+  expect(started.status).toBe(202);const {poll}=await started.json();
+  let status:any;for(let i=0;i<30;i++){status=await (await realFetch(url+poll,{headers})).json();if(status.progress)break;await new Promise(r=>setTimeout(r,10));}
+  expect(status.progress).toEqual({stage:'separating',percent:35});expect(Number.isFinite(Date.parse(status.created))).toBe(true);
+  expect((await realFetch(url+poll)).status).toBe(403);
+  finish();for(let i=0;i<30;i++){const r=await realFetch(url+poll,{headers});if(r.status===200){expect((await r.json()).id).toBe('a'.repeat(64));return;}await new Promise(r=>setTimeout(r,10));}throw Error('Job did not complete');
+ }finally{finish();vi.unstubAllEnvs();}
+});

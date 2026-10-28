@@ -1,3 +1,4 @@
+import {parseEditProgress,type EditProgress} from '../src/domain/edit-progress';
 import {readFile,writeFile,mkdir,rename,unlink,stat} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {execFile} from 'node:child_process';
@@ -16,7 +17,8 @@ export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$
 export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},_receipt?:{version:number}|null){
  if(input.version!==plan.version)throw Error('The edit plan changed. Reload the current version before exporting.');
 }
-export async function renderTemplatePlan(root:string,raw:unknown){
+export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(progress:EditProgress)=>void){
+ onProgress?.({stage:'preparing'});
  const input=templateRenderRequest.parse(raw),plan=await readTemplatePlan(root,input.id);
  const folder=resolve(root,'edit/template-plans');
  checkRenderApproval(input,plan);
@@ -37,7 +39,10 @@ export async function renderTemplatePlan(root:string,raw:unknown){
  try{
   const hyperframes=['tier-list','hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons'].includes(proposal.templateId);
   await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos)}:{})}),{mode:0o600});
-  await exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:1024*1024});
+  const rendering=exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:8*1024*1024});
+  let pending='';rendering.child.stdout?.on('data',chunk=>{pending+=String(chunk);const lines=pending.split('\n');pending=lines.pop()??'';for(const line of lines){const p=parseEditProgress(line);if(p)onProgress?.(p);}});
+  await rendering;
+  onProgress?.({stage:'finishing'});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);

@@ -19,5 +19,5 @@ try{
  const inputProps={sourceUrl,source:job.source,proposal:job.proposal,brand:job.brand};
  const browserExecutable=process.env.CREATOR_CHROMIUM_PATH||undefined;
  const composition=await selectComposition({serveUrl,id:'CreatorEdit',inputProps,browserExecutable});
- await renderMedia({serveUrl,composition,inputProps,browserExecutable,outputLocation:job.output,codec:'h264',pixelFormat:'yuv420p',concurrency:2,scale:job.preview?0.5:1,crf:job.preview?26:18});
+ await renderMedia({onProgress:p=>process.stdout.write(JSON.stringify({stage:'rendering',percent:Math.floor(p.progress*100)})+'\n'),serveUrl,composition,inputProps,browserExecutable,outputLocation:job.output,codec:'h264',pixelFormat:'yuv420p',concurrency:2,scale:job.preview?0.5:1,crf:job.preview?26:18});
 }finally{server.close();await rm(temp,{recursive:true,force:true});}

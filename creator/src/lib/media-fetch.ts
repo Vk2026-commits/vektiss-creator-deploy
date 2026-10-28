@@ -1,9 +1,10 @@
+import type {MediaJobProgress} from '../domain/edit-progress';
 import {supabase} from './supabase';
 import {onResume} from './resume-events';
 import {recoveryRead,recoveryWrite} from './recovery-storage';
 
 // Same-origin only: never forward a user's session to a URL returned by a provider.
-export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:string,resumeOnly=false,onAccepted?:()=>void):Promise<Response>{
+export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:string,resumeOnly=false,onAccepted?:()=>void,onProgress?:(status:MediaJobProgress)=>void):Promise<Response>{
  if(!/^\/api\/local-capture(?:\/|$)/.test(path))throw Error('Invalid media route.');
  const signal=init.signal??new AbortController().signal;
  const owner=(await supabase?.auth.getSession())?.data.session?.user.id;
@@ -58,6 +59,7 @@ export async function mediaFetch(path:string,init:RequestInit={},recoveryTag?:st
  }
  while(response.status===202){
   const job=await response.json();
+  onProgress?.({created:job.created,progress:job.progress});
   if(typeof job.poll!=='string'||!pollPattern.test(job.poll))throw Error('Invalid processing response.');
   if(recoveryKey)recoveryWrite(recoveryKey,job.poll);
   onAccepted?.();

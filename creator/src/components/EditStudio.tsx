@@ -1,3 +1,4 @@
+import {editStageLabels,type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
 import {EditSceneControls} from './EditSceneControls';
@@ -18,6 +19,8 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;mode:string;version:number}|null>(null);
+ const [renderProgress,setRenderProgress]=useState<EditProgress|null>(null),[renderStarted,setRenderStarted]=useState(0),[elapsed,setElapsed]=useState(0);
+ useEffect(()=>{if(!renderStarted)return;const update=()=>setElapsed(Math.max(0,Math.floor((Date.now()-renderStarted)/1000)));update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[renderStarted]);
  const pending=useRef(false);
  const [savedEdits,setSavedEdits]=useState<{id:string;savedAt:string;templateId:string;title:string}[]>([]);
  const [savedError,setSavedError]=useState('');
@@ -75,14 +78,16 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  async function render(mode:'preview'|'final'){
   if(!plan||dirty||pending.current||plan.logos?.some(l=>l.status==='pending'))return;
   pending.current=true;setBusy(true);setError('');
+  setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'preparing'});
   try{
    const body=JSON.stringify({id:plan.id,version:plan.version,mode});
-   const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},body);
+   const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},body,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
+   setRenderProgress({stage:'finishing'});
    const video=await mediaFetch(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`);if(!video.ok)throw Error('The render is saved, but its download could not load. Try again.');
    setRendered({url:URL.createObjectURL(await video.blob()),mode,version:plan.version});
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
-  finally{pending.current=false;setBusy(false);}
+  finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
  return <section className="edit-studio">
   <span className="eyebrow">EDIT STUDIO</span><h1>Your talking-head video. Your visuals.</h1>
@@ -129,7 +134,8 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    {plan.proposal.templateId==='clean-tech'&&<LogoReview logos={plan.logos??[]} busy={busy} onChange={logos=>{setPlan({...plan,logos});setDirty(true);setRendered(null);}}/>}
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
    {plan.storyboard.map((b,i)=><article key={i} style={{padding:'16px 0',borderBottom:'1px solid #dce5ef'}}><h3>{b.start.toFixed(1)}–{b.end.toFixed(1)}s · {plan.proposal.beats[i].headline||`Scene ${i+1}`}</h3><blockquote>{b.spokenText}</blockquote><p><strong>Visual direction:</strong> {plan.proposal.beats[i].illustration}</p><p><strong>Why:</strong> {b.purpose}</p><EditSceneControls beat={plan.proposal.beats[i]} busy={busy} onChange={beat=>editBeat(i,beat)}/></article>)}
-   <button className="button primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy?'Working…':'Save edit plan'}</button><p>Saving makes no AI call and does not start a render.</p>
+   <button className="button primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save edit plan'}</button><p>Saving makes no AI call and does not start a render.</p>
+   {renderProgress&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
    <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video · optional</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>

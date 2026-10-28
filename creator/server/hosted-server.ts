@@ -1,3 +1,4 @@
+import type {EditProgress} from '../src/domain/edit-progress';
 import {reviewDiscovery} from './discovery-review';
 import {templateEdit,readTemplatePlan,saveTemplatePlan,listTemplatePlans} from './template-edit';
 import {readStudio,saveStudio} from './studio-setting';
@@ -35,7 +36,7 @@ export function validateHostingConfig(c:HostingConfig){
  if(resolve(c.data)===resolve(c.dist))throw Error('Media storage must be separate from public files.');
  return c;
 }
-type Job={state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean;notification?:VideoReadyNotification};
+type Job={progress?:EditProgress;state:'running'|'done'|'failed';route:string;created:string;result?:unknown;file?:string;type?:string;error?:string;cost?:Record<string,unknown>;costSynced?:boolean;notification?:VideoReadyNotification};
 async function saveJob(path:string,job:Job){const temp=`${path}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(job),{mode:0o600});await rename(temp,path);}
 function json(res:ServerResponse,status:number,value:unknown){res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));}
 async function notifyVideoReady(c:HostingConfig,user:{id?:unknown;email?:unknown},root:string,job:Job){
@@ -111,7 +112,7 @@ export function hostedHandler(c:HostingConfig){
       }catch{console.error('cost-telemetry-retry',id);}
      }
     }
-    if(job.state==='running')return activeJob===id?json(res,202,{poll:`${prefix}/jobs/${id}`}):json(res,409,{error:'Processing was interrupted by a restart. Retry; saved sources and paid renders are preserved.'});
+    if(job.state==='running')return activeJob===id?json(res,202,{poll:`${prefix}/jobs/${id}`,created:job.created,progress:job.progress}):json(res,409,{error:'Processing was interrupted by a restart. Retry; saved sources and paid renders are preserved.'});
     if(job.state==='failed')return json(res,422,{error:job.error});
     if(job.file){res.setHeader('Content-Type',job.type??'video/mp4');const stream=createReadStream(resolve(jobs,`${id}.mp4`));stream.on('error',()=>res.destroy());stream.pipe(res);return;}
     return json(res,200,job.result);
@@ -207,8 +208,10 @@ export function hostedHandler(c:HostingConfig){
     const savedInput=inputFile;inputFile='';detached=true;
     // Persist status, not bearer tokens. Work survives a disconnected phone; never starts a paid render.
     void(async()=>{
+     let progressWrites=Promise.resolve(),lastProgress='';
+     const reportProgress=(progress:EditProgress)=>{const key=JSON.stringify(progress);if(key===lastProgress)return;lastProgress=key;job.progress=progress;progressWrites=progressWrites.then(()=>saveJob(metadata,{...job,progress})).catch(()=>{});};
      try{
-      if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input);
+      if(path.endsWith('/template-render'))job.result=await renderTemplatePlan(root,input,reportProgress);
       else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
       else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],aspectRatio:req.headers['x-edit-aspect-ratio'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
       else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
@@ -224,6 +227,7 @@ export function hostedHandler(c:HostingConfig){
 	      await notifyVideoReady(c,user,root,job);
 	     }catch(e){job.state='failed';job.error=e instanceof DraftError?e.message:importMessages[e instanceof Error?e.message:'']??'Media processing failed. Your saved source and existing paid render are preserved; retry or upload the original video.';}
      finally{
+      await progressWrites;
       const assets=(await mediaInventory(root).catch(()=>[])).filter(asset=>before.get(asset.key)!==asset.modified).map(({key,bytes})=>({key,bytes}));
       job.cost={...job.cost,status:job.state,finished_at:new Date().toISOString(),elapsed_ms:Date.now()-started,retained_bytes:assets.reduce((n,a)=>n+a.bytes,0),assets};
       job.costSynced=false;
