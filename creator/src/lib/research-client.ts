@@ -30,7 +30,7 @@ async function invoke<T>(name: string, body: unknown): Promise<T> {
 }
 
 export const loadResearchFeed = (profileId: string | undefined, options: { platform?:DiscoveryFilters['platform'];filter: ResearchFeedFilter; sort?:ResearchSort; sourceMode?: 'all'|'videos'|'articles'; offset: number; limit: number }) => invoke<ResearchFeed>("research-feed", { ...(profileId ? { profileId } : {}), ...options });
-export const requestResearch = (profileId: string, requestedCount: number,options:{sourceMode:'videos'|'articles';articleDate?:ArticleDate;discoveryFilters?:DiscoveryFilters}={sourceMode:'videos'}) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount,...options, idempotencyKey: crypto.randomUUID() });
+export const requestResearch = (profileId: string, requestedCount: number,options:{searchQuery?:string;useContentProfile?:boolean;sourceMode:'videos'|'articles';articleDate?:ArticleDate;discoveryFilters?:DiscoveryFilters}={sourceMode:'videos'}) => invoke<{ job: ResearchJob }>("research-request", { profileId, requestedCount,...options, idempotencyKey: crypto.randomUUID() });
 export const syncResearch = (jobId: string) => invoke<{ job: ResearchJob }>("research-sync", { jobId });
 export const stopResearch = (jobId: string) => invoke<{ job: ResearchJob }>("research-sync", { jobId, action:'stop' });
 export const researchFeedback = (opportunityId: string, action: "saved" | "rejected" | "selected" | "script_created", reason?: string) => invoke<{ ok: true }>("research-feedback", { opportunityId, action, ...(reason ? { reason } : {}) });

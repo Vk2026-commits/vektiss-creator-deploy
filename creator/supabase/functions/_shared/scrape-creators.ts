@@ -38,7 +38,7 @@ export function scrapeTasks(brief:ResearchBrief,seed:string,watchlist:CreatorSou
  const defaults=['AI side hustle results','first AI client','selling AI automation','AI freelancing income','AI business revenue'];
  const groups=[/experiment|side hustle|results/i,/first|client|customer/i,/automation|service/i,/freelanc|skill/i,/income|revenue|profit|business/i];
  const aiIncome=/\bAI\b|artificial intelligence|ChatGPT/i.test(topics.join(' '));
- const lanes=aiIncome?groups.map((re,i)=>{const options=topics.filter(t=>re.test(t));return options.length?options[(seed.charCodeAt(i%seed.length)||0)%options.length]:defaults[i];}):buildCrossPlatformQueryPack({...brief,discoveryPilot:false},seed,1);
+ const lanes=brief.searchQuery?[brief.searchQuery]:aiIncome?groups.map((re,i)=>{const options=topics.filter(t=>re.test(t));return options.length?options[(seed.charCodeAt(i%seed.length)||0)%options.length]:defaults[i];}):buildCrossPlatformQueryPack({...brief,discoveryPilot:false},seed,1);
  const directives=(brief.researchSeekSituations+' '+brief.researchScreeningCriteria).toLowerCase();
  return [...lanes.flatMap((query,i)=>platforms.map(platform=>({id:`search-${platform}-${i}`,platform,kind:'search' as const,query:platform==='Instagram'&&/demonstrat|case stud/.test(directives)&&i===2?query+' demo':query}))),...watchlist.filter(c=>platforms.includes(c.platform)).slice(0,20).map((creator,i)=>({id:`watch-${i}`,platform:creator.platform,kind:'creator' as const,creator}))].slice(0,35);
 }

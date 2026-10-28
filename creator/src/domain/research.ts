@@ -92,6 +92,7 @@ export const providerResearchEnvelopeSchema = z
 
 export const researchBriefSchema = z
   .object({
+    searchQuery: z.string().trim().max(300).optional(),
     expertise: z.string().trim().max(2000),
     experience: z.string().trim().max(2000),
     industries: z.array(z.string().trim().max(160)).max(20),
@@ -126,6 +127,8 @@ export type ResearchBrief = z.infer<typeof researchBriefSchema>;
 
 export const researchRequestSchema = z
   .object({
+    searchQuery: z.string().trim().max(300).default(''),
+    useContentProfile: z.boolean().default(true),
     profileId: z.string().uuid(),
     requestedCount: z.number().int().min(1).max(10),
     idempotencyKey: z.string().uuid(),
@@ -133,7 +136,7 @@ export const researchRequestSchema = z
     articleDate:articleDateSchema.optional(),
     discoveryFilters:discoveryFiltersSchema.optional(),
   })
-  .strict();
+  .strict().refine(value => value.useContentProfile || value.searchQuery.length > 0, {message:'Enter what you want to find when the content profile is off.',path:['searchQuery']});
 
 export const researchFeedbackRequestSchema = z
   .object({

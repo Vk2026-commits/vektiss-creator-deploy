@@ -1,3 +1,4 @@
+import {directSearchBrief} from '../../../src/domain/direct-search.ts';
 import {scrapeEnabled,scrapeTasks} from '../_shared/scrape-creators.ts';
 import {indexedVideoSearch,youtubeSearch} from '../_shared/discovery-search.ts';
 import {startWatchlistDiscovery} from '../_shared/platform-discovery.ts';
@@ -117,7 +118,7 @@ Deno.serve(async (request) => {
       .select("id,user_id,creator_profile_id,name,primary_audience,strategy").eq("id", input.profileId).eq("user_id", userId).maybeSingle();
     if (profileError || !profile) return reply(headers, { code: "PROFILE" }, 403);
     const { data: creator } = await db.from("creator_profiles").select("context").eq("id", profile.creator_profile_id).eq("user_id", userId).maybeSingle();
-    const brief = buildBrief(creator as Record<string, unknown> | null, profile as Record<string, unknown>);
+    let brief = buildBrief(creator as Record<string, unknown> | null, profile as Record<string, unknown>);
     const { data: qualityRow, error: qualityError } = await db.from("creator_search_quality").select("*").eq("content_profile_id", input.profileId).maybeSingle();
     if (qualityError) throw new Error("PERSISTENCE");
     const defaults = await db.from('creator_search_defaults').select('settings').eq('creator_id',profile.creator_profile_id).maybeSingle();
@@ -131,6 +132,7 @@ Deno.serve(async (request) => {
       brief.researchSeekSituations = quality.seekSituations;
       brief.researchBlockedUrls = quality.badExamples;
     }
+    brief = directSearchBrief(brief,input.searchQuery,input.useContentProfile);
     brief.sourceMode=input.sourceMode;
     if(input.sourceMode==='videos'&&input.discoveryFilters){brief.discoveryFilters=input.discoveryFilters;brief.researchSourcePlatforms=input.discoveryFilters.platform==='all'?['TikTok','Instagram','YouTube']:[input.discoveryFilters.platform];}
     if(input.sourceMode==='articles'){
@@ -143,7 +145,7 @@ Deno.serve(async (request) => {
     const pilot=await db.from('creator_discovery_pilot').select('enabled').eq('content_profile_id',input.profileId).maybeSingle();
     if(pilot.error)throw Error('PERSISTENCE');
     brief.discoveryPilot=input.sourceMode==='videos'&&pilot.data?.enabled===true;
-    const watch=brief.discoveryPilot?await db.from('creator_discovery_watchlist').select('platform,identifier,url,name').eq('content_profile_id',input.profileId).eq('user_id',userId):{data:[],error:null};
+    const watch=brief.discoveryPilot&&input.useContentProfile&&!input.searchQuery?await db.from('creator_discovery_watchlist').select('platform,identifier,url,name').eq('content_profile_id',input.profileId).eq('user_id',userId):{data:[],error:null};
     if(watch.error)throw Error('PERSISTENCE');
     const watchlist=(watch.data??[]).flatMap(row=>{const parsed=creatorSourceSchema.safeParse(row);return parsed.success?[parsed.data]:[];});
     await reserve(userId, input.requestedCount);

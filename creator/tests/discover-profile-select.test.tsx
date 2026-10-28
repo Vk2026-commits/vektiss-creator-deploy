@@ -11,7 +11,7 @@ const profile=(id:string,name:string):ContentProfile=>({
 describe('Discover profile selection',()=>{
   it('shows the selected profile beside the search controls',()=>{
     const html=renderToStaticMarkup(<Discover profiles={[profile('safety','Safety with Steve'),profile('credit','Credit with Rose')]} selectedId="safety" onSelectProfile={()=>{}} onCreate={()=>{}}/>);
-    expect(html).toContain('Searching for this Content Profile');
+    expect(html).toContain('Searching with this Content Profile');
     expect(html).toContain('<option value="safety" selected="">Safety with Steve</option>');
     expect(html).toContain('<option value="credit">Credit with Rose</option>');
     expect(html).toContain('Quick picks made for Safety with Steve.');
