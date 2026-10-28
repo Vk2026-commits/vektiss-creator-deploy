@@ -35,3 +35,12 @@ it('allows only supported illustration IDs and preserves a semantic selection',(
  const invalid=JSON.parse(JSON.stringify(plan));invalid.beats[0].graphics.nodes[0].asset='https://untrusted.example/image.svg';
  expect(()=>validateEditProposal(invalid,templateSampleSource,plan.templateId)).toThrow();
 });
+
+it('only offers ranking boards for ranking-compatible template requests',()=>{
+ for(const style of ['popout-explainer','walkthrough','hyperframes-motion']){
+  const schema=editResponseFormat(templateSampleSource,style).json_schema.schema as any;
+  expect(schema.properties.beats.items.properties.visual.enum).not.toContain('tier-board');
+ }
+ const schema=editResponseFormat(templateSampleSource,'tier-list').json_schema.schema as any;
+ expect(schema.properties.beats.items.properties.visual.enum).toContain('tier-board');
+});

@@ -19,3 +19,12 @@ it('rejects ambiguous order, stale sources and incompatible rankings',()=>{
  expect(editPlanDiagnostic(Error('private content'))).toBe('EDIT_PLAN_SCHEMA');
  expect(editPlanDiagnostic(Error('EDIT_REVEAL_WORD'))).toBe('EDIT_REVEAL_WORD');
 });
+
+it('repairs a tierless board without changing its content, but preserves actual ranking safeguards',()=>{
+ const p=templateSample('popout-explainer');p.beats[0].visual='tier-board';
+ const fixed=repairEditPlan(p,source,p.templateId);
+ expect(fixed.beats[0].visual).toBe('diagram');
+ expect(fixed.beats[0].graphics).toEqual(p.beats[0].graphics);
+ p.beats[0].graphics!.nodes[0].tier='S';
+ expect(()=>repairEditPlan(p,source,p.templateId)).toThrow('EDIT_TEMPLATE_MISMATCH');
+});

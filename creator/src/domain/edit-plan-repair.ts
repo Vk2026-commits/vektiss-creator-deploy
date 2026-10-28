@@ -15,7 +15,12 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
  const repaired={...plan,beats:plan.beats.map((beat,i)=>{
   const firstWord=starts[i],lastWord=(starts[i+1]??source.words.length)-1;
   const b={...beat,firstWord,lastWord};
-  if(b.visual==='tier-board'&&template!=='tier-list')throw Error('EDIT_TEMPLATE_MISMATCH');
+  if(b.visual==='tier-board'&&template!=='tier-list'){
+   // A tierless board is a mislabeled diagram. Preserve its content and timing.
+   // Actual rankings require review; never silently discard their ratings.
+   if(b.graphics?.nodes.some(n=>n.tier!==undefined))throw Error('EDIT_TEMPLATE_MISMATCH');
+   b.visual='diagram';
+  }
   if(b.graphics){
    b.graphics={nodes:b.graphics.nodes.map(n=>{
     const copy={...n};

@@ -14,7 +14,7 @@ export function editResponseFormat(rawSource:EditSource,template:unknown){
   scene:enumeration(['process','timeline','comparison','network','statistic','document','spotlight']),
   firstWord:word,lastWord:word,
   layout:enumeration(['presenter','bottom-presenter','split','full-graphic']),
-  visual:enumeration(['presenter','diagram','comparison','steps','typography','tier-board','screen-focus']),
+  visual:enumeration(['presenter','diagram','comparison','steps','typography','screen-focus',...(styles.includes('tier-list')?['tier-board']:[])]),
   headline:text(100),purpose:text(600,1),illustration:text(1200),motion:text(600),
   graphics:object({chart:{anyOf:[object({unit:text(30),items:{type:'array',minItems:2,maxItems:4,items:object({label:text(45,1),value:{type:'number',minimum:0,maximum:1e15},sourceWord:word})}}),{type:'null'}]},nodes:{type:'array',items:node,maxItems:6},links:{type:'array',maxItems:8,items:object({from:{type:'integer',minimum:0,maximum:5},to:{type:'integer',minimum:0,maximum:5}})}}),
  });
