@@ -7,7 +7,7 @@ export async function loadMediaBlob(path:string,request:(path:string,init:Reques
   let part:Blob|undefined,end=0;
   for(let attempt=0;attempt<3;attempt++){
    try{
-    const response=await request(path,{headers:{Range:`bytes=${received}-${received+chunkSize-1}`}});
+    const response=await request(path,{headers:{'X-Creator-Range':`bytes=${received}-${received+chunkSize-1}`}});
     if(!response.ok||!response.headers.get('content-type')?.startsWith('video/mp4'))throw Error('Could not load the saved MP4.');
     if(response.status===200&&received===0)return await response.blob();
     const range=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get('content-range')??'');

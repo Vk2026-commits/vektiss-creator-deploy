@@ -6,8 +6,9 @@ import {createReadStream} from 'node:fs';
 export async function serveMediaFile(req:IncomingMessage,res:ServerResponse,file:string,type:string){
  const {size}=await stat(file);res.setHeader('Content-Type',type);res.setHeader('Accept-Ranges','bytes');
  let start=0,end=size-1;
- if(req.headers.range){
-  const match=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range);
+ const range=req.headers['x-creator-range']??req.headers.range;
+ if(range){
+  const match=/^bytes=(\d+)-(\d*)$/.exec(typeof range==='string'?range:'');
   start=match?Number(match[1]):NaN;end=match&&match[2]?Math.min(Number(match[2]),size-1):size-1;
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>=size||end<start){res.writeHead(416,{'Content-Range':`bytes */${size}`});res.end();return;}
   res.statusCode=206;res.setHeader('Content-Range',`bytes ${start}-${end}/${size}`);
