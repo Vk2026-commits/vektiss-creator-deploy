@@ -1,3 +1,4 @@
+import {searchKeywords} from '../../../src/domain/search-keywords.ts';
 import {collectEngagement} from '../../../src/domain/discovery-engagement.ts';
 import {creatorFromUrl,incomeSearchLanes} from '../../../src/domain/discovery-pilot.ts';
 import {providerText} from '../../../src/domain/provider-text.ts';
@@ -85,7 +86,7 @@ function requestedQueries(brief:ResearchBrief,seed:string,round:number,instagram
 }
 
 export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
- if(brief.searchQuery)return [brief.searchQuery];
+ if(brief.searchQuery)return searchKeywords(brief.searchQuery);
  if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '),seed);
   const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   const topics = [...brief.sourceTopics, ...brief.contentPillars, ...brief.audienceInterests];
@@ -117,7 +118,7 @@ export function buildTikTokQueryPack(brief: ResearchBrief, seed = "", round = 1)
 }
 
 export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
- if(brief.searchQuery)return [brief.searchQuery];
+ if(brief.searchQuery)return searchKeywords(brief.searchQuery);
  if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '),seed);
   const requested=requestedQueries(brief,seed,round); if(requested)return requested;
   // Use shorter, incident-oriented phrases for Shorts and Reels search. Long
@@ -136,7 +137,7 @@ export function buildCrossPlatformQueryPack(brief: ResearchBrief, seed = "", rou
 }
 
 export function buildInstagramQueryPack(brief: ResearchBrief, seed = "", round = 1): string[] {
- if(brief.searchQuery)return [brief.searchQuery];
+ if(brief.searchQuery)return searchKeywords(brief.searchQuery);
  if(brief.discoveryPilot)return incomeSearchLanes(brief.sourceTopics.slice(0,2).join(' '),seed);
   const requested=requestedQueries(brief,seed,round,true); if(requested)return requested;
   const safety = /women.?s? safety|personal safety|situational awareness/i.test(

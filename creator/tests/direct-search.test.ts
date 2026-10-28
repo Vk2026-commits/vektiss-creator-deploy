@@ -8,3 +8,9 @@ describe('direct search',()=>{
  it('retains screening with profile enabled but queries the typed topic on every platform',()=>{const result=directSearchBrief(brief,'fast food fries rankings',true);expect(result.researchScreeningCriteria).toContain('visible action');for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['fast food fries rankings']);expect(result.discoveryPilot).toBe(true);});
  it('rejects empty profile-free requests and defaults old clients to profile mode',()=>{const base={profileId:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),requestedCount:3};expect(researchRequestSchema.parse(base).useContentProfile).toBe(true);expect(researchRequestSchema.safeParse({...base,useContentProfile:false,searchQuery:'  '}).success).toBe(false);});
 });
+
+it('searches each keyword phrase on every platform without joining them',()=>{
+ const result=directSearchBrief(brief,'AI side hustles, first AI client, AI side hustles',false);
+ for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['AI side hustles','first AI client']);
+ expect(result.researchScreeningCriteria).toContain('at least one');
+});
