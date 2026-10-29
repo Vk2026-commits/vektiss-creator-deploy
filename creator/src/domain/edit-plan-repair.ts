@@ -21,6 +21,13 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
    if(b.graphics?.nodes.some(n=>n.tier!==undefined))throw Error('EDIT_TEMPLATE_MISMATCH');
    b.visual='diagram';
   }
+  // Empty graphic instructions have nothing to draw. Keep their existing title
+  // as typography rather than rejecting the entire recorded video at export.
+  if(b.visual!=='presenter'&&!b.graphics?.nodes.length&&!b.graphics?.chart){
+   b.visual=b.headline.trim()?'typography':'presenter';
+   b.scene='spotlight';
+   if(b.visual==='presenter')b.layout='presenter';
+  }
   if(b.graphics){
    b.graphics={nodes:b.graphics.nodes.map(n=>{
     const copy={...n};

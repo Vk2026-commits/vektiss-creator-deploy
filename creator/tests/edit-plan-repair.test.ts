@@ -28,3 +28,12 @@ it('repairs a tierless board without changing its content, but preserves actual 
  p.beats[0].graphics!.nodes[0].tier='S';
  expect(()=>repairEditPlan(p,source,p.templateId)).toThrow('EDIT_TEMPLATE_MISMATCH');
 });
+
+it('recovers an empty graphic from saved plans using its existing headline without inventing statistics',()=>{
+ const p=templateSample('popout-explainer');
+ p.beats[0]={...p.beats[0],visual:'diagram',scene:'statistic',headline:'Engagement Stats',graphics:{nodes:[],links:[]}};
+ const fixed=repairEditPlan(p,source,p.templateId);
+ expect(fixed.beats[0].visual).toBe('typography');expect(fixed.beats[0].scene).toBe('spotlight');
+ expect(fixed.beats[0].headline).toBe('Engagement Stats');expect(fixed.beats[0].graphics?.nodes).toEqual([]);
+ p.beats[0].headline='';expect(repairEditPlan(p,source,p.templateId).beats[0].visual).toBe('presenter');
+});

@@ -1,3 +1,4 @@
+import {repairEditPlan} from '../src/domain/edit-plan-repair';
 import {renderIllustrations} from './template-illustrations';
 import {EDIT_RENDER_VERSION} from '../src/domain/edit-planner-version';
 import {parseEditProgress,type EditProgress} from '../src/domain/edit-progress';
@@ -8,7 +9,7 @@ import {promisify} from 'node:util';
 import {createHash,randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import {readTemplatePlan} from './template-edit';
-import {editSourceSchema,validateEditProposal} from '../src/domain/edit-templates';
+import {editSourceSchema} from '../src/domain/edit-templates';
 import {mediaBinary} from './media-binaries';
 import {editBrandSchema,defaultEditBrand} from '../src/domain/edit-brand';
 import {editDimensions} from '../src/domain/edit-format';
@@ -26,7 +27,7 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
  checkRenderApproval(input,plan);
  const revision=z.string().regex(/^[a-f0-9]{64}$/).parse(plan.proposal.sourceRevision);
  const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(folder,`${revision}.source.json`),'utf8')));
- const proposal=validateEditProposal(plan.proposal,source,plan.proposal.templateId);
+ const proposal=repairEditPlan(plan.proposal,source,plan.proposal.templateId);
  if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length&&!b.graphics?.chart&&!(b.visual==='typography'&&b.headline.trim())))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
