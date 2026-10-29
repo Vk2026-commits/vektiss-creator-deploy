@@ -1,3 +1,4 @@
+import {editRenderer} from '../src/domain/edit-renderer';
 import {repairEditPlan} from '../src/domain/edit-plan-repair';
 import {renderIllustrations} from './template-illustrations';
 import {EDIT_RENDER_VERSION} from '../src/domain/edit-planner-version';
@@ -41,8 +42,8 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
  const sourceFile=resolve(folder,`${revision}.mp4`);
  try{
-  const hyperframes=['tier-list','hyperframes-motion','phone-mockup','paper-cutout','clean-tech','glass-cards','popout-explainer','animated-explainer','charts-comparisons'].includes(proposal.templateId);
-  await writeFile(jobFile,JSON.stringify({source,proposal,brand,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos,illustrations)}:{})}),{mode:0o600});
+  const hyperframes=editRenderer(proposal.templateId,proposal.aspectRatio)==='hyperframes';
+  await writeFile(jobFile,JSON.stringify({source,proposal,brand,illustrations,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos,illustrations)}:{})}),{mode:0o600});
   const rendering=exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:8*1024*1024});
   let pending='';rendering.child.stdout?.on('data',chunk=>{pending+=String(chunk);const lines=pending.split('\n');pending=lines.pop()??'';for(const line of lines){const p=parseEditProgress(line);if(p)onProgress?.(p);}});
   await rendering;

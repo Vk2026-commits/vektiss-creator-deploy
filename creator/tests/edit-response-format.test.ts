@@ -44,3 +44,10 @@ it('only offers ranking boards for ranking-compatible template requests',()=>{
  const schema=editResponseFormat(templateSampleSource,'tier-list').json_schema.schema as any;
  expect(schema.properties.beats.items.properties.visual.enum).toContain('tier-board');
 });
+
+it('offers directed search only where the export renderer supports it',()=>{
+ const scenes=(style:string)=>(editResponseFormat(templateSampleSource,style).json_schema.schema as any).properties.beats.items.properties.scene.enum;
+ expect(scenes('popout-explainer')).toContain('search');
+ expect(scenes('recommend')).toContain('search');
+ expect(scenes('premium-explainer')).not.toContain('search');
+});

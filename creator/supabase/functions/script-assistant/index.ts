@@ -1,7 +1,7 @@
 import {ILLUSTRATION_MODEL} from '../../../src/domain/edit-illustrations.ts';
 import {EDIT_PLANNER_VERSION} from '../../../src/domain/edit-planner-version.ts';
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
-import {editPlannerMessages} from '../../../server/edit-planner.ts';
+import {editPlannerMessages,editPlannerModel} from '../../../server/edit-planner.ts';
 import {editResponseFormat,normalizeEditResponse} from '../../../src/domain/edit-response-format.ts';
 import {repairEditPlan,editPlanDiagnostic} from '../../../src/domain/edit-plan-repair.ts';
 import {editSourceSchema,editProposalSchema} from '../../../src/domain/edit-templates.ts';
@@ -79,7 +79,7 @@ Deno.serve(async request=>{
   const editing=form?.get('action')==='edit-plan';
   const illustrating=form?.get('action')==='edit-illustration';
   const visual=form?.get('action')==='video-analysis'||boundary||graphic;
-  const writingModel=input?.action==='generate'&&safetyProfile?'gpt-4.1-2025-04-14':'gpt-4o-mini';
+  const writingModel=editing?editPlannerModel(form?.get('template')):input?.action==='generate'&&safetyProfile?'gpt-4.1-2025-04-14':'gpt-4o-mini';
   const usageModel=illustrating?ILLUSTRATION_MODEL:editing?writingModel:alignment?'whisper-1':form&&!visual?'gpt-4o-mini-transcribe':writingModel;
   const {error:recordError}=await db.from('creator_ai_generations').insert({id:generationId,user_id:auth.user.id,profile_id:profileId,project_id:projectId??null,action:input?.action??(editing||illustrating?'generate':alignment?'story-alignment':boundary?'video-boundary':graphic?'graphic-analysis':visual?'video-analysis':'transcribe'),model:usageModel});
   if(recordError)throw Error('PERSISTENCE');

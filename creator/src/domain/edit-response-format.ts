@@ -9,13 +9,13 @@ export function editResponseFormat(rawSource:EditSource,template:unknown){
  const text=(maxLength:number,minLength=0)=>({type:'string',minLength,maxLength});
  const enumeration=(values:readonly unknown[])=>({type:'string',enum:values});
  const word={type:'integer',minimum:0,maximum:source.words.length-1};
- const node=object({label:text(45,1),asset:{anyOf:[enumeration(editorialAssetIds),{type:'null'}]},shape:enumeration(['box','circle']),x:{type:'number',minimum:10,maximum:90},y:{type:'number',minimum:15,maximum:85},tier:{anyOf:[enumeration(['S','A','B','C','D','E','F']),{type:'null'}]},revealWord:{anyOf:[word,{type:'null'}]}});
+ const node=object({label:text(styles.length===1&&styles[0]==='popout-explainer'?32:45,1),asset:{anyOf:[enumeration(editorialAssetIds),{type:'null'}]},shape:enumeration(['box','circle']),x:{type:'number',minimum:10,maximum:90},y:{type:'number',minimum:15,maximum:85},tier:{anyOf:[enumeration(['S','A','B','C','D','E','F']),{type:'null'}]},revealWord:{anyOf:[word,{type:'null'}]}});
  const beat=object({
-  scene:enumeration(['process','timeline','comparison','network','statistic','document','spotlight']),
+  scene:enumeration(['process','timeline','comparison','network','statistic','document','spotlight',...(styles.includes('popout-explainer')?['search']:[])]),
   firstWord:word,lastWord:word,
   layout:enumeration(['presenter','bottom-presenter','split','full-graphic']),
   visual:enumeration(['presenter','diagram','comparison','steps','typography','screen-focus',...(styles.includes('tier-list')?['tier-board']:[])]),
-  headline:text(100),purpose:text(600,1),illustration:text(1200),motion:text(600),
+  headline:text(styles.length===1&&styles[0]==='popout-explainer'?48:100),purpose:text(600,1),illustration:text(1200),motion:text(600),
   graphics:object({chart:{anyOf:[object({unit:text(30),items:{type:'array',minItems:2,maxItems:4,items:object({label:text(45,1),value:{type:'number',minimum:0,maximum:1e15},sourceWord:word})}}),{type:'null'}]},nodes:{type:'array',items:node,maxItems:6},links:{type:'array',maxItems:8,items:object({from:{type:'integer',minimum:0,maximum:5},to:{type:'integer',minimum:0,maximum:5}})}}),
  });
  return {type:'json_schema',json_schema:{name:'creator_edit_plan',strict:true,schema:object({version:{type:'integer',enum:[1]},rendererVersion:{type:'integer',enum:[2]},templateId:enumeration(styles),sourceRevision:enumeration([source.revision]),beats:{type:'array',minItems:1,maxItems:100,items:beat}})}};

@@ -26,7 +26,7 @@ export const editSourceSchema=z.object({
 });
 export type EditSource=z.infer<typeof editSourceSchema>;
 const beat=z.object({
- scene:z.enum(['process','timeline','comparison','network','statistic','document','spotlight']).optional(),
+ scene:z.enum(['process','timeline','comparison','network','statistic','document','spotlight','search']).optional(),
  firstWord:z.number().int().nonnegative(),lastWord:z.number().int().nonnegative(),
  layout:z.enum(['presenter','bottom-presenter','split','full-graphic']),
  visual:z.enum(['presenter','diagram','comparison','steps','typography','tier-board','screen-focus']),
@@ -55,6 +55,7 @@ export function validateEditProposal(raw:unknown,source:EditSource,templateId:z.
  if(plan.templateId!==templateId||plan.sourceRevision!==source.revision)throw Error('EDIT_SOURCE_CHANGED');
  let next=0;
  for(const b of plan.beats){
+  if(b.scene==='search'&&templateId!=='popout-explainer')throw Error('EDIT_TEMPLATE_MISMATCH');
   if(b.firstWord!==next||b.lastWord<b.firstWord||b.lastWord>=source.words.length)throw Error('EDIT_SPEECH_COVERAGE');
   if(templateId==='walkthrough'&&b.visual==='tier-board'||templateId!=='tier-list'&&b.visual==='tier-board')throw Error('EDIT_TEMPLATE_MISMATCH');
   if(b.graphics?.links.some(l=>l.from>=b.graphics!.nodes.length||l.to>=b.graphics!.nodes.length))throw Error('EDIT_GRAPHIC_LINK');

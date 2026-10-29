@@ -37,3 +37,8 @@ it('recovers an empty graphic from saved plans using its existing headline witho
  expect(fixed.beats[0].headline).toBe('Engagement Stats');expect(fixed.beats[0].graphics?.nodes).toEqual([]);
  p.beats[0].headline='';expect(repairEditPlan(p,source,p.templateId).beats[0].visual).toBe('presenter');
 });
+
+it('does not turn an invalid Pop-out anchor into an early default reveal',()=>{
+ const p=templateSample('popout-explainer');p.beats[1].graphics!.nodes[0].revealWord=0;
+ expect(()=>repairEditPlan(p,source,p.templateId)).toThrow('EDIT_REVEAL_WORD');
+});

@@ -1,8 +1,10 @@
+import {timeDirectedPlan} from './directed-plan-timing.ts';
+import {assertDirectedPlanQuality} from './edit-plan-quality.ts';
 import {editProposalSchema,validateEditProposal,type EditSource,type EditProposal} from './edit-templates.ts';
 import {normalizeEditResponse} from './edit-response-format.ts';
 
 export function editPlanDiagnostic(error:unknown){
- const allowed=['EDIT_FORMAT_VERSION','EDIT_SOURCE_CHANGED','EDIT_SPEECH_COVERAGE','EDIT_TEMPLATE_MISMATCH','EDIT_GRAPHIC_LINK','EDIT_REVEAL_WORD','EDIT_SCENE_DENSITY'];
+ const allowed=['EDIT_UNSUPPORTED_FIGURE','EDIT_UNDERDIRECTED_SCENE','EDIT_FORMAT_VERSION','EDIT_SOURCE_CHANGED','EDIT_SPEECH_COVERAGE','EDIT_TEMPLATE_MISMATCH','EDIT_GRAPHIC_LINK','EDIT_REVEAL_WORD','EDIT_SCENE_DENSITY'];
  return error instanceof Error&&allowed.includes(error.message)?error.message:'EDIT_PLAN_SCHEMA';
 }
 
@@ -31,7 +33,10 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
   if(b.graphics){
    b.graphics={nodes:b.graphics.nodes.map(n=>{
     const copy={...n};
-    if(copy.revealWord!==undefined&&(copy.revealWord<firstWord||copy.revealWord>lastWord))delete copy.revealWord;
+    if(copy.revealWord!==undefined&&(copy.revealWord<firstWord||copy.revealWord>lastWord)){
+     if(template==='popout-explainer')throw Error('EDIT_REVEAL_WORD');
+     delete copy.revealWord;
+    }
     return copy;
    }),links:b.graphics.links.filter(l=>l.from<b.graphics!.nodes.length&&l.to<b.graphics!.nodes.length)};
    // Preserve every label by using a layout which supports its actual node count.
@@ -39,5 +44,7 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
   }
   return b;
  })};
- return validateEditProposal(repaired,source,template);
+ const validated=validateEditProposal(timeDirectedPlan(repaired,source),source,template);
+ assertDirectedPlanQuality(validated,source);
+ return validated;
 }
