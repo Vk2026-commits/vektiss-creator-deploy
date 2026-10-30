@@ -110,3 +110,6 @@ button:disabled { cursor:not-allowed; }
  .opportunity-actions .use-idea { grid-column:auto; } .discover-results-toolbar { align-items:stretch; } .discover-sort { width:100%; }
 }
 @media (prefers-reduced-motion:reduce) { .workspace-main *, .sidebar * { scroll-behavior:auto!important; transition:none!important; } }
+/* Safari keeps native select chrome unless appearance is explicitly reset. */
+.workspace-main select { appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%2364758b' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; }
+@media(min-width:701px) { .discover-query-submit .discover-primary-find { flex:0 0 230px; } }
