@@ -553,25 +553,11 @@ function CreatorWorkspace({
             Avatar library
           </button>
           <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
-          {creativeEnabled&&<button className={page==='creative'&&creativeTab==='brands'?'active':''} onClick={()=>{setCreativeTab('brands');setPage('creative');}}>Brand Kit</button>}
-          {import.meta.env.VITE_EDIT_STUDIO==='true'&&<button className={page==='edit-studio'?'active':''} onClick={()=>setPage('edit-studio')}>Edit Studio</button>}
+          {creativeEnabled&&<button className={page==='creative'&&creativeTab==='brands'?'active':''} onClick={()=>{setCreativeTab('brands');setPage('creative');}}><Layers3 size={19}/> Brand Kit</button>}
+          {import.meta.env.VITE_EDIT_STUDIO==='true'&&<button className={page==='edit-studio'?'active':''} onClick={()=>setPage('edit-studio')}><Film size={19}/> Edit Studio</button>}
         </nav>
         {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button><button className={page === 'search-quality' ? 'active' : ''} onClick={() => setPage('search-quality')}><Sparkles size={18}/> Search Quality</button></nav></>}
-        <span className="nav-caption upcoming-caption">COMING NEXT</span>
-        <div className="upcoming">
-          <span>
-            <Film size={18} />
-            Your projects
-          </span>
-        </div>
         <div className="sidebar-bottom">
-          <div className="team-note">
-            <span className="little-stars">✧</span>
-            <strong>Built around your perspective.</strong>
-            <p>
-              Your strategy is the starting point for everything you create.
-            </p>
-          </div>
           <button className="help-button" onClick={() => setHelp(true)}>
             <CircleHelp size={17} />
             How Creator works

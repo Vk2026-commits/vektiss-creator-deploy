@@ -4,6 +4,7 @@ import {AppUpdateNotice} from "./components/AppUpdateNotice";
 import { App } from "./App";
 import "./styles.css";
 import "./brand.css";
+import "./premium.css";
 
 class ErrorBoundary extends React.Component<
   React.PropsWithChildren,
