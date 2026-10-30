@@ -283,7 +283,7 @@ export function rankResearchCandidates(
     const similarQualityPenalty = history.some(item => item.status === "rejected" && item.rejectionReason === "poor_quality" && headlineSimilarity(item.title, candidate.title) >= 0.45) ? -5 : 0;
     const evidenceBoost = Math.min(sources.length, 3) * 3;
     const rankScore = Math.round(
-      Math.max(0, Math.min(100, candidate.relevanceScore * 0.68 + candidate.timelinessScore * 0.22 + evidenceBoost + preferenceBoost + similarQualityPenalty)),
+      Math.max(0, Math.min(100, candidate.relevanceScore * (/video|native/.test(sources[0]?.sourceType??'')?0.60:0.68) + candidate.timelinessScore * (/video|native/.test(sources[0]?.sourceType??'')?0.10:0.22) + (/video|native/.test(sources[0]?.sourceType??'')?videoPerformancePoints(sources[0]):0) + evidenceBoost + preferenceBoost + similarQualityPenalty)),
     );
     accepted.push({
       ...candidate,
@@ -313,4 +313,14 @@ export function selectDiverseVideoCandidates(candidates: RankedResearchCandidate
     if (replace >= 0) chosen[replace] = alternative;
   }
   return chosen.sort((left, right) => right.rankScore - left.rankScore);
+}
+
+/** Bounded observed performance signals; missing data contributes no evidence. */
+export function videoPerformancePoints(source: ResearchSource): number {
+ const metrics=source.engagement;
+ if(!metrics)return 0;
+ const views=metrics.views!=null?Math.min(10,Math.log10(Math.max(1,metrics.views))*2):0;
+ const engagement=metrics.rate!=null?Math.min(5,Math.max(0,metrics.rate)):0;
+ const outlier=metrics.baseline?Math.min(15,Math.max(0,Math.log2(Math.max(1,metrics.baseline.ratio)))*5):0;
+ return views+engagement+outlier;
 }

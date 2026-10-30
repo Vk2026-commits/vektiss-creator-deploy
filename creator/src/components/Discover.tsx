@@ -75,7 +75,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const activeProfiles = profiles.filter(item => !item.archived_at);
   const profile = activeProfiles.find(item => item.id === selectedId) ?? activeProfiles[0] ?? null;
   const [filters,setFilters]=useState<DiscoveryFilters>(()=>{try{return discoveryFiltersSchema.parse(JSON.parse(localStorage.getItem('creator-search-filters-v2:'+profile?.id)??'{"mode":"relevant","minViews":0,"minEngagementRate":0,"maxAgeDays":0}'));}catch{return discoveryFiltersSchema.parse({mode:'relevant',minViews:0,minEngagementRate:0,maxAgeDays:0});}});
-  function updateFilters(next:DiscoveryFilters){if(next.platform!==filters.platform)setFeed(null);setFilters(next);setPageOffset(0);setSort(next.mode==='outliers'?'outlier':next.mode==='engaged'?'views':'match');try{localStorage.setItem('creator-search-filters-v2:'+profile?.id,JSON.stringify(next));}catch{/* Preferences remain available for this session. */}}
+  function updateFilters(next:DiscoveryFilters){if(next.platform!==filters.platform)setFeed(null);setFilters(next);setPageOffset(0);setSort(next.mode==='outliers'?'outlier':next.mode==='engaged'?'views':'recommended');try{localStorage.setItem('creator-search-filters-v2:'+profile?.id,JSON.stringify(next));}catch{/* Preferences remain available for this session. */}}
   const [feed, setFeed] = useState<ResearchFeed | null>(null);
   const [busy, setBusy] = useState(false);
   const [searchCount, setSearchCount] = useState(10);
@@ -95,7 +95,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const [useContentProfile,setUseContentProfile]=useState(true);
   const [instruction, setInstruction] = useState("");
   const [sourceMode,setSourceMode]=useState<'all'|'videos'|'articles'>('videos');
-  const [sort,setSort]=useState<ResearchSort>('match');
+  const [sort,setSort]=useState<ResearchSort>('recommended');
   const [articleDate,setArticleDate]=useState<ArticleDate>({preset:'week',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [pageOffset, setPageOffset] = useState(0);
@@ -169,8 +169,8 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     <header className="discover-header">
       <div>
         <span className="eyebrow">DISCOVER</span>
-        <h1 id="discover-heading">Search videos. Find your next idea.</h1>
-        <p>Search Instagram, TikTok, and YouTube together. React to a video or turn its idea into your own original script.</p>
+        <h1 id="discover-heading">Find what’s working. Make it your own.</h1>
+        <p>Find high-performing videos across Instagram, TikTok, and YouTube. See how they fit your audience, then remake the idea or add your reaction.</p>
       </div>
       <div className="discover-allowance" aria-label="Research allowance">
         <strong>{feed?.remaining ?? "—"}</strong><span>ideas left</span>
@@ -226,9 +226,9 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
               <div className="opportunity-meta">
                 <span className="signal-category">{opportunity.category}</span>
                 <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
-                <small>Match {Math.round(opportunity.relevance_score)}%</small>
+                <small>Audience fit {Math.round(opportunity.relevance_score)}%</small>
               </div>
-              {!isArticle&&!source?.engagement&&<div className="clip-engagement"><small>Engagement was not collected for this saved clip. New searches apply your thresholds.</small></div>}
+              {!isArticle&&!source?.engagement&&<div className="clip-engagement"><small>Performance data unavailable. This is an idea match, not a verified viral result.</small></div>}
               {!isArticle&&source?.engagement&&<div className="clip-engagement" aria-label="Reported clip engagement"><strong>{source.engagement.views===null?'Views unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.views)+' views'}</strong><span>{source.engagement.likes===null?'Likes unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.likes)+' likes'}</span><span>{source.engagement.rate===null?'Engagement unavailable':source.engagement.rate.toFixed(1)+'% engagement'}</span>{source.engagement.baseline&&<strong>{source.engagement.baseline.ratio.toFixed(1)}× creator median · {source.engagement.baseline.sampleSize} recent videos</strong>}<small>{source.engagement.provider} snapshot · {new Date(source.engagement.observedAt).toLocaleDateString()}</small></div>}
               {!isArticle&&<div className="discovery-evidence"><strong>{reviewLabel(source?.review)}</strong>{source?.review?.accessibility&&source.review.accessibility!=='not_checked'&&<span> · {source.review.accessibility}</span>}<details><summary>Source evidence and limits</summary><p>{source?.review?.limitations??'Only the title/caption metadata has been inspected. Watch the original before reacting.'}</p>{source?.review?.claims&&<p><strong>Speaker’s claims:</strong> {source.review.claims}</p>}{source?.review?.observations&&<p><strong>Sampled observations:</strong> {source.review.observations}</p>}{source?.review?.timestamps?.length? <p>Sampled at {source.review.timestamps.map(t=>t.toFixed(1)+'s').join(', ')}</p>:null}</details></div>}
               {profile&&feed?.pilot?.enabled&&feed.pilot.profileId===profile.id&&creator&&<button type="button" className="button secondary" disabled={busy} onClick={()=>void action(async()=>{await discoverySettings(profile.id,'follow',{url:creator.url});setWatchRevision(x=>x+1);setNotice('Creator added to this profile’s watchlist.');})}>Follow creator · {creator.name}</button>}
@@ -238,15 +238,16 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
                   {isArticle&&<p><a href={source.url} target="_blank" rel="noreferrer">Read article · {new URL(source.url).hostname.replace(/^www\./,'')}</a> · Published {opportunity.published_at?.slice(0,10)}<br/>{opportunity.why_audience_cares}</p>}
                   <p className="opportunity-summary">{opportunity.factual_summary}</p>
                 </div>
-                <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>match</span></div>
+                <div className="signal-score" aria-label={`${Math.round(opportunity.relevance_score)} percent match`}><strong>{Math.round(opportunity.relevance_score)}</strong><span>audience fit</span></div>
               </div>
+              {!isArticle&&<div className="signal-points"><div><span>PERFORMANCE SIGNAL</span><p>{source?.engagement?.baseline ? `${source.engagement.baseline.ratio.toFixed(1)}× this creator’s median views across ${source.engagement.baseline.sampleSize} recent videos. A comparison of reported views, not a promise of future reach.` : source?.engagement?.views != null ? 'Reported views and engagement show audience response. No creator baseline is available, so breakout performance is unverified.' : 'Metrics are missing; evaluate the idea and watch the source before choosing it.'}</p></div></div>}
               <div className="signal-take">
-                <span><Sparkles size={15}/> YOUR SIMPLE TAKE</span>
+                <span><Sparkles size={15}/> YOUR ORIGINAL ANGLE</span>
                 <p>{opportunity.recommended_angle}</p>
               </div>
               <div className="signal-points">
-                <div><span>WHY IT WORKS</span><p>{opportunity.creator_connection}</p></div>
-                {opportunity.suggested_hook && <div><span>OPEN WITH THIS</span><p>{opportunity.suggested_hook}</p></div>}
+                <div><span>WHY IT FITS YOUR AUDIENCE</span><p>{opportunity.creator_connection}</p></div>
+                {opportunity.suggested_hook && <div><span>A HOOK TO MAKE YOUR OWN</span><p>{opportunity.suggested_hook}</p></div>}
               </div>
               {needsCheck && <details className="signal-proof"><summary><span><Eye size={15}/> Quick check before you use this</span><ChevronDown size={16}/></summary><p>{opportunity.uncertainty}</p>{source && <a className="proof-source" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Open source</a>}</details>}
               <footer>
@@ -254,8 +255,8 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
                   <button className={`icon-action${opportunity.status === "saved" ? " is-saved" : ""}`} aria-label={opportunity.status === "saved" ? "Idea saved" : "Save idea"} title={opportunity.status === "saved" ? "Saved" : "Save idea"} disabled={busy || opportunity.status === "saved"} onClick={() => void action(() => researchFeedback(opportunity.id, "saved"))}><Bookmark size={17}/></button>
                   <button className="icon-action" aria-label="Skip idea" title="Skip idea" disabled={busy} onClick={() => { setRejecting(opportunity.id); setRefining(null); }}><ThumbsDown size={17}/></button>
                   <button className="icon-action" aria-label="Change the idea" title="Change the idea" disabled={busy} onClick={() => { setRefining(opportunity.id); setRejecting(null); }}><WandSparkles size={17}/></button>
-                  <button className="button secondary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity, "original"); })}>Create my own script</button>
-                  <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity, "reaction"); })}><Clapperboard size={17}/> React to video<Check size={15}/></button>
+                  <button className="button secondary" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity, "original"); })}>Remake this idea</button>
+                  <button className="button primary use-idea" disabled={busy} onClick={() => void action(async () => { await researchFeedback(opportunity.id, "selected"); onCreate(opportunity, "reaction"); })}><Clapperboard size={17}/> React to this video<Check size={15}/></button>
                 </div>
               </footer>
             </div>
