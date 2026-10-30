@@ -14,12 +14,12 @@ describe('Discover profile selection',()=>{
     expect(html).toContain('Searching with this Content Profile');
     expect(html).toContain('What do you want to find?');
     expect(html.indexOf('id="discover-query"')).toBeLessThan(html.indexOf('discover-profile-choice'));
-    expect(html).toContain('Use content profile');
+    expect(html).toContain('Rank for my content profile');
     expect(html).toContain('Add keyword');
     expect(html).toContain('Search ·');
     expect(html).toContain('<option value="safety" selected="">Safety with Steve</option>');
     expect(html).toContain('<option value="credit">Credit with Rose</option>');
-    expect(html).toContain('Find content to talk about.');
+    expect(html).toContain('Search videos. Find your next idea.');
     expect(html).toContain('<summary>Content profile: Safety with Steve</summary>');
     expect(html.match(/class="discover-primary-find"/g)).toHaveLength(1);
   });

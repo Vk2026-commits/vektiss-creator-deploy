@@ -94,6 +94,7 @@ export const providerResearchEnvelopeSchema = z
 export const researchBriefSchema = z
   .object({
     searchQuery: z.string().trim().max(300).optional(),
+    profileRankingOnly: z.boolean().optional(),
     expertise: z.string().trim().max(2000),
     experience: z.string().trim().max(2000),
     industries: z.array(z.string().trim().max(160)).max(20),

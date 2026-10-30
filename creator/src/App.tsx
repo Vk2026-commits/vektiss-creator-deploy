@@ -19,7 +19,7 @@ import { SearchQualityAdmin } from './components/SearchQualityAdmin';
 import { EditStudio } from './components/EditStudio';
 import { AvatarCostHelp } from './components/AvatarCostHelp';
 import { Discover } from './components/Discover';
-import type { ResearchOpportunity } from './lib/research-client';
+import type { ResearchIntent } from './lib/research-client';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -387,7 +387,7 @@ function CreatorWorkspace({
   useEffect(()=>{if(preview)return;let live=true;void creativeRequest({action:'state'}).then(s=>{if(live)setCreativeEnabled(s.enabled===true);}).catch(()=>{});return()=>{live=false;};},[preview,userId]);
   useEffect(()=>{const open=(event:Event)=>{const detail=(event as CustomEvent).detail;if(!creativeEnabled)return;setCreativeTab(detail==='looks'||detail==='brands'||detail==='videos'?detail:'agent');if(typeof detail==='object')setCreativeSeed(detail);setPage('creative');};window.addEventListener('creator:creative',open);return()=>window.removeEventListener('creator:creative',open);},[creativeEnabled]);
 
-  const [researchIntent, setResearchIntent] = useState<ResearchOpportunity | null>(null);
+  const [researchIntent, setResearchIntent] = useState<ResearchIntent | null>(null);
   const [costAdmin, setCostAdmin] = useState(false);
   useEffect(() => {
     let live = true;
@@ -668,7 +668,7 @@ function CreatorWorkspace({
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
               {page === 'edit-studio' && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={()=>{setAvatarIntent(n=>n+1);setPage("create");}}/>}
-              {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity) => { setResearchIntent(opportunity); setPage("create"); }} />}
+              {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity, creationMode) => { setResearchIntent({...opportunity, creationMode}); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
                   {choosingAudience&&<button type="button" className="text-button" onClick={()=>{setChoosingAudience(false);setPage('create');}}>← Back to your video</button>}

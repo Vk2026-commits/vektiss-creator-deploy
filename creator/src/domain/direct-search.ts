@@ -4,11 +4,17 @@ import {researchBriefSchema,type ResearchBrief} from './research.ts';
 export function directSearchBrief(brief:ResearchBrief,query:string,useProfile:boolean):ResearchBrief {
  const searchQuery=query.trim();
  if(!useProfile&&!searchQuery)throw new Error('SEARCH_QUERY_REQUIRED');
- const result={...brief};
+ const result={...brief,profileRankingOnly:true};
  if(!useProfile){
   for(const key of ['expertise','experience','communicationStyle','preferredCtaStyle','creatorContext','primaryAudience','profileContext','researchScreeningCriteria','researchSeekSituations'] as const)result[key]='';
   for(const key of ['industries','creatorTone','phrasesToAvoid','audienceProblems','audienceInterests','contentPillars','sourceTopics','reactionAngles','desiredOutcomes','profileTone','thingsToAvoid','researchReferenceUrls','researchBlockedUrls'] as const)result[key]=[];
   result.audienceName='Direct search';result.researchSourcePlatforms=['TikTok','Instagram','YouTube'];
+ }
+ // Profile preferences influence ranking; they must not veto a topic match.
+ if(useProfile){
+  result.profileContext=[result.profileContext,`Ranking preferences only: ${result.researchScreeningCriteria}`,result.thingsToAvoid.length?`Lower-priority topics: ${result.thingsToAvoid.join(', ')}`:''].filter(Boolean).join('\n').slice(0,5000);
+  result.researchScreeningCriteria='Match the requested topic. Use the content profile to rank useful ideas and suggest original angles, not to exclude a topic-matching source for a different format, audience, or presentation style. Reject genuinely off-topic or unverifiable sources; never invent relevance.';
+  result.thingsToAvoid=[];
  }
  if(searchQuery){result.searchQuery=searchQuery;result.sourceTopics=searchKeywords(searchQuery);result.researchSeekSituations=searchQuery;result.researchScreeningCriteria=[`Find content matching at least one of these keyword phrases: ${searchKeywords(searchQuery).join("; ")}. Search each phrase separately; do not require every phrase in one clip. Do not substitute adjacent topics.`,result.researchScreeningCriteria].filter(Boolean).join('\n').slice(0,12000);}
  return researchBriefSchema.parse(result);
