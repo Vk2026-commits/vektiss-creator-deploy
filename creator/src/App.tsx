@@ -9,6 +9,8 @@ import type { Session } from "@supabase/supabase-js";
 import { authRedirectUrl } from './lib/auth-redirect';
 import {PasswordSignup} from './components/PasswordSignup';
 import {setupStep} from './lib/signup';
+import {CreativeTools} from "./components/CreativeTools";
+import {creativeRequest} from "./lib/creative-client";
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
 import { Scripts } from "./components/Scripts";
@@ -360,7 +362,7 @@ export function SignIn({
   );
 }
 
-type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs" | "search-quality" | "edit-studio";
+type Page = "profiles" | "creator" | "create" | "discover" | "avatars" | "costs" | "avatar-costs" | "search-quality" | "edit-studio" | "creative" | "new-video";
 function CreatorWorkspace({
   repo,
   userId,
@@ -379,6 +381,12 @@ function CreatorWorkspace({
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("create");
   const [avatarIntent,setAvatarIntent]=useState(0);
+  const [creativeEnabled,setCreativeEnabled]=useState(false);
+  const [creativeTab,setCreativeTab]=useState<'looks'|'brands'|'agent'|'videos'>('agent');
+  const [creativeSeed,setCreativeSeed]=useState<any>(null);
+  useEffect(()=>{if(preview)return;let live=true;void creativeRequest({action:'state'}).then(s=>{if(live)setCreativeEnabled(s.enabled===true);}).catch(()=>{});return()=>{live=false;};},[preview,userId]);
+  useEffect(()=>{const open=(event:Event)=>{const detail=(event as CustomEvent).detail;if(!creativeEnabled)return;setCreativeTab(detail==='looks'||detail==='brands'||detail==='videos'?detail:'agent');if(typeof detail==='object')setCreativeSeed(detail);setPage('creative');};window.addEventListener('creator:creative',open);return()=>window.removeEventListener('creator:creative',open);},[creativeEnabled]);
+
   const [researchIntent, setResearchIntent] = useState<ResearchOpportunity | null>(null);
   const [costAdmin, setCostAdmin] = useState(false);
   useEffect(() => {
@@ -516,7 +524,7 @@ function CreatorWorkspace({
             <small>Creator workspace</small>
           </div>
         </div>
-        <button className="button new-video" onClick={() => {setPage("create");window.dispatchEvent(new Event('creator:new-video'));}}>
+        <button className="button new-video" onClick={() => {if(creativeEnabled)setPage("new-video");else{setPage("create");window.dispatchEvent(new Event('creator:new-video'));}}}>
           <Plus size={18} /> Create a video <span>↗</span>
         </button>
         <span className="nav-caption">WORKSPACE</span>
@@ -545,6 +553,7 @@ function CreatorWorkspace({
             Avatar library
           </button>
           <button className={page === 'avatar-costs' ? 'active' : ''} onClick={() => setPage('avatar-costs')}><CircleHelp size={19} /> Avatar costs</button>
+          {creativeEnabled&&<button className={page==='creative'&&creativeTab==='brands'?'active':''} onClick={()=>{setCreativeTab('brands');setPage('creative');}}>Brand Kit</button>}
           {import.meta.env.VITE_EDIT_STUDIO==='true'&&<button className={page==='edit-studio'?'active':''} onClick={()=>setPage('edit-studio')}>Edit Studio</button>}
         </nav>
         {costAdmin && <><span className="nav-caption">ADMIN</span><nav aria-label="Admin navigation"><button className={page === 'costs' ? 'active' : ''} onClick={() => setPage('costs')}><Layers3 size={18}/> Global costs</button><button className={page === 'search-quality' ? 'active' : ''} onClick={() => setPage('search-quality')}><Sparkles size={18}/> Search Quality</button></nav></>}
@@ -651,7 +660,10 @@ function CreatorWorkspace({
             </div>
           ) : (
             <>
-              {page === "avatars" && <AvatarLibrary preview={preview} />}
+              {page === "avatars" && <>{creativeEnabled&&<div className="creative-launch"><p>Create a new setting and look while keeping your identity.</p><button className="button primary" onClick={()=>{setCreativeTab('looks');setPage('creative');}}>Create a new look</button></div>}<AvatarLibrary preview={preview} /></>}
+              {page==='creative'&&creativeEnabled&&<CreativeTools tab={creativeTab} onTab={setCreativeTab} profiles={data.profiles} selectedId={selected?.id??null} seed={creativeSeed}/>}
+              {page==='new-video'&&<section className="creative-tools"><h1>How would you like to create?</h1><article><h2>Your script + Creator templates</h2><p>Use your avatar or uploaded footage with Creator’s existing editing styles.</p><button className="button primary" onClick={()=>{setPage('create');window.dispatchEvent(new Event('creator:new-video'));}}>Use Creator templates</button></article><article><h2>AI-produced video</h2><p>Use your avatar and brand kit, review the storyboard, then let HeyGen produce the video.</p><button className="button primary" onClick={()=>{setCreativeSeed(null);setCreativeTab('agent');setPage('creative');}}>Create an AI-produced video</button></article></section>}
+              {page==='create'&&creativeEnabled&&<div className="creative-launch"><p>Your saved AI-produced videos and storyboards</p><button className="button" onClick={()=>{setCreativeTab('videos');setPage('creative');}}>View AI-produced videos</button></div>}
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
@@ -996,7 +1008,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create'}><Scripts avatarIntent={avatarIntent} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create'}><Scripts creativeEnabled={creativeEnabled} avatarIntent={avatarIntent} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>

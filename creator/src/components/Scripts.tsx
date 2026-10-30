@@ -34,7 +34,7 @@ import {watchRender} from '../lib/watch-render';
 import {fullCompositionInput} from '../lib/full-composition-input';
 import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
-export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=0 }: { profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:number }) {
+export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=0 }: { creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchOpportunity|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:number }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -318,6 +318,7 @@ export function Scripts({ profiles, selectedId, userId, preview, onAddAudience, 
   },[saved,renderStates,preview,queueEpoch]);
   return <div className="scripts-workspace">
     <div className="page-heading"><h1>Create video</h1></div>
+    {creativeEnabled&&draft.brief.stage==='review'&&<div className="creative-launch"><p>Use this script with your brand kit and review an AI-produced storyboard.</p><button className="button" disabled={busy} onClick={()=>window.dispatchEvent(new CustomEvent('creator:creative',{detail:{title:draft.title,profileId:draft.content_profile_id,source:draft.brief.source||draft.brief.source_summary||draft.brief.url,angle:draft.brief.review||draft.brief.notes||draft.brief.summary,script:scriptText(draft),avatarId:draft.brief.production?.avatar_id}}))}>Use this script in AI-produced video</button></div>}
     <VideoLibraryPicker items={libraryItems} current={current} disabled={busy||loading||sourceProcessing} renderStates={renderStates} onSelect={open}/>
     <div className="scripts-grid">
       <aside className="scripts-list"><button className="button" disabled={busy} onClick={() => open(null)}>+ New video</button><h2>My videos</h2>

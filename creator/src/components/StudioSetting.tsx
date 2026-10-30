@@ -1,3 +1,4 @@
+import {creativeRequest,openCreative} from '../lib/creative-client';
 import {useEffect,useRef,useState} from 'react';
 import type {VideoPlan} from '../domain/video-plan';
 import {graphicCaptureSchema} from '../domain/video-plan';
@@ -7,6 +8,8 @@ import {GraphicImage} from './GraphicPreview';
 import {BackgroundControls} from './BackgroundControls';
 
 export function StudioSetting({plan,onChange,disabled,preview}:{plan:VideoPlan;onChange:(p:VideoPlan)=>void;disabled:boolean;preview:boolean}){
+ const [creativeEnabled,setCreativeEnabled]=useState(false);
+ useEffect(()=>{if(preview)return;let live=true;void creativeRequest({action:'state'}).then(s=>{if(live)setCreativeEnabled(s.enabled);}).catch(()=>{});return()=>{live=false;};},[preview]);
  const [saved,setSaved]=useState<{version:number;background:VideoPlan['studio_background']|null}>({version:0,background:null});
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
  const latest=useRef(plan);latest.current=plan;
@@ -19,7 +22,7 @@ export function StudioSetting({plan,onChange,disabled,preview}:{plan:VideoPlan;o
  }
  async function save(){if(!plan.studio_background||busy||disabled||preview)return;setBusy(true);setError('');try{const r=await mediaFetch('/api/local-capture/template-studio',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseVersion:saved.version,background:plan.studio_background})});const data=await r.json();if(!r.ok)throw Error(data.error??'Could not save studio.');setSaved(data);setMessage('Studio default saved for your account.');}catch(e){setError(e instanceof Error?e.message:'Save failed.');}finally{setBusy(false);}}
  const shown={...plan,article_capture:plan.studio_background,screenshot_story:undefined};
- return <section className="article-layout" aria-label="Avatar setting"><h3>Choose the setting</h3><fieldset disabled={disabled||busy}><label><input type="radio" name="avatar-setting" checked={plan.setting==='original'} onChange={()=>onChange({...plan,setting:'original'})}/> Keep this avatar look’s original setting</label><label><input type="radio" name="avatar-setting" checked={plan.setting==='studio'} onChange={()=>onChange({...plan,setting:'studio'})}/> Use my studio background</label>
+ return <section className="article-layout" aria-label="Avatar setting"><h3>Choose the setting</h3>{creativeEnabled&&<button type="button" disabled={disabled||busy} onClick={()=>openCreative('looks')}>Create a new avatar look</button>}<fieldset disabled={disabled||busy}><label><input type="radio" name="avatar-setting" checked={plan.setting==='original'} onChange={()=>onChange({...plan,setting:'original'})}/> Keep this avatar look’s original setting</label><label><input type="radio" name="avatar-setting" checked={plan.setting==='studio'} onChange={()=>onChange({...plan,setting:'studio'})}/> Use my studio background</label>
  {plan.setting==='original'?<p>The selected avatar look keeps its setting. No room will be generated or substituted. The template adds graphics over this footage.</p>:<><label>Upload a studio image<input type="file" accept="image/png,image/jpeg,image/webp" disabled={preview} onChange={e=>{const file=e.target.files?.[0];if(file)void upload(file);e.target.value='';}}/></label>{saved.background&&<button type="button" onClick={()=>onChange({...plan,studio_background:saved.background!})}>Use saved studio · {saved.background.title}</button>}{plan.studio_background&&<><FreePresenter plan={shown} onChange={p=>onChange({...p,article_capture:plan.article_capture,screenshot_story:plan.screenshot_story,studio_background:plan.studio_background})}><GraphicImage id={plan.studio_background.id} framing={plan.background_framing}/></FreePresenter><BackgroundControls plan={shown} onChange={p=>onChange({...p,article_capture:plan.article_capture,screenshot_story:plan.screenshot_story})}/><button type="button" disabled={preview} onClick={()=>void save()}>Save studio as my default</button></>}<p>Placement preview only—not a guarantee of final lighting or motion. Choose a room with a similar camera angle and lighting to the avatar. Replacement requires a clean cutout; if unavailable, your paid footage is preserved without an automatic retry.</p></>}
  </fieldset>{message&&<p role="status">{message}</p>}{error&&<p role="alert">{error}</p>}</section>;
 }

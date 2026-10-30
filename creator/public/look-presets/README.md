@@ -1,0 +1,3 @@
+Original AI-generated scene references created for Vektiss Creator with the built-in image_gen tool on 2026-10-30. All people are fictional; these are pose, clothing and setting references, not identity photos. No third-party stock assets or logos.
+
+Prompt set: photorealistic-natural, exactly one fictional adult, full head and comfortable headroom, direct camera gaze, hands visible, portrait 9:16, no logos or text. Modern Office: navy business casual jacket, contemporary glass and wood office, soft daylight. Podcast Studio: dark crewneck, acoustic wood slats, microphone off to side, soft key light. Home Office: pale blue shirt, warm bookshelves and window light. Clean Studio: charcoal shirt, warm gray seamless backdrop, dimensional soft light.

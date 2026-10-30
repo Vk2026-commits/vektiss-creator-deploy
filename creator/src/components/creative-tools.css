@@ -1,0 +1,215 @@
+.creative-tools {
+  max-width: 1080px;
+  margin: 24px auto 64px;
+  color: #10263d;
+}
+.creative-tools h1 {
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -1.5px;
+  margin: 12px 0;
+}
+.creative-tools h2 {
+  font-size: 24px;
+}
+.creative-tools p {
+  line-height: 1.6;
+}
+.creative-tools nav,
+.creative-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0;
+}
+.creative-tools fieldset,
+.creative-tools article {
+  border: 1px solid #d6e4f5;
+  border-radius: 20px;
+  padding: 24px;
+  background: white;
+  margin: 22px 0;
+  min-width: 0;
+}
+.creative-tools label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  flex: 1;
+  min-width: 180px;
+  font-weight: 600;
+}
+.creative-tools input:not([type="checkbox"]),
+.creative-tools select,
+.creative-tools textarea {
+  padding: 12px;
+  border: 1px solid #bfd3ec;
+  border-radius: 10px;
+  background: #f9fbfe;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+.creative-tools textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.creative-tools .creative-check {
+  flex-direction: row;
+  align-items: center;
+}
+.creative-tools .creative-check input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.creative-tools button {
+  cursor: pointer;
+}
+.creative-tools button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.creative-tools button:not(.button) {
+  padding: 10px 14px;
+  margin: 6px;
+  border: 1px solid #cbdcf0;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: #103458;
+  font-weight: 600;
+}
+.look-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.look-presets button {
+  padding: 0 !important;
+  overflow: hidden;
+  text-align: left;
+  margin: 0 !important;
+}
+.look-presets img {
+  width: 100%;
+  aspect-ratio: 3/4;
+  object-fit: cover;
+  display: block;
+}
+.look-presets strong,
+.look-presets span {
+  display: block;
+  padding: 10px 12px;
+}
+.look-presets span {
+  font-size: 11px;
+  padding-top: 0;
+}
+.look-presets [aria-pressed="true"] {
+  outline: 3px solid #1688ff;
+}
+.generated-look {
+  max-height: 520px;
+  max-width: 100%;
+  border-radius: 16px;
+}
+.creative-progress {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  background: #eff7ff;
+  padding: 16px;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+.creative-progress progress {
+  width: 180px;
+  accent-color: #1688ff;
+}
+.creative-progress strong {
+  text-transform: capitalize;
+}
+.creative-progress span {
+  font-size: 13px;
+}
+.brand-swatches,
+.brand-assets,
+.storyboard-resources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.brand-swatches span {
+  padding: 22px 12px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+  text-shadow: 0 1px 3px white;
+  color: #111;
+}
+.brand-assets img {
+  max-width: 180px;
+  max-height: 100px;
+  object-fit: contain;
+}
+.brand-assets span {
+  display: block;
+}
+.storyboard-resources img {
+  max-width: 280px;
+  max-height: 360px;
+  object-fit: contain;
+}
+.creative-history video,
+.storyboard-resources video {
+  max-width: 100%;
+  max-height: 600px;
+  border-radius: 16px;
+  background: #111;
+}
+.storyboard-messages {
+  max-height: 450px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.creative-launch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px 24px;
+  border: 1px solid #cbdcf0;
+  border-radius: 16px;
+  background: #fff;
+  margin: 12px 0;
+}
+.creative-launch p {
+  flex: 1;
+  margin: 0;
+}
+@media (max-width: 650px) {
+  .look-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .creative-tools fieldset,
+  .creative-tools article {
+    padding: 16px;
+  }
+  .creative-tools nav {
+    gap: 6px;
+  }
+  .creative-tools .creative-row {
+    flex-direction: column;
+  }
+  .creative-tools {
+    margin: 16px 0;
+  }
+  .creative-tools nav .button {
+    font-size: 12px;
+    padding: 10px;
+  }
+  .storyboard-resources img {
+    max-width: 100%;
+  }
+}
