@@ -134,6 +134,7 @@ export const researchRequestSchema = z
     profileId: z.string().uuid(),
     requestedCount: z.number().int().min(1).max(10),
     idempotencyKey: z.string().uuid(),
+    resumeJobId: z.string().uuid().optional(),
     sourceMode:z.enum(['videos','articles']).default('videos'),
     articleDate:articleDateSchema.optional(),
     discoveryFilters:discoveryFiltersSchema.optional(),

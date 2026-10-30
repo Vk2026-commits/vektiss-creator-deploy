@@ -1,8 +1,10 @@
+import {createSearchCache,searchCacheKey} from '../_shared/search-cache.ts';
+import {refillDecision} from '../../../src/domain/search-delivery.ts';
 import {ARTICLE_NEWS_DOMAINS} from '../../../src/domain/article-policy.ts';
 import {qualifyArticleCandidates} from '../../../src/domain/article-screening.ts';
 import {screeningDecisions,acceptedCandidates,inspectionIds,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import {mergePool,shortlist,selectionDiagnostics,selectionReason} from '../_shared/discovery-selection.ts';
-import {runSCTask,detailTasks,balancedSources,expansionTask,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
+import {runSCTask as fetchSCTask,detailTasks,balancedSources,expansionTask,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
 import {engagementFailure,sourceCreator,creatorKey,attachBaseline} from '../../../src/domain/discovery-engagement.ts';
 import type {CreatorSource} from '../../../src/domain/discovery-pilot.ts';
 import {startWatchlistDiscovery,startPlatformDiscovery} from '../_shared/platform-discovery.ts';
@@ -12,7 +14,7 @@ import {providerText} from '../../../src/domain/provider-text.ts';
 import {reviewWaitExpired} from '../../../src/domain/review-wait.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
-import { getDeepResearchRun, startDeepResearch, startNativeVideoScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
+import { getDeepResearchRun as fetchResearchRun, startDeepResearch, startNativeVideoScreening as startScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
 import { buildCrossPlatformQueryPack, discoveryDiagnostics, getNativeDiscoveryRun, renumberNativeSources, type NativeDiscoveryResult, type NativePlatform } from "../_shared/platform-discovery.ts";
 import {completedSearchPhase,filteredSearchPhase} from '../../../src/domain/search-phase.ts';
 import {mergeSearchRound,needsFilteredRefill,pendingReviewBatches,canReviewMore} from '../../../src/domain/search-rounds.ts';
@@ -80,7 +82,7 @@ function retainedCandidates(value: unknown): ProviderResearchCandidate[] {
 }
 
 function roundNumber(value: unknown): number {
-  return typeof value === "number" && Number.isInteger(value) ? Math.max(1, Math.min(3, value)) : 1;
+  return typeof value === "number" && Number.isInteger(value) ? Math.max(1, Math.min(120, value)) : 1;
 }
 
 function sourcePlatform(source: ResearchSource): NativePlatform {
@@ -119,6 +121,38 @@ Deno.serve(async (request) => {
     const brief = researchBriefSchema.safeParse(job.input_snapshot);
     if (!brief.success) throw new Error("RESEARCH_INPUT");
     const providerMetadata = metadata(job);
+    const cache=createSearchCache(db,auth.user.id);
+    async function runSCTask(task:SCTask,b:typeof brief.data):Promise<Awaited<ReturnType<typeof fetchSCTask>>>{
+      if(!job?.incremental_delivery)return fetchSCTask(task,b!);
+      const key=await searchCacheKey({v:1,kind:'metadata',brief:b,task:{...task,id:undefined,parentId:undefined,state:undefined}});
+      const hit=await cache.get(key);
+      if(hit)return {...hit,ledger:{...hit.ledger,id:task.id,credits:0,remaining:null,route:'cache',at:new Date().toISOString()}};
+      const result=await fetchSCTask(task,b!);
+      if(!result.diagnostic)await cache.put(key,result,15*60*1000);
+      return result;
+    }
+    async function startNativeVideoScreening(args:Parameters<typeof startScreening>[0]){
+      if(!job?.incremental_delivery)return startScreening(args);
+      const key=await searchCacheKey({v:1,kind:'review',...args});
+      const hit=await cache.get(key);
+      if(hit)return {id:'cache:'+key,status:'completed'} as ProviderRun;
+      const result=await startScreening(args);
+      await cache.put('run:'+result.id,{key},60*60*1000);
+      return result;
+    }
+    async function getDeepResearchRun(...args:Parameters<typeof fetchResearchRun>){
+      if(args[0].startsWith('cache:')){
+        const hit=await cache.get(args[0].slice(6));
+        if(!hit)throw Error('REVIEW_CACHE_EXPIRED');
+        return {...hit,usage:{cost:{total_cost:0}},id:args[0]} as CompletedResearchRun;
+      }
+      const result=await fetchResearchRun(...args);
+      if(job?.incremental_delivery&&result.status==='completed'){
+        const mapping=await cache.get('run:'+args[0]);
+        if(mapping)await cache.put(mapping.key,result,60*60*1000);
+      }
+      return result;
+    }
     if(providerMetadata.stage==='scrape_discovery_v2'){
       const tasks=(providerMetadata.scTasks??[]) as SCTask[],ledger=(providerMetadata.scLedger??[]) as SCLedger[];
       let pool=nativeSources(providerMetadata.scPool);
@@ -137,8 +171,8 @@ Deno.serve(async (request) => {
       pool=pool.filter(s=>!knownIds.has(videoIdentity(s.url)));
       const remaining=40-ledger.length-(brief.data.discoveryFilters?.mode==='outliers'&&!providerMetadata.baselineRuns?5:0);
       let pending=tasks.filter(t=>!t.state);
-      const target=Math.min(120-screened.length,Math.max(Number(job.requested_count)*2,10));
-      const eligible=shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],Math.max(0,Math.min(40,120-screened.length)));
+      const target=Math.min(120-screened.length,Math.max((Number(job.requested_count)-Number(job.delivered_count))*2,job.incremental_delivery?3:10));
+      const eligible=shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],Math.max(0,Math.min(job.incremental_delivery?Math.max(3,(Number(job.requested_count)-Number(job.delivered_count))*2):40,120-screened.length)));
       if(!pending.length&&remaining>0&&!scrapeUnavailable(ledger)&&eligible.length<target){
         const details=detailTasks(pool.filter(s=>!screened.includes(s.url)),tasks,Math.min(3,remaining),brief.data);
         const expansion=expansionTask(tasks);
@@ -156,6 +190,7 @@ Deno.serve(async (request) => {
       const results=await Promise.all(batch.map(t=>runSCTask(t,brief.data)));
       for(const result of results)pool=mergePool(pool,result.sources.filter(s=>!knownIds.has(videoIdentity(s.url))),brief.data);
       const byId=new Map(batch.map((t,i)=>[t.id,results[i]]));
+      if(job.incremental_delivery)for(let i=0;i<batch.length;i++){const t=batch[i],status=results[i].ledger.status;if((status===429||status>=500)&&!t.id.endsWith('-retry')&&!tasks.some(x=>x.id===t.id+'-retry'))tasks.push({...t,id:t.id+'-retry',state:undefined});}
       const next={...providerMetadata,scTasks:tasks.map(t=>byId.has(t.id)?{...t,state:byId.get(t.id)!.diagnostic?'failed':'done',nextCursor:byId.get(t.id)!.nextCursor}:t),scPool:pool,scLedger:[...ledger,...results.map(r=>r.ledger)],scRawReturned:Number(providerMetadata.scRawReturned??0)+results.reduce((n,r)=>n+(r.ledger.id.startsWith('detail-')?0:r.sources.length),0),scInFlight:[],providerDiagnostics:[...providerMetadata.providerDiagnostics as string[]??[],...results.flatMap(r=>r.diagnostic?[r.diagnostic]:[])]};
       const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:`${pool.length} unique clips checked; selecting qualifying matches`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_RESULTS');return reply(headers,{job:saved.data??job},202);
     }
@@ -497,7 +532,7 @@ Deno.serve(async (request) => {
       providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,metadataReviewed:(providerMetadata.scExplicitReviewedIds as number[]).length,relevanceRejected:decisions.filter(d=>d.outcome==='rejected').length,needsContentReview:decisions.filter(d=>d.outcome==='needs_content_review').length};
       providerRun.candidates=approved;
       const ledger=(providerMetadata.scLedger??[]) as SCLedger[];
-      if(approved.length<Number(job.requested_count)&&checkedUrls.length<40&&ledger.length<40&&!scrapeUnavailable(ledger)&&!['no_more_results','provider_limited'].includes(String((providerMetadata.searchDiagnostics as Record<string,unknown>)?.stopReason))){
+      if(!job.incremental_delivery&&approved.length<Number(job.requested_count)&&checkedUrls.length<40&&ledger.length<40&&!scrapeUnavailable(ledger)&&!['no_more_results','provider_limited'].includes(String((providerMetadata.searchDiagnostics as Record<string,unknown>)?.stopReason))){
         const next={...providerMetadata,stage:'scrape_discovery_v2',round:Number(providerMetadata.round??1)+1,accumulatedSources:providerRun.sources,accumulatedCandidates:approved,accumulatedCost:providerCost(providerRun.usage)??0,scInFlight:[]};
         const saved=await db.from('creator_research_jobs').update({provider_metadata:next,phase:'Replacing rejected clips with new qualifying matches…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').eq('provider_metadata->>stage',String(providerMetadata.stage)).select('*').maybeSingle();if(saved.error)throw Error('REFILL_SAVE');return reply(headers,{job:saved.data??job},202);
       }
@@ -564,6 +599,48 @@ Deno.serve(async (request) => {
     const ranked = brief.data.sourceMode === 'videos'
       ? selectDiverseVideoCandidates(rankedPool, requestedCount)
       : rankedPool.slice(0, requestedCount);
+    if(job.incremental_delivery){
+      const rows=ranked.map(candidate=>({normalized_title:candidate.normalizedTitle,title:candidate.title,
+        factual_summary:candidate.factualSummary,why_audience_cares:candidate.whyAudienceCares,creator_connection:candidate.creatorConnection,
+        recommended_angle:candidate.recommendedAngle,suggested_hook:candidate.suggestedHook,category:candidate.category,
+        published_at:candidate.publishedAt,timeliness_score:candidate.timelinessScore,relevance_score:candidate.relevanceScore,
+        rank_score:candidate.rankScore,uncertainty:candidate.uncertainty,evidence_state:candidate.uncertainty?'partial':'source_backed',
+        source_snapshot:candidate.sources.map(source=>({...source,url:canonicalResearchUrl(source.url)??source.url}))}));
+      const previousDelivered=Number(job.delivered_count);
+      const delivered=await db.rpc('creator_search_deliver',{p_job_id:job.id,p_user_id:auth.user.id,p_rows:rows});
+      if(delivered.error)throw Error('PERSISTENCE_DELIVERY');
+      job=delivered.data;
+      if(!job||['ready','failed','cancelled'].includes(String(job.status)))return reply(headers,{job});
+      const screened=providerMetadata.scScreenedUrls as string[]??[];
+      const tasks=providerMetadata.scTasks as SCTask[]??[],ledger=providerMetadata.scLedger as SCLedger[]??[];
+      const unused=shortlist(nativeSources(providerMetadata.scPool),brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],120);
+      const decision=refillDecision({delivered:Number(job.delivered_count),requested:requestedCount,reviewed:screened.length,
+        requests:ledger.length,unused:unused.length,canRetrieve:tasks.some(t=>!t.state)||!!expansionTask(tasks)||detailTasks(nativeSources(providerMetadata.scPool),tasks,1,brief.data).length>0,
+        providerLimited:scrapeUnavailable(ledger),reviewLimited:Boolean(providerMetadata.reviewLimited||providerMetadata.relevanceReviewLimited)});
+      const again=decision==='review'||decision==='retrieve';
+      const next={...providerMetadata,stage:again?'scrape_discovery_v2':'finished',round:currentRound+1,
+        accumulatedSources:[],accumulatedCandidates:[],metadataDecisions:[],scExplicitReviewedIds:[],pilotReviewed:false,scInFlight:[],reviewLimited:false,
+        inspectionSources:undefined,inspectionAllSources:undefined,inspectionCandidates:undefined,
+        postReviewRunId:undefined,postReviewSourceIds:undefined,postReviewRetryAt:undefined,postReviewQueueStartedAt:undefined,
+        screeningRuns:[],pendingScreeningBatches:[],screeningQueueStartedAt:undefined,screeningRetryAt:undefined,
+        deliveryMetrics:{delivered:job.delivered_count,requested:requestedCount,requests:ledger.length,reviewed:screened.length,
+          firstResultAt:job.first_result_at,elapsedMs:Date.now()-Date.parse(String(job.started_at??job.created_at))}};
+      const usageKey=await searchCacheKey({job:job.id,round:currentRound,kind:'delivery'});
+      const usageId=`${usageKey.slice(0,8)}-${usageKey.slice(8,12)}-4${usageKey.slice(13,16)}-8${usageKey.slice(17,20)}-${usageKey.slice(20,32)}`;
+      const usageSaved=await db.from('creator_research_usage').upsert({id:usageId,job_id:job.id,user_id:auth.user.id,
+        operation:'deep_research_complete',provider_response_id:providerRun.id,model:providerRun.model??null,
+        status:again?'incomplete':'completed',usage:providerRun.usage,provider_cost_usd:providerCost(providerRun.usage),
+        accepted_count:Number(job.delivered_count)-previousDelivered,elapsed_ms:next.deliveryMetrics.elapsedMs,
+        request_metadata:{...next.deliveryMetrics,decision,incremental:true}},{onConflict:'id'});
+      if(usageSaved.error)throw Error('PERSISTENCE_USAGE');
+      const result=await db.from('creator_research_jobs').update({status:again?'researching':decision==='complete'?'ready':'failed',
+        ...(again?{}:{reserved_count:0,completed_at:new Date().toISOString()}),provider_metadata:next,
+        interruption_reason:again||decision==='complete'?null:decision,
+        phase:`${job.delivered_count} of ${requestedCount} clips ready. ${again?'Finding the remaining clips…':decision==='complete'?'Search complete.':'Search interrupted; results are saved.'}`,
+        updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+      if(result.error)throw Error('PERSISTENCE_DELIVERY_STATE');
+      return reply(headers,{job:result.data??job},again?202:200);
+    }
     const priorReports = Array.isArray(providerMetadata.roundReports) ? providerMetadata.roundReports : [];
     const screenedIds = new Set((Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ sourceIds: number[] }> : [])
       .flatMap((run) => Array.isArray(run.sourceIds) ? run.sourceIds : []));

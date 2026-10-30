@@ -11,7 +11,7 @@ export type ResearchOpportunity = {
   status: "new" | "saved" | "rejected" | "selected" | "turned_into_content"; created_at: string; updated_at: string;
 };
 export type ResearchIntent = ResearchOpportunity & { creationMode?: "reaction" | "original" };
-export type ResearchJob = {review_limited?:boolean;relevance_review_limited?:boolean; retrieval_diagnostics?:{requests?:number;requestLimit?:number;rawReturned?:number;uniqueRetained?:number;stopReason?:string};engagement_diagnostics?:{metadataReviewed?:number;passed:number;freshCandidates:number;excluded:Record<string,number>;relevanceRejected?:number;needsContentReview?:number;contentReviewAccepted?:number;contentReviewRejected?:number;contentReviewUnresolved?:number};id: string; content_profile_id: string; requested_count: number; delivered_count: number; candidate_count: number; status: string; phase: string; error_code: string | null; created_at: string; updated_at: string; completed_at: string | null };
+export type ResearchJob = {incremental_delivery?:boolean;interruption_reason?:string|null;first_result_at?:string|null;review_limited?:boolean;relevance_review_limited?:boolean; retrieval_diagnostics?:{requests?:number;requestLimit?:number;rawReturned?:number;uniqueRetained?:number;stopReason?:string};engagement_diagnostics?:{metadataReviewed?:number;passed:number;freshCandidates:number;excluded:Record<string,number>;relevanceRejected?:number;needsContentReview?:number;contentReviewAccepted?:number;contentReviewRejected?:number;contentReviewUnresolved?:number};id: string; content_profile_id: string; requested_count: number; delivered_count: number; candidate_count: number; status: string; phase: string; error_code: string | null; created_at: string; updated_at: string; completed_at: string | null };
 export type ResearchFeedFilter = "all" | "saved" | "used" | "skipped";
 export type ResearchFeed = { pilot?:{profileId:string;configured:boolean;enabled:boolean}; active: boolean; remaining: number; limit: number; periodStart: string | null; jobs: ResearchJob[]; opportunities: ResearchOpportunity[]; opportunityTotal: number; pageOffset: number; pageSize: number; statusCounts: Record<ResearchFeedFilter, number> };
 
@@ -39,3 +39,5 @@ export const refineResearchOpportunity = (opportunityId: string, instruction: st
 
 export type DiscoverySettings={configured:boolean;enabled:boolean;provider?:string;youtube:string;watchlist:Array<{id:string;platform:string;identifier:string;url:string;name:string;created_at:string}>};
 export const discoverySettings=(profileId:string,action:'load'|'toggle'|'follow'|'remove'='load',options:{enabled?:boolean;url?:string;id?:string}={})=>invoke<DiscoverySettings>('discovery-settings',{profileId,action,...options});
+
+export const resumeResearch=(profileId:string,jobId:string)=>invoke<{job:ResearchJob}>('research-request',{profileId,resumeJobId:jobId,requestedCount:1,idempotencyKey:crypto.randomUUID()});

@@ -50,3 +50,7 @@
 .discover-keyword-entry,.discover-query-submit{display:flex;align-items:end;gap:12px}.discover-keyword-entry input{flex:1;min-width:0;padding:14px;border:1px solid #b8cce7;border-radius:10px;font:inherit}.discover-keyword-entry>button{padding:14px 20px;background:#eaf3ff;color:#125da8;border:1px solid #b8cce7;border-radius:10px;font-weight:700;white-space:nowrap}.discover-keywords button{margin-left:10px;font-size:20px;border:0;background:transparent;color:inherit}.discover-query-submit>label{min-width:100px}.discover-query-submit>.discover-primary-find{min-height:48px;flex:1}@media(max-width:600px){.discover-keyword-entry{flex-wrap:wrap}.discover-keyword-entry input{flex-basis:100%}}
 
 .discover-settings{margin:16px 0;padding:16px 20px;border:1px solid #dce5f0;border-radius:14px;background:#ffffffa8}.discover-settings>summary{cursor:pointer;font-weight:600;color:#425a73}.discover-settings[open]>summary{margin-bottom:16px}.discover-settings .discover-profile-choice{margin:0}.discover-query{box-shadow:0 8px 28px #17314d08}.discover-query-submit .discover-primary-find{font-size:16px}
+/* Keep search constraints beside the submit action, including on mobile. */
+.discover-query .discover-filters { margin: 16px 0; }
+.search-resume { padding: 16px 20px; border: 1px solid #bfd7f5; border-radius: 16px; background: #f4f8ff; }
+.search-resume p { margin-top: 0; }

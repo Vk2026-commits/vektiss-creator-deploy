@@ -1,3 +1,4 @@
+import {deliveryProgress} from '../domain/search-delivery';
 import {searchKeywords} from '../domain/search-keywords';
 import {DiscoverFilters} from './DiscoverFilters';
 import {discoveryFiltersSchema,type DiscoveryFilters} from '../domain/discovery-engagement';
@@ -11,7 +12,7 @@ import {
 } from "lucide-react";
 import type { ContentProfile } from "../domain/strategy";
 import {
-  loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch, stopResearch,
+  resumeResearch, loadResearchFeed, refineResearchOpportunity, requestResearch, researchFeedback, syncResearch, stopResearch,
   type ResearchFeed, type ResearchFeedFilter, type ResearchOpportunity,
 } from "../lib/research-client";
 import "./discover.css";
@@ -33,23 +34,6 @@ type HistoryFilter = ResearchFeedFilter;
 const archivePageSize = 8;
 
 type EmbeddedClip = { platform: "TikTok" | "Instagram" | "YouTube"; src: string };
-type ResearchProgress = { percent: number; title: string; timing: string };
-
-function progressForResearch(job: { status: string; phase: string }): ResearchProgress {
-  const phase = job.phase.toLowerCase();
-  if(phase.includes('inspecting shortlisted'))return {percent:78,title:'Inspecting shortlisted clips',timing:'Reviewing speech and sampled frames from up to five videos'};
-  const round = Number(phase.match(/round (\d) of 3/)?.[1] ?? 0);
-  if (job.status === "queued") return { percent: 8, title: "Getting your search ready", timing: "Starting now" };
-  if (round > 1 && phase.includes("searching round")) return { percent: round === 2 ? 48 : 72, title: `Searching round ${round} of 3`, timing: "Looking for more strong matches" };
-  if (round > 1 && (phase.includes("checking clip") || phase.includes("round") && phase.includes("quality"))) return { percent: round === 2 ? 58 : 82, title: `Checking round ${round} clips`, timing: "Filtering weak and duplicate matches" };
-  if (phase.includes("finding direct")) return { percent: 28, title: "Finding your clips", timing: "Searching the source platform" };
-  if (phase.includes("direct video leads")) return { percent: 60, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
-  if (phase.includes("screening") || phase.includes("checking clip")) return { percent: 65, title: "Checking clip quality", timing: "Reviewing candidates—this can take a few minutes" };
-  if (phase.includes("reviewing")) return { percent: 78, title: "Checking the best matches", timing: "Reviewing source evidence" };
-  if (phase.includes("ranking")) return { percent: 92, title: "Choosing your best matches", timing: "Ranking relevant results" };
-  if (job.status === "researching") return { percent: 65, title: "Researching relevant sources", timing: "Search is still running" };
-  return { percent: 45, title: "Finding relevant sources", timing: "Search is still running" };
-}
 
 function embeddedClip(url: string): EmbeddedClip | null {
   try {
@@ -101,6 +85,8 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const [pageOffset, setPageOffset] = useState(0);
   const discoverRef = useRef<HTMLElement>(null);
 
+  const [clockNow,setClockNow]=useState(Date.now());
+  useEffect(()=>{const timer=setInterval(()=>setClockNow(Date.now()),1000);return ()=>clearInterval(timer);},[]);
   const loadVersion=useRef(0);
   const load = useCallback(async () => {
     const version=++loadVersion.current;
@@ -120,6 +106,12 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     const timer=window.setInterval(()=>void load().catch(()=>undefined),2000);
     return ()=>window.clearInterval(timer);
   },[busy,load]);
+  async function resume(jobId:string){
+    if(!profile||busy||stopLock.current)return;
+    stopLock.current=true;setBusy(true);setError('');setHistoryFilter('all');setPageOffset(0);setSort('discovered');
+    try{await resumeResearch(profile.id,jobId);await load();}catch(e){setError(e instanceof Error?e.message:'Could not resume search.');}
+    finally{stopLock.current=false;setBusy(false);}
+  }
   async function stop(jobId:string){
     if(stopLock.current)return;
     stopLock.current=true;setStopping(jobId);setError('');
@@ -129,9 +121,12 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   }
   useEffect(() => {
     if (!activeJobs.length) return;
+    let running=false;
     const timer = window.setInterval(() => {
-      void Promise.all(activeJobs.map((job) => syncResearch(job.id).catch(() => null))).then(() => load().catch(() => undefined));
-    }, 6000);
+      if(running)return;
+      running=true;
+      void Promise.all(activeJobs.map((job) => syncResearch(job.id).catch(() => null))).then(() => load().catch(() => undefined)).finally(()=>{running=false;});
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [activeJobs, load]);
 
@@ -153,6 +148,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     if (!profile) { setError("Create a content profile before researching."); return; }
     await action(async () => {
       if(sourceMode==='articles')try{resolveArticleWindow(articleDate);}catch{throw Error('Choose valid dates within the past year, ending no later than today.');}
+      setHistoryFilter('all');setPageOffset(0);setSort('discovered');
       await requestResearch(profile.id, count,{searchQuery:effectiveQuery,useContentProfile,sourceMode:searchMode,...(sourceMode==='articles'?{articleDate}:{discoveryFilters:filters})});
     });
   }
@@ -183,7 +179,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
     </header>
     {error && <p className="error-message" role="alert">{error}</p>}
     {notice&&<p role="status">{notice}</p>}
-    <form className="discover-query" aria-label="Search topic" onSubmit={event=>{event.preventDefault();void find(searchCount);}}><label htmlFor="discover-query">What do you want to find?</label><div className="discover-keyword-entry"><input id="discover-query" type="text" maxLength={300} value={keywordDraft} disabled={busy||activeJobs.length>0} onChange={event=>{if(!effectiveQuery&&event.target.value.trim())updateFilters({...filters,platform:'all'});setKeywordDraft(event.target.value);}} placeholder="What’s your next video about?"/><button type="button" disabled={busy||activeJobs.length>0||!keywordDraft.trim()} onClick={addKeyword}>Add keyword</button></div><p>Search a topic, or use Add keyword to combine up to five phrases. Press Enter to search.</p><div className="discover-keywords">{searchKeywords(searchQuery).map(term=><span key={term}>{term}<button type="button" aria-label={'Remove '+term} disabled={busy||activeJobs.length>0} onClick={()=>setSearchQuery(searchKeywords(searchQuery).filter(value=>value!==term).join(', '))}>×</button></span>)}</div>{(searchKeywords(effectiveQuery).length>5||effectiveQuery.length>300)&&<p role="alert">Use up to five phrases, totaling 300 characters.</p>}{sourceMode!=='articles'&&<label>Search networks<select value={filters.platform} disabled={busy||activeJobs.length>0} onChange={event=>updateFilters({...filters,platform:event.target.value as typeof filters.platform})}><option value="all">All networks · TikTok, Instagram &amp; YouTube</option><option value="TikTok">TikTok</option><option value="Instagram">Instagram</option><option value="YouTube">YouTube</option></select></label>}<label><input type="checkbox" checked={useContentProfile} disabled={busy||activeJobs.length>0} onChange={event=>setUseContentProfile(event.target.checked)}/> Rank for my content profile</label><p>{useContentProfile?'Your keywords set the topic; your profile helps rank the best matches. Leave keywords blank to explore your profile’s topics.':'Enter a topic to search without your profile’s topic or screening rules.'}</p>{sourceMode==='videos'&&(filters.minViews>0||filters.minEngagementRate>0||filters.maxAgeDays>0||filters.mode!=='relevant')&&<button type="button" disabled={busy||activeJobs.length>0} onClick={()=>updateFilters({...filters,mode:'relevant',minViews:0,minEngagementRate:0,maxAgeDays:0})}>Broader results · any date, no minimum metrics</button>}<div className="discover-query-submit"><label>How many?<select value={searchCount} disabled={busy||activeJobs.length>0} onChange={event=>setSearchCount(Number(event.target.value))}>{Array.from({length:10},(_,i)=><option key={i+1} value={i+1}>{i+1}</option>)}</select></label><button type="submit" className="discover-primary-find" disabled={busy||activeJobs.length>0||!feed?.active||!profile||(!useContentProfile&&!effectiveQuery)||searchKeywords(effectiveQuery).length>5||effectiveQuery.length>300||(feed?.remaining??0)<searchCount}>{busy?'Searching…':`Search · ${searchCount} ${sourceMode==='articles'?'articles':'clips'}`}</button></div>{feed?.active&&(feed.remaining??0)<searchCount&&<p className="search-allowance-hint" role="status">You have {feed.remaining} ideas left. Choose a smaller result count to search.</p>}</form>
+    <form className="discover-query" aria-label="Search topic" onSubmit={event=>{event.preventDefault();void find(searchCount);}}><label htmlFor="discover-query">What do you want to find?</label><div className="discover-keyword-entry"><input id="discover-query" type="text" maxLength={300} value={keywordDraft} disabled={busy||activeJobs.length>0} onChange={event=>{if(!effectiveQuery&&event.target.value.trim())updateFilters({...filters,platform:'all'});setKeywordDraft(event.target.value);}} placeholder="What’s your next video about?"/><button type="button" disabled={busy||activeJobs.length>0||!keywordDraft.trim()} onClick={addKeyword}>Add keyword</button></div><p>Search a topic, or use Add keyword to combine up to five phrases. Press Enter to search.</p><div className="discover-keywords">{searchKeywords(searchQuery).map(term=><span key={term}>{term}<button type="button" aria-label={'Remove '+term} disabled={busy||activeJobs.length>0} onClick={()=>setSearchQuery(searchKeywords(searchQuery).filter(value=>value!==term).join(', '))}>×</button></span>)}</div>{(searchKeywords(effectiveQuery).length>5||effectiveQuery.length>300)&&<p role="alert">Use up to five phrases, totaling 300 characters.</p>}{sourceMode!=='articles'&&<label>Search networks<select value={filters.platform} disabled={busy||activeJobs.length>0} onChange={event=>updateFilters({...filters,platform:event.target.value as typeof filters.platform})}><option value="all">All networks · TikTok, Instagram &amp; YouTube</option><option value="TikTok">TikTok</option><option value="Instagram">Instagram</option><option value="YouTube">YouTube</option></select></label>}<label><input type="checkbox" checked={useContentProfile} disabled={busy||activeJobs.length>0} onChange={event=>setUseContentProfile(event.target.checked)}/> Rank for my content profile</label><p>{useContentProfile?'Your keywords set the topic; your profile helps rank the best matches. Leave keywords blank to explore your profile’s topics.':'Enter a topic to search without your profile’s topic or screening rules.'}</p>{sourceMode==='videos'&&(filters.minViews>0||filters.minEngagementRate>0||filters.maxAgeDays>0||filters.mode!=='relevant')&&<button type="button" disabled={busy||activeJobs.length>0} onClick={()=>updateFilters({...filters,mode:'relevant',minViews:0,minEngagementRate:0,maxAgeDays:0})}>Broader results · any date, no minimum metrics</button>}{sourceMode==='videos'&&<DiscoverFilters value={filters} onChange={updateFilters} disabled={busy||activeJobs.length>0} hidePlatforms/>}<div className="discover-query-submit"><label>How many?<select value={searchCount} disabled={busy||activeJobs.length>0} onChange={event=>setSearchCount(Number(event.target.value))}>{Array.from({length:10},(_,i)=><option key={i+1} value={i+1}>{i+1}</option>)}</select></label><button type="submit" className="discover-primary-find" disabled={busy||activeJobs.length>0||!feed?.active||!profile||(!useContentProfile&&!effectiveQuery)||searchKeywords(effectiveQuery).length>5||effectiveQuery.length>300||(feed?.remaining??0)<searchCount}>{busy?'Searching…':`Search · ${searchCount} ${sourceMode==='articles'?'articles':'clips'}`}</button></div>{feed?.active&&(feed.remaining??0)<searchCount&&<p className="search-allowance-hint" role="status">You have {feed.remaining} ideas left. Choose a smaller result count to search.</p>}</form>
     <details className="discover-settings"><summary>{useContentProfile?`Content profile: ${profile?.name??'Choose a profile'}`:'Save results to a profile'}</summary>    <div className="discover-profile-choice">
       <div><strong>{useContentProfile?'Searching with this Content Profile':'Direct search · profile off'}</strong><span>{useContentProfile?'Your profile guides ranking, not strict exclusions. A typed search sets the topic.':'Search uses your words. Results are saved under the selected profile.'}</span></div>
       <label htmlFor="discover-profile-select">Content Profile
@@ -194,23 +190,25 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
       </label>
     </div>
 </details>
-    {!activeJobs.length && latestJob?.status==='failed' && <div className="error-message" role="alert"><strong>Search couldn’t finish</strong><p>{latestJob.error_code==='PROVIDER_INCOMPLETE'?'The search provider returned an incomplete result.':'The search provider could not finish this run.'} Your saved ideas are safe. Unused idea allowance has been released. Choose 1–10 and try again.</p></div>}
+    {!activeJobs.length && latestJob?.status==='failed' && <div className="error-message" role="alert"><strong>Search couldn’t finish</strong><p>{latestJob.interruption_reason?`${latestJob.delivered_count} of ${latestJob.requested_count} clips ready. Search stopped at ${latestJob.interruption_reason.replaceAll('_',' ')}.`:latestJob.error_code==='PROVIDER_INCOMPLETE'?'The search provider returned an incomplete result.':'The search provider could not finish this run.'} Your saved ideas are safe. Unused idea allowance has been released. Choose 1–10 and try again.</p></div>}
 
+    {!activeJobs.length&&latestJob?.incremental_delivery&&['failed','cancelled'].includes(latestJob.status)&&latestJob.delivered_count<latestJob.requested_count&&<div className="search-resume"><p>Your clips are saved. Continue with the same topic and filters; only the remaining clips count against your allowance. Continuing starts another bounded search and may incur provider processing costs.</p><button type="button" disabled={busy} onClick={()=>void resume(latestJob.id)}>Find remaining {latestJob.requested_count-latestJob.delivered_count} clips</button></div>}
     {latestJob&&<details className="discover-settings"><summary>Last search details</summary>    {!activeJobs.length && latestJob?.status==='ready' && latestJob.delivered_count<latestJob.requested_count && <p role="status">{latestJob.phase} Only delivered ideas count against your allowance.</p>}    {!activeJobs.length&&latestJob?.engagement_diagnostics&&<p className="search-filter-diagnostics">{latestJob.engagement_diagnostics.passed} of {latestJob.engagement_diagnostics.freshCandidates} fresh clips passed your search filters. {Object.entries(latestJob.engagement_diagnostics.excluded).map(([reason,count])=>`${count} excluded: ${({below_outlier_multiple:'below outlier multiple',outlier_baseline_unavailable:'outlier comparison unavailable',outside_date_range:'outside date range',date_unavailable:'date unavailable',below_minimum_views:'views below minimum',views_unavailable:'views unavailable',below_minimum_engagement:'engagement below minimum',engagement_unavailable:'engagement unavailable'} as Record<string,string>)[reason]??(reason==='baseline'?'outlier baseline missing, insufficient, or below threshold':reason==='date'?'outside date range or date unavailable':reason==='views'?'views below minimum or unavailable':reason==='engagement'?'engagement below minimum or unavailable':reason)}`).join(' · ')}. {latestJob.engagement_diagnostics.relevanceRejected!==undefined&&<span>{latestJob.engagement_diagnostics.metadataReviewed!==undefined&&<>{latestJob.engagement_diagnostics.metadataReviewed} clips reviewed for relevance · </>}{latestJob.engagement_diagnostics.relevanceRejected} rejected · {latestJob.engagement_diagnostics.needsContentReview??0} needed content review. </span>}{latestJob.engagement_diagnostics.contentReviewAccepted!==undefined&&<span>Content review: {latestJob.engagement_diagnostics.contentReviewAccepted} relevant · {latestJob.engagement_diagnostics.contentReviewRejected??0} off topic · {latestJob.engagement_diagnostics.contentReviewUnresolved??0} unresolved.</span>}</p>}
     {!activeJobs.length&&latestJob?.retrieval_diagnostics?.rawReturned!==undefined&&<p className="search-filter-diagnostics">Search returned {latestJob.retrieval_diagnostics.rawReturned} records; retained {latestJob.retrieval_diagnostics.uniqueRetained} unique new clips. {latestJob.retrieval_diagnostics.requests} of {latestJob.retrieval_diagnostics.requestLimit} collection API calls used. {latestJob.retrieval_diagnostics.stopReason==='request_budget'?'Collection reached its budget; results do not represent all available clips.':latestJob.retrieval_diagnostics.stopReason==='provider_limited'?'Collection was limited by the provider.':''}</p>}
     {!activeJobs.length&&(latestJob?.review_limited||latestJob?.relevance_review_limited)&&<p className="search-filter-diagnostics">The relevance provider could not finish every check. Unresolved clips were not approved.</p>}
 </details>}
     {!feed?.active ? <div className="discover-empty"><Lightbulb size={28}/><h2>{feed?'Discover is almost ready.':'Loading your ideas…'}</h2>{feed&&<p>This feature is available to selected Pro pilot accounts.</p>}</div> : <>
       <div className="discover-source-options"><div role="group" aria-label="Source type">{(['videos','articles','all'] as const).map(mode=><button type="button" key={mode} aria-pressed={sourceMode===mode} disabled={busy} onClick={()=>{setSourceMode(mode);setPageOffset(0);setFeed(null);}}>{mode==='videos'?'Videos':mode==='articles'?'Articles':'All'}</button>)}</div>{sourceMode==='articles'&&<><label>Published within<select disabled={busy} value={articleDate.preset} onChange={e=>setArticleDate({...articleDate,preset:e.target.value as ArticleDate['preset']})}>{Object.entries({day:'Past 24 hours',week:'Past 7 days',month:'Past 30 days',quarter:'Past 90 days',year:'Past year',custom:'Custom dates'}).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{articleDate.preset==='custom'&&(['start','end'] as const).map(field=><label key={field}>{field==='start'?'From':'Through'}<input type="date" disabled={busy} min={localDate(new Date(Date.now()-365*86400000),articleDate.timezone)} max={localDate(new Date(),articleDate.timezone)} value={articleDate[field]??''} onChange={e=>setArticleDate({...articleDate,[field]:e.target.value})}/></label>)}</>}</div>
-      {sourceMode==='videos'&&<details className="discover-settings"><summary>Advanced filters · {filters.maxAgeDays?`last ${filters.maxAgeDays} days`:'any date'}{filters.minViews>0?` · ${filters.minViews.toLocaleString()}+ views`:''}{filters.minEngagementRate>0?` · ${filters.minEngagementRate}% engagement`:''}</summary><DiscoverFilters value={filters} onChange={updateFilters} disabled={busy||activeJobs.length>0} hidePlatforms/></details>}
+
 
 
       <div className="discover-results-toolbar"><nav className="discover-filters" aria-label="Idea history">{historyFilters.map(([filter, label]) => <button key={filter} className={historyFilter === filter ? "active" : ""} aria-pressed={historyFilter === filter} onClick={() => { setHistoryFilter(filter); setPageOffset(0); }}>{label}<span>{filterCount(filter)}</span></button>)}</nav><label className="discover-sort">Sort by<select value={sort} disabled={busy} onChange={e=>{setSort(e.target.value as ResearchSort);setPageOffset(0);}}>{Object.entries(researchSortLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label></div>
       {activeJobs.map((job) => {
-        const progress = progressForResearch(job);
-        return <section className="research-progress" key={job.id} aria-label={progress.title}>
-          <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{progress.title}</strong><span>{progress.timing}</span></div></div></div>
-          <div className="research-progress-track" role="progressbar" aria-label={progress.title}><i style={{ width: `${progress.percent}%` }} /></div>
+        const progress = deliveryProgress(job,clockNow);
+        const title=`${progress.delivered} of ${job.requested_count} clips ready · ${progress.percent}% complete`;
+        return <section className="research-progress" key={job.id} aria-label={title}>
+          <div className="research-progress-head"><div className="research-progress-title"><LoaderCircle className="spin" size={19}/><div><strong>{title}</strong><span>{progress.elapsed} elapsed · Result completion</span></div></div></div>
+          <div className="research-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent} aria-label={title}><i style={{ width: `${progress.percent}%` }} /></div>
           <p>{job.phase}</p>
           {stopConfirm===job.id?<div className="research-stop-confirm"><strong>Stop this search?</strong><p>Unfinished clips from this search will not be added. Previously saved ideas stay available, and work already sent to a provider may still incur a cost.</p><div><button type="button" className="button secondary" disabled={stopping===job.id} onClick={()=>setStopConfirm(null)}>Keep searching</button><button type="button" className="button primary" disabled={stopping===job.id} onClick={()=>void stop(job.id)}>{stopping===job.id?'Stopping…':'Stop search'}</button></div></div>:<button type="button" className="button secondary" onClick={()=>setStopConfirm(job.id)}>Stop search</button>}
         </section>;

@@ -109,6 +109,18 @@ Deno.serve(async (request) => {
     if (existingError) throw new Error("PERSISTENCE");
     if (existing) return reply(headers, { job: existing, reused: true });
 
+    let resumeBrief:ReturnType<typeof researchBriefSchema.parse>|undefined;
+    if(input.resumeJobId){
+      const parent=await db.from('creator_research_jobs').select('*').eq('id',input.resumeJobId).eq('user_id',userId).eq('content_profile_id',input.profileId).maybeSingle();
+      if(parent.error||!parent.data?.incremental_delivery||!['failed','cancelled'].includes(parent.data.status))return reply(headers,{code:'RESUME_UNAVAILABLE'},409);
+      const child=await db.from('creator_research_jobs').select('*').eq('resume_of',input.resumeJobId).eq('user_id',userId).maybeSingle();
+      if(child.error)throw Error('PERSISTENCE');
+      if(child.data)return reply(headers,{job:child.data,reused:true});
+      input.requestedCount=Number(parent.data.requested_count)-Number(parent.data.delivered_count);
+      if(input.requestedCount<=0)return reply(headers,{code:'RESUME_UNAVAILABLE'},409);
+      resumeBrief=researchBriefSchema.parse(parent.data.input_snapshot);
+      input.sourceMode='videos';
+    }
     const { data: config, error: configError } = await db.from("creator_research_config")
       .select("feature_enabled,candidate_multiplier").eq("id", true).maybeSingle();
     if (configError) throw new Error("PERSISTENCE");
@@ -142,9 +154,14 @@ Deno.serve(async (request) => {
       brief.researchReferenceUrls=[];
     }
 
+    if(resumeBrief)brief=resumeBrief;
+    const deliveryFlag=await db.from('creator_search_delivery_flags').select('enabled').eq('user_id',userId).maybeSingle();
+    if(deliveryFlag.error)throw Error('PERSISTENCE');
+    const incrementalDelivery=input.sourceMode==='videos'&&deliveryFlag.data?.enabled===true;
+    if(incrementalDelivery&&!Deno.env.get('CREATOR_SCRAPECREATORS_API_KEY'))throw Error('SCRAPECREATORS_NOT_CONFIGURED');
     const pilot=await db.from('creator_discovery_pilot').select('enabled').eq('content_profile_id',input.profileId).maybeSingle();
     if(pilot.error)throw Error('PERSISTENCE');
-    brief.discoveryPilot=input.sourceMode==='videos'&&pilot.data?.enabled===true;
+    brief.discoveryPilot=incrementalDelivery||(input.sourceMode==='videos'&&pilot.data?.enabled===true);
     const watch=brief.discoveryPilot&&input.useContentProfile&&!input.searchQuery?await db.from('creator_discovery_watchlist').select('platform,identifier,url,name').eq('content_profile_id',input.profileId).eq('user_id',userId):{data:[],error:null};
     if(watch.error)throw Error('PERSISTENCE');
     const watchlist=(watch.data??[]).flatMap(row=>{const parsed=creatorSourceSchema.safeParse(row);return parsed.success?[parsed.data]:[];});
@@ -153,12 +170,14 @@ Deno.serve(async (request) => {
     jobId = crypto.randomUUID();
     const inserted = await db.from("creator_research_jobs").insert({
       id: jobId, user_id: userId, content_profile_id: input.profileId, idempotency_key: input.idempotencyKey,
-      requested_count: input.requestedCount, reserved_count: reservation, input_snapshot: brief,
+      requested_count: input.requestedCount, reserved_count: reservation, input_snapshot: brief, incremental_delivery:incrementalDelivery,resume_of:input.resumeJobId??null,
     }).select("*").maybeSingle();
     if (inserted.error || !inserted.data) {
       if (inserted.error?.code === "23505") {
         await releaseReservation(userId, reservation);
-        const { data: concurrent } = await db.from("creator_research_jobs").select("*").eq("user_id", userId).eq("idempotency_key", input.idempotencyKey).maybeSingle();
+        reservation=0;
+        const query=db.from("creator_research_jobs").select("*").eq("user_id",userId);
+        const {data:concurrent}=await (input.resumeJobId?query.eq("resume_of",input.resumeJobId):query.eq("idempotency_key",input.idempotencyKey)).maybeSingle();
         if (concurrent) return reply(headers, { job: concurrent, reused: true });
       }
       throw new Error("PERSISTENCE");
@@ -172,7 +191,7 @@ Deno.serve(async (request) => {
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{requestedCount:input.requestedCount,sourceMode:'articles',articleWindow:brief.articleWindow}});
       reservation=0;return reply(headers,{job:updated.data,reused:false},202);
     }
-    if(brief.discoveryPilot&&scrapeEnabled()){
+    if(incrementalDelivery||(brief.discoveryPilot&&scrapeEnabled())){
       if(!Deno.env.get('CREATOR_SCRAPECREATORS_API_KEY'))throw Error('SCRAPECREATORS_NOT_CONFIGURED');
       const saved=await db.from('creator_research_jobs').update({provider_response_id:jobId,status:'researching',phase:'Preparing Scrape Creators platform searches…',started_at:new Date().toISOString(),provider_metadata:{stage:'scrape_discovery_v2',selectionVersion:2,pilot:true,provider:'Scrape Creators',round:1,scTasks:scrapeTasks(brief,jobId!,watchlist),scSources:[],scLedger:[],providerDiagnostics:[],roundReports:[],accumulatedSources:[],accumulatedCandidates:[]},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();if(saved.error||!saved.data)throw Error('PERSISTENCE');
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',model:'scrape-creators-discovery',status:'started',request_metadata:{requestedCount:input.requestedCount,filters:input.discoveryFilters,provider:'Scrape Creators',maxRequests:40}});

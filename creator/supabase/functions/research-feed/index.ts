@@ -34,7 +34,7 @@ Deno.serve(async (request) => {
     const input = inputSchema.parse(await request.json());
     const { data: entitlement } = await db.from("creator_research_entitlements").select("enabled,monthly_opportunity_limit,delivered_count,reserved_count,period_start").eq("user_id", auth.user.id).maybeSingle();
     const { data: config } = await db.from("creator_research_config").select("feature_enabled").eq("id", true).maybeSingle();
-    const jobs = db.from("creator_research_jobs").select("id,content_profile_id,requested_count,delivered_count,candidate_count,status,phase,error_code,created_at,updated_at,completed_at,engagement_diagnostics:provider_metadata->engagementDiagnostics,retrieval_diagnostics:provider_metadata->searchDiagnostics,review_limited:provider_metadata->reviewLimited,relevance_review_limited:provider_metadata->relevanceReviewLimited")
+    const jobs = db.from("creator_research_jobs").select("id,content_profile_id,requested_count,delivered_count,incremental_delivery,interruption_reason,first_result_at,candidate_count,status,phase,error_code,created_at,updated_at,completed_at,engagement_diagnostics:provider_metadata->engagementDiagnostics,retrieval_diagnostics:provider_metadata->searchDiagnostics,review_limited:provider_metadata->reviewLimited,relevance_review_limited:provider_metadata->relevanceReviewLimited")
       .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(30);
     let opportunities = db.from("creator_research_opportunities").select(opportunityFields, { count: "exact" }).eq("user_id", auth.user.id);
     if (input.profileId) opportunities = opportunities.eq("content_profile_id", input.profileId);
