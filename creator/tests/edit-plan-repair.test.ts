@@ -50,7 +50,7 @@ it('recovers a premature scene boundary while preserving every explicit anchor a
  expect(fixed.beats[0].lastWord).toBeGreaterThanOrEqual(Math.max(...p.beats[0].graphics!.nodes.map(n=>n.revealWord!)));
  expect(fixed.beats[1].firstWord).toBe(fixed.beats[0].lastWord+1);
  expect(fixed.beats.at(-1)!.lastWord).toBe(source.words.length-1);
- expect(fixed.beats.filter(b=>b.visual!=='presenter').map(b=>b.graphics)).toEqual(p.beats.map(b=>b.graphics));
+ expect(fixed.beats.filter(b=>b.graphics?.nodes.length).map(b=>b.graphics)).toEqual(p.beats.map(b=>b.graphics));
 });
 
 it('repairs the observed 25–30 word anchors before a scene starting at word 14',()=>{
@@ -60,7 +60,7 @@ it('repairs the observed 25–30 word anchors before a scene starting at word 14
  // Shorten the fixture to avoid conflating boundary repair with long-scene quality checks.
  longSource.duration=12;longSource.words=longSource.words.slice(0,40);p.beats[1].lastWord=39;
  const fixed=repairEditPlan(p,longSource,p.templateId);
- const graphicBeats=fixed.beats.filter(b=>b.visual!=='presenter');
+ const graphicBeats=fixed.beats.filter(b=>b.graphics?.nodes.length);
  expect(graphicBeats[0].lastWord).toBe(30);
  expect(graphicBeats[0].graphics!.nodes.map(n=>n.revealWord)).toEqual([25,30]);
  expect(graphicBeats[1].graphics!.nodes[0].revealWord).toBe(36);

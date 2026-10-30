@@ -6,7 +6,7 @@ const plan:EditProposal={version:1,rendererVersion:2,sourceRevision:source.revis
 it('waits for the last spoken numeric component and preserves every original word',()=>{
  const fixed=timeDirectedPlan(plan,source);
  expect(fixed.beats.map(beat=>[beat.firstWord,beat.lastWord])).toEqual([[0,8],[9,9]]);
- expect(fixed.beats[0].visual).toBe('presenter');expect(fixed.beats[0].headline).toBe('');
+ expect(fixed.beats[0].visual).toBe('typography');expect(fixed.beats[0].headline).toBe('One company reports over');
  expect(fixed.beats[1].graphics!.nodes[0]).toEqual({...plan.beats[0].graphics!.nodes[0],revealWord:9});
  expect(fixed.beats[1].headline).toBe(plan.beats[0].headline);
  expect(plan.beats[0].graphics!.nodes[0].revealWord).toBe(4);

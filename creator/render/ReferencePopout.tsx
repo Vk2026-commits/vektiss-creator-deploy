@@ -6,6 +6,7 @@ import {editorialCaptions} from '../src/domain/editorial-captions';
 import type {RenderIllustration} from '../src/domain/edit-illustrations';
 import type {EditBrand} from '../src/domain/edit-brand';
 import {popoutLayout as layout,popoutBeatIndex} from '../src/domain/popout-layout';
+import {popoutPresenterMotion} from '../src/domain/popout-motion';
 const ease=Easing.bezier(.65,0,.2,1);
 export const referenceProgress=(frame:number,start:number,duration=8)=>interpolate(frame,[start,start+duration],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp',easing:ease});
 function Graphic({source,beat,time,brand,image,full=false}:{source:EditSource;beat:ReturnType<typeof editStoryboard>[number];time:number;brand:EditBrand;image?:string;full?:boolean}){
@@ -20,18 +21,21 @@ function Graphic({source,beat,time,brand,image,full=false}:{source:EditSource;be
  const p=beat.start===0?1:referenceProgress(time*30,beat.start*30,duration),q=beat.start===0?1:referenceProgress(time*30,beat.start*30+2,duration);
  return <div style={{position:'absolute',inset:0,color:brand.text}}>
  <div style={{position:'absolute',...layout.title,overflow:'hidden',fontSize:beat.headline.length>38?64:76,fontWeight:800,lineHeight:1.03,letterSpacing:-3.5}}><div style={{overflow:'hidden'}}><div style={{transform:`translateY(${(1-p)*110}%)`}}>{words.slice(0,split).join(' ')}</div></div><div style={{overflow:'hidden',fontFamily:'Georgia,serif',fontStyle:'italic',fontWeight:400,color:brand.primary}}><div style={{transform:`translateY(${(1-q)*110}%)`}}>{words.slice(split).join(' ')}</div></div></div>
- <div ref={root} className="reference-art" style={{position:'absolute',...(full?{left:60,top:480,width:960,height:1000}:layout.artwork),overflow:'hidden'}} dangerouslySetInnerHTML={image?undefined:{__html:markup}}>{image?<img src={image} style={{width:'100%',height:'100%',objectFit:'contain'}}/>:undefined}</div>
+ <div ref={root} className="reference-art" style={{position:'absolute',...(full?{left:60,top:480,width:960,height:1000}:layout.artwork),overflow:'hidden',transform:`scale(${1+.025*Math.min(1,Math.max(0,(time-beat.start)/Math.max(.1,beat.end-beat.start)))})`,transformOrigin:'50% 50%'}} dangerouslySetInnerHTML={image?undefined:{__html:markup}}>{image?<img src={image} style={{width:'100%',height:'100%',objectFit:'contain'}}/>:undefined}</div>
  </div>;
 }
 export function ReferencePopout({sourceUrl,presenterUrl,source,proposal,brand,illustrations=[]}:{illustrations?:RenderIllustration[];sourceUrl:string;presenterUrl:string;source:EditSource;proposal:EditProposal;brand:EditBrand}){
  const frame=useCurrentFrame(),t=frame/30,beats=useMemo(()=>editStoryboard(proposal,source),[proposal,source]);
- const index=popoutBeatIndex(beats,t),beat=beats[index];
- const presenterOnly=beat.visual==='presenter',fullGraphic=beat.layout==='full-graphic'&&!presenterOnly;
+ const index=popoutBeatIndex(beats,t),rawBeat=beats[index];
+ // Existing plans get a source-grounded title immediately, without a new AI call.
+ const beat=rawBeat.visual==='presenter'?{...rawBeat,visual:'typography' as const,layout:'bottom-presenter' as const,headline:source.words.slice(rawBeat.firstWord,Math.min(rawBeat.lastWord+1,rawBeat.firstWord+7)).map(w=>w.text).join(' ').slice(0,100),graphics:{nodes:[],links:[]}}:rawBeat;
+ const presenterMotion=popoutPresenterMotion(t,beat.start,beat.end);
+ const presenterOnly=false,fullGraphic=beat.layout==='full-graphic'&&!presenterOnly;
  const caption=editorialCaptions(source.words).find(c=>t>=c.start&&t<c.end),wide=proposal.aspectRatio==='16:9';
  // The portrait artboard is letterboxed for widescreen; never stretch a face.
  return <AbsoluteFill style={{background:brand.background}}><div style={{position:'absolute',width:1080,height:1920,left:wide?656.25:0,top:0,transform:wide?'scale(.5625)':'none',transformOrigin:'0 0',overflow:'hidden',fontFamily:`${brand.fontFamily??'Arial'},sans-serif`,'--editorial-accent':brand.primary,'--editorial-ink':brand.text} as React.CSSProperties}>
  <style>{editorialSceneStyles+'.reference-art>svg{width:100%;height:100%;overflow:hidden}'}</style>
- <div style={{position:'absolute',...(presenterOnly?{left:0,top:0,width:1080,height:1920}:layout.presenter),opacity:fullGraphic?0:1,transform:`translateY(${12*(1-referenceProgress(frame,0,12))}px)`}}>
+ <div style={{position:'absolute',...(presenterOnly?{left:0,top:0,width:1080,height:1920}:layout.presenter),opacity:fullGraphic?0:presenterMotion.opacity,transform:`translateY(${presenterMotion.translateY}px) scale(${presenterMotion.scale})`,transformOrigin:'50% 100%'}}>
  {<OffthreadVideo src={sourceUrl} muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:!presenterOnly&&brand.presenterTreatment==='cutout'?0:1,clipPath:presenterOnly?'none':brand.presenterTreatment==='window'?'inset(0 round 30px)':'inset(38% 0 0 round 30px)'}}/>}
  {<OffthreadVideo src={presenterUrl} transparent muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:presenterOnly||brand.presenterTreatment==='window'?0:1,clipPath:brand.presenterTreatment==='cutout'?undefined:'inset(0 0 62% 0)'}}/>}
  <div style={{position:'absolute',inset:'48% 0 0',background:'linear-gradient(transparent,#08101eaa)'}}/>

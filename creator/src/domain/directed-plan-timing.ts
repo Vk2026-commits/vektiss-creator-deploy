@@ -30,7 +30,7 @@ export function directedHeadlineTime(beat:Beat,source:EditSource){
 }
 
 /** Timing-only compilation. Preserve the graphic's language, objects and order;
- * turn a long wait for its first object into a clean presenter lead-in. */
+ * turn a long wait for its first object into a speech-grounded animated title. */
 export function timeDirectedPlan(plan:EditProposal,source:EditSource):EditProposal{
  if(plan.templateId!=='popout-explainer')return plan;
  const beats=plan.beats.flatMap((beat):Beat[]=>{
@@ -57,7 +57,7 @@ export function timeDirectedPlan(plan:EditProposal,source:EditSource):EditPropos
   if(nodes.some(node=>node.revealWord===undefined)||beat.graphics.chart)return [timed];
   const first=Math.min(...nodes.map(node=>node.revealWord!));
   if(first<=beat.firstWord||first>beat.lastWord||source.words[first].start-source.words[beat.firstWord].start<=1.25)return [timed];
-  const lead:Beat={...beat,lastWord:first-1,layout:'presenter',visual:'presenter',headline:'',scene:'spotlight',illustration:'',motion:'',graphics:{nodes:[],links:[]}};
+  const lead:Beat={...beat,lastWord:first-1,layout:'bottom-presenter',visual:'typography',headline:figures(beat.headline).length?source.words.slice(beat.firstWord,Math.min(first,beat.firstWord+4)).map(w=>w.text).join(' ').replace(/\d.*$/,'').trim().slice(0,100):beat.headline,scene:'spotlight',illustration:'',motion:'',graphics:{nodes:[],links:[]}};
   return [lead,{...timed,firstWord:first}];
  });
  return {...plan,beats};
