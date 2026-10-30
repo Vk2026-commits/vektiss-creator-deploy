@@ -1,3 +1,4 @@
+import {acceptedCandidates} from '../src/domain/pilot-screening';
 import {describe,it,expect} from 'vitest';
 import {researchBriefSchema,researchRequestSchema} from '../src/domain/research';
 import {nativeScreeningInstructions} from '../supabase/functions/_shared/research-provider';
@@ -28,4 +29,11 @@ it('ranks profile fit rather than applying legacy audience vetoes',()=>{
  expect(prompt).toContain('ranking preference, never an additional topic or format gate');
  expect(prompt).not.toContain('For an AI-income audience, acceptance requires');
  expect(prompt).not.toContain('reject news/reaction/compilation packaging');
+});
+
+it('keeps accepted topic matches with lower profile scores in search mode',()=>{
+ const candidates=[{relevanceScore:40,sourceIds:[1]},{relevanceScore:90,sourceIds:[2]}] as any;
+ const decisions=[{sourceId:1,outcome:'accepted',reason:'Matches topic'},{sourceId:2,outcome:'rejected',reason:'Off topic'}] as any;
+ expect(acceptedCandidates(candidates,decisions,0)).toEqual([candidates[0]]);
+ expect(acceptedCandidates(candidates,decisions)).toEqual([]);
 });

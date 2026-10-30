@@ -15,9 +15,9 @@ export function screeningDecisions(sources:ResearchSource[],candidates:ProviderR
   return decision.outcome==='accepted'&&!sourceTopicSupported(s,brief)?{...decision,outcome:'needs_content_review' as const,reason:'Source evidence does not establish an AI connection; a hypothetical reaction angle is insufficient.'}:decision;
  });
 }
-export function acceptedCandidates(candidates:ProviderResearchCandidate[],decisions:ScreeningDecision[]):ProviderResearchCandidate[]{
+export function acceptedCandidates(candidates:ProviderResearchCandidate[],decisions:ScreeningDecision[],minimumScore=70):ProviderResearchCandidate[]{
  const accepted=new Set(decisions.filter(d=>d.outcome==='accepted').map(d=>d.sourceId));
- return candidates.filter(c=>c.relevanceScore>=70&&accepted.has(c.sourceIds[0]));
+ return candidates.filter(c=>c.relevanceScore>=minimumScore&&accepted.has(c.sourceIds[0]));
 }
 export function inspectionIds(candidates:ProviderResearchCandidate[],decisions:ScreeningDecision[]):number[]{
  // Reserve space for unclear captions instead of inspecting only metadata approvals.

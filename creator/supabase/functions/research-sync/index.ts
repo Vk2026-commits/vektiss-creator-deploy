@@ -211,7 +211,7 @@ Deno.serve(async (request) => {
       const original=retainedCandidates(providerMetadata.inspectionCandidates).filter(c=>!ids.has(c.sourceIds[0]));
       const complete='candidates' in checked?checked as CompletedResearchRun:undefined;
       const decisions=complete?screeningDecisions(complete.sources,complete.candidates,complete.decisions,brief.data):[];
-      inspectionRun={id:String(job.provider_response_id),status:'completed',sources:all,candidates:[...original,...(complete?acceptedCandidates(complete.candidates,decisions):[])],raw:{},usage:{cost:{total_cost:Number(providerCost(providerMetadata.inspectionUsage as Record<string,unknown>??{})??0)+Number(complete?providerCost(complete.usage)??0:0)}}};
+      inspectionRun={id:String(job.provider_response_id),status:'completed',sources:all,candidates:[...original,...(complete?acceptedCandidates(complete.candidates,decisions,brief.data.profileRankingOnly?0:70):[])],raw:{},usage:{cost:{total_cost:Number(providerCost(providerMetadata.inspectionUsage as Record<string,unknown>??{})??0)+Number(complete?providerCost(complete.usage)??0:0)}}};
       providerMetadata.pilotReviewed=true;providerMetadata.relevanceDecisions=decisions;
       providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,contentReviewAccepted:decisions.filter(d=>d.outcome==='accepted').length,contentReviewRejected:decisions.filter(d=>d.outcome==='rejected').length,contentReviewUnresolved:decisions.filter(d=>d.outcome==='needs_content_review').length};
     }
@@ -488,7 +488,7 @@ Deno.serve(async (request) => {
     if(providerMetadata.selectionVersion===2&&!providerMetadata.pilotReviewed&&!inspectionRun){
       const priorDecisions=(providerMetadata.metadataDecisions??[]) as ScreeningDecision[];
       const decisions=screeningDecisions(providerRun.sources,providerRun.candidates,[...priorDecisions,...providerRun.decisions??[]],brief.data);
-      const approved=acceptedCandidates(providerRun.candidates,decisions);
+      const approved=acceptedCandidates(providerRun.candidates,decisions,brief.data.profileRankingOnly?0:70);
       const checkedUrls=[...new Set([...(providerMetadata.scScreenedUrls as string[]??[]),...providerRun.sources.map(s=>s.url)])];
       providerMetadata.metadataDecisions=decisions;
       providerMetadata.scScreenedUrls=checkedUrls;
@@ -554,7 +554,7 @@ Deno.serve(async (request) => {
     const blockedUrls = new Set(brief.data.researchBlockedUrls.map(canonicalResearchUrl).filter(Boolean));
     const sourcesById = new Map(providerRun.sources.map(source => [source.providerSourceId, source]));
     const eligibleCandidates = brief.data.sourceMode === 'videos'
-      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= 70 && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= (brief.data.profileRankingOnly?0:70) && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
       : qualifyArticleCandidates(providerRun.candidates,providerRun.sources,brief.data);
     if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={requiredLanguage:'en',publisherPolicy:'established_news_editorial',approvedDomains:[...ARTICLE_NEWS_DOMAINS],minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
     const requestedCount = Number(job.requested_count);
