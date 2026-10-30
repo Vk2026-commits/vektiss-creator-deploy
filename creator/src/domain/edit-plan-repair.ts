@@ -14,6 +14,18 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
  if(plan.sourceRevision!==source.revision||plan.templateId!==template)throw Error('EDIT_SOURCE_CHANGED');
  const starts=plan.beats.map((b,i)=>i===0?0:b.firstWord);
  if(!starts.length||starts.some((s,i)=>s>=source.words.length||i>0&&s<=starts[i-1]))throw Error('EDIT_SPEECH_COVERAGE');
+ // Keep every explicit word anchor and the scene order. Adjust only a shared
+ // boundary when adjacent scenes' anchors leave an unambiguous valid interval.
+ if(template==='popout-explainer'){
+  for(let i=1;i<starts.length;i++){
+   const prior=plan.beats[i-1].graphics?.nodes.flatMap(n=>n.revealWord===undefined?[]:[n.revealWord])??[];
+   const current=plan.beats[i].graphics?.nodes.flatMap(n=>n.revealWord===undefined?[]:[n.revealWord])??[];
+   const lower=Math.max(starts[i-1]+1,...prior.map(w=>w+1));
+   const upper=Math.min(source.words.length-1,...current);
+   if(lower>upper)throw Error('EDIT_REVEAL_WORD');
+   starts[i]=Math.max(lower,Math.min(upper,starts[i]));
+  }
+ }
  const repaired={...plan,beats:plan.beats.map((beat,i)=>{
   const firstWord=starts[i],lastWord=(starts[i+1]??source.words.length)-1;
   const b={...beat,firstWord,lastWord};
