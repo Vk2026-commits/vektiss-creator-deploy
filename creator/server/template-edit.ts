@@ -1,3 +1,6 @@
+import {resolveEditStyle} from '../src/domain/edit-style';
+import {planningProgress} from '../src/domain/edit-planning-progress';
+import type {EditProgress} from '../src/domain/edit-progress';
 import {EDIT_PLANNER_VERSION} from '../src/domain/edit-planner-version.ts';
 import {createReadStream} from 'node:fs';
 import {mkdir,readFile,writeFile,copyFile,rename,unlink,readdir} from 'node:fs/promises';
@@ -18,16 +21,18 @@ import {discoverLogos} from './logo-assets';
 import {logoBrands,logoSuggestionSchema} from '../src/domain/logo-assets';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
-export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional()}).strict();
+export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional(),instructions:z.string().max(2000).optional()}).strict();
 
 // root is supplied by the authenticated hosted router, never by the caller.
-export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string}){
+export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string},onProgress?:(progress:EditProgress)=>void){
+ onProgress?.(planningProgress('source'));
  let phase='profile';
  try{
  const options=templateEditOptions.parse(raw);
  const headers={Authorization:authorization,apikey:c.publicKey};
- const owner=await fetch(`${c.supabaseUrl}/rest/v1/content_profiles?id=eq.${options.profileId}&select=id`,{headers,signal:AbortSignal.timeout(15000)});
- if(!owner.ok||(await owner.json()).length!==1)throw new DraftError('Select one of your Content Profiles before editing.');
+ const owner=await fetch(`${c.supabaseUrl}/rest/v1/content_profiles?id=eq.${options.profileId}&select=id,name,strategy`,{headers,signal:AbortSignal.timeout(15000)});
+ const profiles=owner.ok?await owner.json():[];
+ if(profiles.length!==1)throw new DraftError('Select one of your Content Profiles before editing.');
  const original=options.exportId?resolve(root,'edit/compositions',`${options.exportId}.mp4`):file;
  phase='source';
  if(!options.exportId&&!['video/mp4','video/webm'].includes(type))throw Error('VIDEO_FORMAT');
@@ -48,7 +53,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   const audio=resolve(folder,`${revision}.mp3`);
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',sourceFile,'-vn','-ac','1','-ar','16000','-b:a','32k',audio],{timeout:120000});
   const body=new FormData();body.set('action','story-alignment');body.set('profileId',options.profileId);body.set('file',new Blob([new Uint8Array(await readFile(audio))],{type:'audio/mpeg'}),'speech.mp3');
-  phase='transcription';
+  phase='transcription';onProgress?.(planningProgress('transcription'));
   let response;try{response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});}finally{await unlink(audio).catch(()=>{});}
   if(!response.ok)throw new DraftError('Speech timing could not finish. Your original video is unchanged.');
   transcript=await response.json();
@@ -61,20 +66,22 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
- const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',...(options.brand?[options.brand]:[])])).digest('hex');
+ const resolvedStyle=resolveEditStyle((await readEditBrand(root)).brand,{},options.brand??{});
+ const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
- const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));
- phase='planning';
+ const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));body.set('instructions',options.instructions??'');body.set('style',JSON.stringify(resolvedStyle.brand));
+ phase='planning';onProgress?.(planningProgress('planning'));
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
- phase='plan-validation';
+ phase='plan-validation';onProgress?.(planningProgress('validation'));
  const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16'});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
- const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:options.brand??(await readEditBrand(root)).brand,proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
- phase='saving';
+ const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:resolvedStyle.brand,resolvedStyle,instructions:options.instructions??'',proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
+ phase='saving';onProgress?.(planningProgress('saving'));
  const temp=`${saved}.${randomUUID()}.tmp`;await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
+ onProgress?.({stage:'planning',percent:100,activity:'Your edit plan is ready'});
  return result;
  }catch(error){
   // Never log speech, bearer tokens, media paths, or provider response bodies.
@@ -140,7 +147,8 @@ export async function saveTemplatePlan(root:string,raw:unknown){
  const latest=await readTemplatePlan(root,input.id);
  if((latest.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
  const illustrations=JSON.stringify(input.proposal)===JSON.stringify(previous.proposal)&&JSON.stringify(input.brand??previous.brand)===JSON.stringify(previous.brand)?previous.illustrations:[];
- const result={...previous,illustrations,brand:input.brand??previous.brand??defaultEditBrand,proposal,logos,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
+ const resolvedStyle=input.brand?resolveEditStyle(previous.brand??defaultEditBrand,{},input.brand):previous.resolvedStyle;
+ const result={...previous,illustrations,resolvedStyle,brand:input.brand??previous.brand??defaultEditBrand,proposal,logos,storyboard:editStoryboard(proposal,source),version:input.baseVersion+1,savedAt:new Date().toISOString()};
  const saved=resolve(root,'edit/template-plans',`${input.id}.json`),temp=`${saved}.${randomUUID()}.tmp`;
  await writeFile(temp,JSON.stringify(result),{mode:0o600});await rename(temp,saved);
  return result;

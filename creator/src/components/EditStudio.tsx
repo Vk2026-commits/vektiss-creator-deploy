@@ -1,6 +1,7 @@
 import {illustrationScenes,ILLUSTRATION_OUTPUT_ESTIMATE,type SavedIllustration} from '../domain/edit-illustrations';
 import {loadMediaBlob} from '../lib/load-media-blob';
 import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-version';
+import {planningSteps} from '../domain/edit-planning-progress';
 import {editStageLabels,type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
@@ -12,11 +13,12 @@ import {defaultEditBrand,captionStyles,editBrandSchema,type EditBrand} from '../
 import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 import {LogoReview,type LogoChoice} from './LogoReview';
 
-type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
+type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];instructions?:string;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
 export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:()=>void}){
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
  const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
  const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
+ const [instructions,setInstructions]=useState('');
  const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>('9:16');
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
@@ -31,7 +33,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  async function openSavedEdit(id:string){
   if(pending.current||dirty)return;
   pending.current=true;setBusy(true);setError('');
-  try{const response=await mediaFetch(`/api/local-capture/template-plans/${id}`);if(!response.ok)throw Error('This saved edit could not open. Please try again.');const saved:Plan=await response.json();setPlan(saved);setTemplate(saved.proposal.templateId);setAspectRatio(saved.proposal.aspectRatio??'9:16');setDirty(false);}
+  try{const response=await mediaFetch(`/api/local-capture/template-plans/${id}`);if(!response.ok)throw Error('This saved edit could not open. Please try again.');const saved:Plan=await response.json();setPlan(saved);setInstructions(saved.instructions??'');setTemplate(saved.proposal.templateId);setAspectRatio(saved.proposal.aspectRatio??'9:16');setDirty(false);}
   catch(e){setError(e instanceof Error?e.message:'Saved edit could not open.');}
   finally{pending.current=false;setBusy(false);}
  }
@@ -52,16 +54,16 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/exports').then(async r=>{if(!r.ok)throw Error('Completed videos could not load.');const data=await r.json();if(live)setExports(data);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
  async function generate(){
   if(preview||pending.current||!profileId||(!file&&!exportId))return;
-  pending.current=true;setBusy(true);setError('');setPlan(null);
+  pending.current=true;setBusy(true);setError('');setPlan(null);setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'planning',percent:0,activity:'Preparing your upload'});
   try{
-   const headers:Record<string,string>=file?{'Content-Type':editVideoUploadType(file),'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId}:{'Content-Type':'application/json'};
+   const headers:Record<string,string>=file?{'Content-Type':editVideoUploadType(file),'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId,'X-Edit-Instructions':encodeURIComponent(instructions)}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
-   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio})},`edit:planner${EDIT_PLANNER_VERSION}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}`);
+   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio,instructions})},`edit:planner${EDIT_PLANNER_VERSION}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}:${instructions}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created)setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
    const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
-  finally{pending.current=false;setBusy(false);}
+  finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
  async function save(){
   if(!plan||pending.current)return;
@@ -117,6 +119,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   <fieldset disabled={busy||!brandLoaded}><legend>2. Brand colors & captions</legend>
    <p>Saved for your creator account. New plans use these defaults; existing edits keep their saved look.</p>
    <div className="edit-brand-colors">{([['primary','Brand accent'],['background','Background'],['text','Text']] as const).map(([key,label])=><div key={key}><label>{label}<input type="color" aria-label={label} value={/^#[0-9a-f]{6}$/i.test(brand[key])?brand[key]:brandRecord.brand[key]} onChange={e=>setBrand({...brand,[key]:e.target.value.toUpperCase()})}/></label><label><span className="sr-only">{label} hex code</span><input type="text" aria-label={`${label} hex code`} aria-invalid={!/^#[0-9a-f]{6}$/i.test(brand[key])} aria-describedby="brand-hex-help" placeholder="#671816" value={brand[key]} spellCheck={false} autoComplete="off" onChange={e=>{const value=e.target.value.trim();setBrand({...brand,[key]:/^[0-9a-f]{6}$/i.test(value)?`#${value.toUpperCase()}`:value.toUpperCase()});}}/></label></div>)}</div>
+   <div className="edit-brand-colors"><label>Typography<select value={brand.fontFamily??'Arial'} onChange={e=>setBrand({...brand,fontFamily:e.target.value as EditBrand['fontFamily']})}><option>Arial</option><option>Georgia</option><option>Verdana</option></select></label><label>Pop-out presenter treatment<select value={brand.presenterTreatment??'head-pop'} onChange={e=>setBrand({...brand,presenterTreatment:e.target.value as EditBrand['presenterTreatment']})}><option value="head-pop">Head above the frame</option><option value="cutout">Background removed</option><option value="window">Clean video window</option></select></label><label>Pop-out motion<select value={brand.motionStyle??'balanced'} onChange={e=>setBrand({...brand,motionStyle:e.target.value as EditBrand['motionStyle']})}><option value="calm">Calm</option><option value="balanced">Balanced</option><option value="snappy">Snappy</option></select></label></div>
    <p id="brand-hex-help">Type or paste a six-digit hex code, with or without # (for example, #671816).</p>
    {!brandValid&&<p role="alert">Complete each color with six hexadecimal digits (0–9 or A–F) before saving.</p>}
    <label>Caption style<select value={brand.captionStyle} onChange={e=>setBrand({...brand,captionStyle:e.target.value as EditBrand['captionStyle']})}>{captionStyles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
@@ -132,26 +135,23 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
    <TemplateChooser file={file} aspectRatio={plan?.proposal.aspectRatio??aspectRatio} brand={brandValid?brand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
   </fieldset>
+  <label>Instructions for this video <span>(optional)</span><textarea maxLength={2000} rows={3} disabled={busy} value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="For example: emphasize the comparison, keep the introduction brief, and use a calm pace."/></label><p>Applies to this edit only. Your saved creator preferences stay unchanged.</p>
   <p>Generating a plan sends speech to the AI provider for transcription and planning and may incur a processing charge. It does not render a video or generate an avatar.</p>
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
-  <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{busy?'Working…':'Generate edit plan'}</button>
+  <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{renderProgress?.stage==='planning'?'Building your edit plan…':'Generate edit plan'}</button>
+  {renderProgress?.stage==='planning'&&<div className="edit-planning-panel" role="status" aria-live="polite"><div className="edit-plan-heading"><div><span className="eyebrow">YOUR EDIT IS TAKING SHAPE</span><h2>{renderProgress.activity??'Building your edit plan'}</h2></div><strong className="edit-progress-number">{renderProgress.percent??0}%</strong></div><progress aria-label="Planning checkpoints completed" max={100} value={renderProgress.percent??0}/><ol className="edit-plan-steps">{planningSteps.map((step,i)=><li key={step.id} className={(renderProgress.percent??0)>i*20?'is-done':(renderProgress.percent??0)===i*20?'is-active':''}>{step.label}</li>)}</ol><p>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')} · Percentage shows completed steps, not time remaining. Speech analysis and scene design can take longer than other steps.</p></div>}
   {error&&<p role="alert">{error}</p>}
-  {plan&&<section aria-label="Saved edit plan"><p role="status">{dirty?'Unsaved changes':`Edit plan saved${plan.savedAt?' at '+new Date(plan.savedAt).toLocaleString():''}`} · {editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}. Ready to preview or export.</p>
-   <p>This edit: {captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p>
-   <p>Your template controls the layout, graphics, and motion. The edit uses your speech to choose what appears and when.</p>
-   {illustrationScenes(plan.proposal).length>0&&<div className="edit-ai-illustrations">
-    <h3>Custom AI illustrations · optional</h3>
-    <p>The template chooses up to {illustrationScenes(plan.proposal).length} scenes and creates matching artwork. Your original presenter and speech stay unchanged.</p>
-    {plan.illustrations?.length?<p>{plan.illustrations.length} illustrations saved. Exports reuse these images without generating them again.</p>:<p>Estimated image output cost: ${(illustrationScenes(plan.proposal).length*ILLUSTRATION_OUTPUT_ESTIMATE).toFixed(3)} USD, plus prompt tokens. OpenAI reference estimate; actual charges may differ. This is separate from HeyGen.</p>}
-    {!plan.illustrations?.length&&<button className="button" disabled={busy||dirty||!profileId} onClick={()=>void createIllustrations()}>{busy?'Working…':'Create AI illustrations · paid'}</button>}
-    <p>You can also export immediately using the template’s existing graphics.</p>
-   </div>}
+  {plan&&<section className="edit-ready-panel" aria-label="Saved edit plan">
+   <div className="edit-plan-heading"><div><span className="eyebrow">{dirty?'CHANGES TO SAVE':'PLAN READY'}</span><h2>{editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}</h2><p>Your scenes are planned. Preview the edit, then export your video.</p></div><span className="edit-plan-badge">{plan.storyboard.length} scenes · {plan.proposal.aspectRatio??'9:16'}</span></div>
+   <div className="edit-scene-summary" aria-label="Planned story">{plan.storyboard.map((scene,i)=><article key={i}><span>{String(i+1).padStart(2,'0')} · {Math.floor(scene.start)}–{Math.ceil(scene.end)}s</span><h3>{scene.headline}</h3><p>{scene.visual==='presenter'?'Presenter focus':scene.scene??'Animated explanation'}</p></article>)}</div>
+   <details className="edit-plan-details"><summary>Brand and saved plan details</summary><p>{captionStyles.find(s=>s.id===(plan.brand??defaultEditBrand).captionStyle)?.name} · Accent {(plan.brand??defaultEditBrand).primary} · Background {(plan.brand??defaultEditBrand).background} · Text {(plan.brand??defaultEditBrand).text}</p><p>Saved {plan.savedAt?new Date(plan.savedAt).toLocaleString():''}. Your original speech is preserved.</p></details>
+   {illustrationScenes(plan.proposal).length>0&&<details className="edit-plan-details"><summary>Optional custom artwork</summary><p>Animated template graphics are included. You can optionally generate {illustrationScenes(plan.proposal).length} additional illustrations.</p>{plan.illustrations?.length?<p>{plan.illustrations.length} illustrations saved and reused on export.</p>:<><p>Estimated image cost: ${(illustrationScenes(plan.proposal).length*ILLUSTRATION_OUTPUT_ESTIMATE).toFixed(3)} USD, plus prompt tokens. Actual charges may differ.</p><button className="button secondary" disabled={busy||dirty||!profileId} onClick={()=>void createIllustrations()}>Generate artwork · paid</button></>}</details>}
    {plan.proposal.templateId==='clean-tech'&&<LogoReview logos={plan.logos??[]} busy={busy} onChange={logos=>{setPlan({...plan,logos});setDirty(true);setRendered(null);}}/>}
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
    {dirty&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save asset choices'}</button><p>Save your asset choices before exporting.</p></>}
-   {renderProgress&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='illustrating'?'Progress counts completed images. Each image can take a minute or more.':renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
-   <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video · optional</button>
+   {renderProgress&&renderProgress.stage!=='planning'&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='illustrating'?'Progress counts completed images. Each image can take a minute or more.':renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
+   <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview my edit</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>
    {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Full-video draft preview · reduced resolution':`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='final'&&<a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a>}</>}

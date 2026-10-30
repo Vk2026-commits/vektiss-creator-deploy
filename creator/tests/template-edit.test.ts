@@ -38,3 +38,26 @@ it('saves a validated scene edit without paid calls and rejects stale or speech-
   expect(request).not.toHaveBeenCalled();
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+it('persists planning progress and reuses a completed plan without another provider call',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'planning-progress-'));
+ try{
+  const {createHash}=await import('node:crypto');
+  const bytes=Buffer.from('cached recording'),revision=createHash('sha256').update(bytes).digest('hex');
+  const folder=join(root,'edit/template-plans');await mkdir(folder,{recursive:true});
+  const file=join(root,'recording.mp4');await writeFile(file,bytes);
+  await writeFile(join(folder,revision+'.source.json'),JSON.stringify({assetId:profileId,revision,kind:'upload',duration:2,words:[{start:0,end:1,text:'Value'}]}));
+  const proposal={version:1,templateId:'premium-explainer',sourceRevision:revision,beats:[{firstWord:0,lastWord:0,layout:'presenter',visual:'diagram',headline:'Value',purpose:'Explain value',illustration:'Problem to solution',motion:'Reveal'}]};
+  const request=vi.fn(async(url: string)=>new Response(JSON.stringify(url.includes('/rest/')?[{id:profileId,name:'Creator',strategy:{}}]:{proposal})));
+  vi.stubGlobal('fetch',request);
+  const progress:any[]=[];
+  const args=[root,file,'video/mp4',{profileId,template:'premium-explainer',instructions:'Use a calm pace'},'Bearer test',{supabaseUrl:'https://example.invalid',publicKey:'public'}] as const;
+  const result=await templateEdit(...args,p=>progress.push(p));
+  expect(progress.map(p=>p.percent)).toEqual([0,40,60,80,100]);
+  expect(result.instructions).toBe('Use a calm pace');
+  expect(result.resolvedStyle.brand).toEqual(result.brand);
+  const cached=await templateEdit(...args);
+  expect(cached.id).toBe(result.id);
+  expect(request.mock.calls.filter(([url])=>url.includes('/functions/'))).toHaveLength(1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

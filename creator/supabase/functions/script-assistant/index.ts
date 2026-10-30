@@ -1,3 +1,4 @@
+import {editBrandSchema} from '../../../src/domain/edit-brand.ts';
 import {ILLUSTRATION_MODEL} from '../../../src/domain/edit-illustrations.ts';
 import {EDIT_PLANNER_VERSION} from '../../../src/domain/edit-planner-version.ts';
 import {discoveryReportSchema} from '../../../src/domain/discovery-pilot.ts';
@@ -117,7 +118,9 @@ Deno.serve(async request=>{
    progress('edit-planning');
    const source=editSourceSchema.parse(JSON.parse(String(form.get('source'))));
    const template=String(form.get('template'));
-   const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([source,template,EDIT_PLANNER_VERSION]))))).map(x=>x.toString(16).padStart(2,'0')).join('');
+   const instructions=z.string().max(2000).parse(form.get('instructions')??'');
+   const editStyle=form.get('style')?editBrandSchema.parse(JSON.parse(String(form.get('style')))):undefined;
+   const fingerprint=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([source,template,EDIT_PLANNER_VERSION,profile,instructions,editStyle]))))).map(x=>x.toString(16).padStart(2,'0')).join('');
    // Look up only this owner's exact source/profile/style. Never repeat a paid call
    // when a previously captured candidate can be repaired locally.
    const previous=await db.from('creator_ai_generations').select('id,result').eq('user_id',auth.user.id).eq('profile_id',profileId).contains('result',{feature:'edit-plan-candidate',fingerprint}).order('created_at',{ascending:false}).limit(1).maybeSingle();
@@ -135,6 +138,8 @@ Deno.serve(async request=>{
     }
    }
    const messages=editPlannerMessages(source,template);
+   messages.splice(messages.length-1,0,{role:'system',content:'CREATOR CONTEXT (style guidance, not evidence): '+JSON.stringify(profile)+'\nUse this creator’s audience, tone and preferences to guide the edit. The recording is the authority for facts, claims and CTA. Do not add a profile offer or keyword absent from the recording. Never copy another creator’s identity or the sample video’s scene sequence.'});
+   messages.splice(messages.length-1,0,{role:'system',content:'CURRENT VIDEO OVERRIDES: '+JSON.stringify({instructions,style:editStyle})+'\nThese override creator style preferences, but cannot authorize unsupported facts, invented narration, altered faces, or executable graphics. Preserve the recorded speech. Use only renderer-supported scene types.'});
    const response=await trackedFetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model:writingModel,store:false,max_tokens:12000,response_format:editResponseFormat(source,template),messages})});
    if(!response.ok)throw Error('PROVIDER');
    const data=await response.json();if(data.choices?.[0]?.finish_reason!=='stop')throw Error('PROVIDER');

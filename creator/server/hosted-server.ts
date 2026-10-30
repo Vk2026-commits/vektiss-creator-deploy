@@ -217,7 +217,7 @@ export function hostedHandler(c:HostingConfig){
       else if(path.endsWith('/creative-import'))job.result=await importCreativeVideo(root,input,authorization,c);
       else if(path.endsWith('/template-illustrations'))job.result=await generateTemplateIllustrations(root,input,authorization,c,undefined,reportProgress);
       else if(path.endsWith('/template-plan-save'))job.result=await saveTemplatePlan(root,input);
-      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],aspectRatio:req.headers['x-edit-aspect-ratio'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c);
+      else if(path.endsWith('/template-edit'))job.result=await templateEdit(root,savedInput,type,input??{instructions:req.headers['x-edit-instructions']?decodeURIComponent(String(req.headers['x-edit-instructions'])):undefined,template:req.headers['x-edit-template'],profileId:req.headers['x-profile-id'],aspectRatio:req.headers['x-edit-aspect-ratio'],brand:req.headers['x-edit-brand']?JSON.parse(String(req.headers['x-edit-brand'])):undefined},authorization,c,reportProgress);
       else if(path.endsWith('/discovery-review'))job.result=await reviewDiscovery(root,input,authorization,c);
       else if(resolving)job.result=await resolveSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);
       else if(graphic)job.result=await graphicSource(root,savedInput,type,input,req.headers['x-profile-id'],authorization,context);

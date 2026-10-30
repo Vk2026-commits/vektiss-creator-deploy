@@ -27,7 +27,7 @@ export function RichEditComposition({source,proposal,brand,frame,media}:{source:
  const caption=activeWord<0?[]:source.words.slice(Math.floor(activeWord/4)*4,Math.floor(activeWord/4)*4+4);
  const graphicTop=wide?85:full?300:125;
  const framedMedia=isValidElement<{style?:CSSProperties}>(media)?cloneElement(media,{style:{...media.props.style,objectFit:proposal.templateId==='walkthrough'?'contain':'cover',objectPosition:'center'}}):media;
- return <div data-renderer="2" data-scene={scene} style={{position:'absolute',inset:0,background:paper,color:ink,fontFamily:'Arial, sans-serif',overflow:'hidden'}}>
+ return <div data-renderer="2" data-scene={scene} style={{position:'absolute',inset:0,background:paper,color:ink,fontFamily:`${brand.fontFamily??'Arial'}, sans-serif`,overflow:'hidden'}}>
   <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 90% 0%, ${accent}20, transparent 65%)`}}/>
   {!full&&<div style={{position:'absolute',...(presenter?{inset:0}:wide?{left:1040,right:55,top:90,bottom:140}:{left:38,right:38,top:1060,bottom:60}),overflow:'hidden',borderRadius:presenter?0:36,background:ink}}>{framedMedia}</div>}
   {!presenter&&<section style={{position:'absolute',top:graphicTop,left:wide?(full?492:60):72,width:936,opacity:entrance,transformOrigin:'top left',transform:`translateY(${(1-entrance)*18}px) scale(${wide&&!full?.94:1})`}}>

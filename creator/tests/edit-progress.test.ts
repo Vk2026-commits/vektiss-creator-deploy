@@ -10,3 +10,10 @@ it('ignores unrelated renderer output and unknown stages',()=>{
  expect(parseEditProgress('{"stage":"secret","percent":50}')).toBeNull();
  expect(parseEditProgress('{"stage":"rendering","percent":"50"}')).toEqual({stage:'rendering'});
 });
+
+import {planningSteps,planningProgress} from '../src/domain/edit-planning-progress';
+it('reports completed planning checkpoints without simulating a time estimate',()=>{
+ expect(planningSteps.map(s=>planningProgress(s.id).percent)).toEqual([0,20,40,60,80]);
+ expect(planningProgress('planning').activity).toBe('Designing the scenes');
+ expect(parseEditProgress('{"stage":"planning","percent":40}')).toEqual({stage:'planning',percent:40});
+});
