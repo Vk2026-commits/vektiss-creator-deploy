@@ -40,3 +40,15 @@ it('writes a render fixture when requested without making a provider call',async
  const html=popoutExplainerProject(templateSampleSource,proposal,defaultEditBrand,false,[{beatIndex:0,dataUri:`data:image/png;base64,${image.toString('base64')}`}]);
  await writeFile(join(folder,'index.html'),html);
 });
+
+it('creates separately keyed objects while preserving speech anchors and labels',async()=>{
+ const {root,proposal}=await setup();try{
+  const result=await generateTemplateIllustrations(root,request,'',{supabaseUrl:'',publicKey:''},async()=>png);
+  expect(result.illustrations.every((a:any)=>Number.isInteger(a.nodeIndex))).toBe(true);
+  const images=await renderIllustrations(root,result);
+  const html=popoutExplainerProject(templateSampleSource,proposal,defaultEditBrand,false,images);
+  expect(html).toContain('data-ed-reveal=');
+  for(const image of images)expect(html).toContain(proposal.beats[image.beatIndex].graphics!.nodes[image.nodeIndex!].label);
+  expect(result.proposal).toEqual(proposal);
+ }finally{await rm(root,{recursive:true});}
+});

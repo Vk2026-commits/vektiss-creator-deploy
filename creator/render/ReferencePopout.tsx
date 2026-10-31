@@ -11,8 +11,8 @@ import {popoutDisplayPlan,popoutTitle} from '../src/domain/popout-display';
 import {popoutPresenterMotion} from '../src/domain/popout-motion';
 const ease=Easing.bezier(.65,0,.2,1);
 export const referenceProgress=(frame:number,start:number,duration=8)=>interpolate(frame,[start,start+duration],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp',easing:ease});
-function Graphic({source,beat,time,brand,image,full=false}:{source:EditSource;beat:ReturnType<typeof editStoryboard>[number];time:number;brand:EditBrand;image?:string;full?:boolean}){
- const root=useRef<HTMLDivElement>(null),markup=useMemo(()=>editorialScene(source,beat),[source,beat]);
+function Graphic({source,beat,time,brand,image,artwork,full=false}:{source:EditSource;beat:ReturnType<typeof editStoryboard>[number];time:number;brand:EditBrand;image?:string;artwork?:Record<string,string>;full?:boolean}){
+ const root=useRef<HTMLDivElement>(null),markup=useMemo(()=>editorialScene(source,beat,artwork),[source,beat,artwork]);
  useLayoutEffect(()=>{if(root.current)seekEditorialScene(root.current,time);},[time,markup]);
  const title=popoutTitle(beat),titleRef=useRef<HTMLDivElement>(null);
  useLayoutEffect(()=>{const el=titleRef.current;if(!el)return;let size=76;el.style.fontSize=size+'px';while((el.scrollHeight>el.clientHeight||el.scrollWidth>el.clientWidth)&&size>32){size--;el.style.fontSize=size+'px';}},[title.headline,brand.fontFamily]);
@@ -42,7 +42,7 @@ export function ReferencePopout({sourceUrl,presenterUrl,source,proposal,brand,il
  <div style={{position:'absolute',inset:'48% 0 0',background:'linear-gradient(transparent,#08101eaa)'}}/>
  </div>
  <div data-popout-region="graphics" style={{position:'absolute',left:0,right:0,...(fullGraphic?{top:0,height:1700}:layout.graphics),opacity:presenterOnly?0:1,overflow:'hidden'}}>
- {<Graphic key={index} source={source} beat={beat} time={t} brand={brand} full={fullGraphic} image={illustrations.find(a=>a.beatIndex===index)?.dataUri}/>}
+ {<Graphic key={index} source={source} beat={beat} time={t} brand={brand} full={fullGraphic} artwork={Object.fromEntries(illustrations.filter(a=>a.nodeIndex!==undefined&&proposal.beats[a.beatIndex]?.lastWord===beat.lastWord).map(a=>[proposal.beats[a.beatIndex].graphics!.nodes[a.nodeIndex!].label,a.dataUri]))} image={illustrations.find(a=>a.nodeIndex===undefined&&proposal.beats[a.beatIndex]?.lastWord===beat.lastWord)?.dataUri}/>}
 
  </div>
  {caption&&brand.captionStyle!=='none'&&<div data-popout-region="captions" style={{position:'absolute',...(presenterOnly||fullGraphic?{left:65,top:1660,width:950,height:145}:layout.captions),display:'block',paddingTop:20,boxSizing:'border-box',overflow:'hidden',background:'transparent',textAlign:'center',fontSize:50,fontWeight:brand.captionStyle==='clean'?500:800,letterSpacing:-2,lineHeight:1.13,color:brand.text,zIndex:20}}>{source.words.filter(w=>w.start>=caption.start&&w.start<caption.end).map((word,i)=><React.Fragment key={i}><span style={{color:brand.captionStyle==='highlight'&&t>=word.start&&t<word.end?brand.primary:undefined}}>{brand.captionStyle==='bold'?word.text.toUpperCase():word.text}</span>{' '}</React.Fragment>)}</div>}

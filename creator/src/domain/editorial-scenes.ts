@@ -52,8 +52,12 @@ export function editorialProcessRoute(a:ReturnType<typeof editorialProcessLayout
 
 /** Trusted vector compositions, not model-generated HTML. All displayed language
  * comes from approved labels. Motion is a function of time, including backwards seeks. */
-export function editorialScene(source:EditSource,beat:EditorialBeat):string{
+export function editorialScene(source:EditSource,beat:EditorialBeat,artwork:Record<string,string>={}):string{
  const nodes=beat.graphics?.nodes??[];
+ const drawAsset=(text:string,x:number,y:number,size:number,asset?:Parameters<typeof editorialAsset>[4])=>{
+  const image=artwork[text];
+  return image&&/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(image)?`<image aria-label="AI-generated conceptual illustration" href="${image}" x="${x}" y="${y}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"/>`:editorialAsset(text,x,y,size,asset);
+ };
  const kind=beat.scene??(beat.visual==='steps'?'process':beat.visual==='comparison'?'comparison':beat.visual==='typography'?'spotlight':'document');
  const at=(i:number)=>nodes[i]?.revealWord===undefined?Math.min(beat.end-.001,beat.start+.15+i*.45):source.words[nodes[i].revealWord!].start;
  const until=(i:number)=>Math.min(beat.end,...nodes.map((_,j)=>at(j)).filter(t=>t>at(i)));
@@ -68,32 +72,32 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   body=reveal(firstContent,panel(34,55,832,530)+`<rect class="ed-search-field" x="70" y="91" width="760" height="98" rx="14"/><circle class="ed-accent-stroke" cx="111" cy="135" r="13"/><path class="ed-accent-stroke" d="m121 145 12 12"/>`);
   if(nodes[0])body+=reveal(at(0),`${attention(at(0)-.4,results.length?at(1):beat.end,'<rect class="ed-selection" x="70" y="91" width="760" height="98" rx="14"/>')}<text x="155" y="150" class="ed-label ed-query"><tspan data-ed-type="${at(0)}" data-ed-text="${esc(nodes[0].label)}">${esc(nodes[0].label)}</tspan><tspan class="ed-caret" data-ed-caret="${at(0)}">|</tspan></text>`);
   body+=results.map((n,i)=>{
-   const idx=i+1,y=216+i*rowH,icon=editorialAsset(n.label,18,18,44,n.asset),height=rowH-18;
+   const idx=i+1,y=216+i*rowH,icon=drawAsset(n.label,18,18,44,n.asset),height=rowH-18;
    const expand=i===results.length-1?` data-ed-expand="${at(idx)+.1}" data-ed-height="${height}" data-ed-growth="${Math.min(48,578-y-height)}"`:"";
    const content=`<rect class="ed-row" width="760" height="${height}" rx="12"${expand}/>${attention(at(idx),until(idx),`<rect class="ed-selection" width="760" height="${height}" rx="12"${expand}/>`)}${icon||`<circle class="ed-dot" cx="39" cy="${height/2}" r="5"/>`}${label(n.label,82,9,592,height-18,results.length>3?27:34)}<g data-ed-result="${at(idx)}" data-ed-until="${until(idx)}"><path class="ed-accent-stroke" d="M705 ${height/2}h22m-9 -9 9 9-9 9"/><path class="ed-result-rule" d="M82 ${height-8}H665" pathLength="1" data-ed-draw="${at(idx)+.18}"/>${i===results.length-1?`<g data-ed-reveal="${at(idx)+.3}" data-ed-y="${height+14}" data-ed-x="82"><path class="ed-muted-line" d="M0 0H490"/><path class="ed-accent-stroke" d="M0 0H490" pathLength="1" data-ed-draw="${at(idx)+.45}"/><circle class="ed-dot" cx="490" cy="0" r="4"/></g>`:""}</g>`;
    return reveal(at(idx),focus(at(idx),until(idx),380,height/2,content),70,y)+cursor(at(idx),until(idx),775,y+height/2,775,i?216+(i-1)*rowH+height/2:140);
   }).join('');
- }else if(kind==='document'&&nodes.length>0&&nodes.length<=3&&nodes.every(n=>n.asset)){
+ }else if(kind==='document'&&nodes.length>0&&nodes.length<=3&&nodes.every(n=>n.asset||artwork[n.label])){
   // Independent examples accumulate as large objects, with no invented connections.
   const width=780/nodes.length;
   body=reveal(firstContent,panel(24,60,852,320));
   body+=nodes.map((n,i)=>{
    const x=60+i*width,size=Math.min(150,width-40),center=width/2;
-   return reveal(at(i),`<g data-ed-object="${at(i)}" data-ed-x="${center}" data-ed-y="165">${editorialAsset(n.label,center-size/2,165-size/2,size,n.asset)}</g>${label(n.label,12,260,width-24,90,34,'ed-center')}`,x,0);
+   return reveal(at(i),`<g data-ed-object="${at(i)}" data-ed-x="${center}" data-ed-y="165">${drawAsset(n.label,center-size/2,165-size/2,size,n.asset)}</g>${label(n.label,12,260,width-24,90,34,'ed-center')}`,x,0);
   }).join('');
  }else if(kind==='document'){
   // A single coherent document, with one ruled row per spoken item. The
   // check stroke draws after the row lands instead of popping a static icon.
   const h=Math.min(104,448/Math.max(1,nodes.length)),panelHeight=80+nodes.length*h,panelY=(640-panelHeight)/2,top=panelY+60;
   body=reveal(firstContent,panel(34,panelY,832,panelHeight)+`<path class="ed-muted-line" d="M66 ${panelY+47}H834"/><circle class="ed-accent-stroke" cx="79" cy="${panelY+24}" r="8"/><path class="ed-accent-stroke" d="m85 ${panelY+30} 8 8"/><path class="ed-muted-line" d="M117 ${panelY+24}H335"/>`);
-  body+=nodes.map((n,i)=>reveal(at(i),`<rect class="ed-row" x="0" y="0" width="764" height="${h-12}" rx="10"/>${attention(at(i),until(i),`<rect class="ed-selection" width="764" height="${h-12}" rx="10"/>`)}${editorialAsset(n.label,17,h/2-24,40,n.asset)||`<rect class="ed-check-box" x="18" y="${h/2-20}" width="30" height="30" rx="6"/><path class="ed-check" d="M24 ${h/2-5}l7 7 14 -17" pathLength="1" data-ed-draw="${at(i)}"/>`}${label(n.label,72,5,650,h-20,nodes.length>4?24:34)}`,68,top+i*h)+cursor(at(i),until(i),785,top+i*h+h/2)).join('');
+  body+=nodes.map((n,i)=>reveal(at(i),`<rect class="ed-row" x="0" y="0" width="764" height="${h-12}" rx="10"/>${attention(at(i),until(i),`<rect class="ed-selection" width="764" height="${h-12}" rx="10"/>`)}${drawAsset(n.label,17,h/2-24,40,n.asset)||`<rect class="ed-check-box" x="18" y="${h/2-20}" width="30" height="30" rx="6"/><path class="ed-check" d="M24 ${h/2-5}l7 7 14 -17" pathLength="1" data-ed-draw="${at(i)}"/>`}${label(n.label,72,5,650,h-20,nodes.length>4?24:34)}`,68,top+i*h)+cursor(at(i),until(i),785,top+i*h+h/2)).join('');
  }else if(kind==='timeline'){
   const cols=Math.min(3,Math.max(1,nodes.length)),rows=Math.ceil(nodes.length/cols),w=770/cols;
   body=reveal(firstContent,panel(34,65,832,510));
   body+=nodes.map((n,i)=>{
    const x=65+(i%cols)*w,y=rows===1?215:155+Math.floor(i/cols)*210;
    const segment=i%cols<cols-1&&i<nodes.length-1?line(`M${x+w/2} ${y}H${x+w*1.5}`,at(i+1)):'';
-   return segment+reveal(at(i),`<circle class="ed-step-ring" cx="${w/2}" cy="0" r="28"/>${editorialAsset(n.label,w/2-18,-18,36,n.asset)||index(i,w/2-13,7)}${label(n.label,10,47,w-20,104,Math.min(n.label.length>24?26:34,w/7),'ed-center')}`,x,y);
+   return segment+reveal(at(i),`<circle class="ed-step-ring" cx="${w/2}" cy="0" r="28"/>${drawAsset(n.label,w/2-18,-18,36,n.asset)||index(i,w/2-13,7)}${label(n.label,10,47,w-20,104,Math.min(n.label.length>24?26:34,w/7),'ed-center')}`,x,y);
   }).join('');
  }else if(kind==='process'){
   // Spacious storyboard frames expose the source's distinct objects, then join
@@ -106,7 +110,7 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   }).join('');
   body+=nodes.map((n,i)=>{
    const {x,y,width:w,height:h}=positions[i],iconSize=rows===1?130:62,iconY=rows===1?53:51;
-   const icon=editorialAsset(n.label,(w-iconSize)/2,iconY,iconSize,n.asset),labelHeight=icon?(rows===1?108:84):h-70;
+   const icon=drawAsset(n.label,(w-iconSize)/2,iconY,iconSize,n.asset),labelHeight=icon?(rows===1?108:84):h-70;
    let font=36;while(font>22&&Math.ceil(n.label.length/Math.max(1,Math.floor((w-32)/(font*.58))))*font*1.13>labelHeight)font--;
    return reveal(at(i),focus(at(i),until(i),w/2,h/2,`${rows===1?'':`<rect class="ed-frame" width="${w}" height="${h}" rx="16"/>`}${attention(at(i),until(i),`<rect class="ed-selection" width="${w}" height="${h}" rx="16"/>`)}${rows===1?'':`<path class="ed-frame-rule" d="M18 44H${w-18}"/>`}${rows===1?'':index(i,20,30)}<g data-ed-object="${at(i)}" data-ed-x="${w/2}" data-ed-y="${iconY+iconSize/2}">${icon}</g>${label(n.label,16,icon?(rows===1?180:122):57,w-32,icon?(rows===1?108:84):h-70,font,'ed-center')}`),x,y);
   }).join('');
@@ -115,8 +119,8 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   // chart. Explicit links are respected; no arbitrary pulse implies causation.
   const hub={x:230,y:320},others=nodes.slice(1),gap=460/Math.max(1,others.length),pos=[hub,...others.map((_,i)=>({x:628,y:90+gap*(i+.5)}))];
   body+=(beat.graphics?.links??[]).filter(l=>l.from!==l.to&&pos[l.from]&&pos[l.to]).map(l=>{const a=pos[l.from],b=pos[l.to];return connection(a,{x:(a.x+b.x)/2,y:a.y},{x:(a.x+b.x)/2,y:b.y},b,Math.max(at(l.from),at(l.to)),beat.end);}).join('');
-  if(nodes[0])body+=reveal(at(0),focus(at(0),until(0),0,0,`<circle class="ed-orbit" r="170"/>${attention(at(0),until(0),'<circle class="ed-focus-ring" r="151"/>')}<circle class="ed-hub" r="145"/><circle class="ed-orbit-inner" r="126"/>${editorialAsset(nodes[0].label,-25,-100,50,nodes[0].asset)}${label(nodes[0].label,-112,-45,224,110,nodes[0].label.length>24?28:35,'ed-center')}`),hub.x,hub.y);
-  body+=others.map((n,i)=>reveal(at(i+1),focus(at(i+1),until(i+1),0,0,`<rect class="ed-satellite" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>${attention(at(i+1),until(i+1),`<rect class="ed-selection" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>`)}${editorialAsset(n.label,-140,-16,32,n.asset)}${label(n.label,editorialAsset(n.label,0,0,1,n.asset)?-95:-140,-Math.min(40,gap/2-12),editorialAsset(n.label,0,0,1,n.asset)?235:280,Math.min(80,gap-24),n.label.length>30?22:others.length>3?26:32)}`),pos[i+1].x,pos[i+1].y)).join('');
+  if(nodes[0])body+=reveal(at(0),focus(at(0),until(0),0,0,`<circle class="ed-orbit" r="170"/>${attention(at(0),until(0),'<circle class="ed-focus-ring" r="151"/>')}<circle class="ed-hub" r="145"/><circle class="ed-orbit-inner" r="126"/>${drawAsset(nodes[0].label,-25,-100,50,nodes[0].asset)}${label(nodes[0].label,-112,-45,224,110,nodes[0].label.length>24?28:35,'ed-center')}`),hub.x,hub.y);
+  body+=others.map((n,i)=>reveal(at(i+1),focus(at(i+1),until(i+1),0,0,`<rect class="ed-satellite" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>${attention(at(i+1),until(i+1),`<rect class="ed-selection" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>`)}${drawAsset(n.label,-140,-16,32,n.asset)}${label(n.label,drawAsset(n.label,0,0,1,n.asset)?-95:-140,-Math.min(40,gap/2-12),drawAsset(n.label,0,0,1,n.asset)?235:280,Math.min(80,gap-24),n.label.length>30?22:others.length>3?26:32)}`),pos[i+1].x,pos[i+1].y)).join('');
  }else if(kind==='statistic'){
   // Give each supported figure equal, readable prominence. Context must not
   // occupy the hero slot while a later figure is still waiting for its anchor.
@@ -129,7 +133,10 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   }else body=nodes.map((n,i)=>reveal(at(i),panel(44,60+i*150,812,150)+label(n.label,84,90+i*150,732,100,56,'ed-stat'))).join('');
  }else if(kind==='comparison'){
   const cols=nodes.length===1?1:2,rows=Math.ceil(nodes.length/cols),w=790/cols,h=Math.min(238,490/Math.max(1,rows));
-  body=nodes.map((n,i)=>reveal(at(i),panel(0,0,w-20,h-20)+`${index(i,26,44)}${editorialAsset(n.label,w-84,20,36,n.asset)}<path class="ed-accent-stroke" d="M26 65H${w-46}"/>${label(n.label,26,82,w-72,h-120,rows>2?24:n.label.length>30?30:36)}`,55+(i%cols)*w,70+Math.floor(i/cols)*h)).join('');
+  body=nodes.map((n,i)=>reveal(at(i),panel(0,0,w-20,h-20)+`${index(i,26,44)}${drawAsset(n.label,w-84,20,36,n.asset)}<path class="ed-accent-stroke" d="M26 65H${w-46}"/>${label(n.label,26,82,w-72,h-120,rows>2?24:n.label.length>30?30:36)}`,55+(i%cols)*w,70+Math.floor(i/cols)*h)).join('');
+ }else if(kind==='spotlight'&&nodes.some(n=>artwork[n.label])){
+  const width=820/Math.max(1,nodes.length);
+  body=nodes.map((n,i)=>reveal(at(i),drawAsset(n.label,30+i*width+(width-260)/2,65,260,n.asset)+label(n.label,30+i*width,360,width-20,140,38,'ed-center'))).join('');
  }else{
   // Editorial statement on open paper; no card chrome. A short secondary phrase
   // gets the serif treatment from the reference, preserving the actual words.

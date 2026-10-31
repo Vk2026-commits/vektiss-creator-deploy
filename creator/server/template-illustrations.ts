@@ -18,8 +18,8 @@ export async function generateTemplateIllustrations(root:string,raw:unknown,auth
  const scenes=illustrationScenes(proposal);if(!scenes.length)throw new DraftError('This template does not need generated illustrations. You can export it with its existing graphics.');
  const folder=resolve(root,'edit/illustrations');await mkdir(folder,{recursive:true,mode:0o700});
  const images:SavedIllustration[]=[];onProgress?.({stage:'illustrating',percent:0});
- for(const {beat,beatIndex} of scenes){
-  const prompt=illustrationPrompt(beat,brand),assetId=assetKey(prompt),file=resolve(folder,`${assetId}.png`),receipt=resolve(folder,`${assetId}.pending`);
+ for(const {beat,beatIndex,nodeIndex} of scenes){
+  const prompt=illustrationPrompt(beat,brand,nodeIndex),assetId=assetKey(prompt),file=resolve(folder,`${assetId}.png`),receipt=resolve(folder,`${assetId}.pending`);
   let cached:Buffer|null=null;try{cached=await readFile(file);}catch{}
   if(!cached||!validPng(cached)){
    try{await writeFile(receipt,new Date().toISOString(),{flag:'wx',mode:0o600});}catch{throw new DraftError('An illustration request is already running or its outcome is uncertain. No duplicate paid request was sent. You can still export with the existing graphics.');}
@@ -36,7 +36,7 @@ export async function generateTemplateIllustrations(root:string,raw:unknown,auth
     const temp=`${file}.${randomUUID()}.tmp`;await writeFile(temp,bytes,{mode:0o600});await rename(temp,file);await unlink(receipt).catch(()=>{});
    }catch(e){throw e instanceof DraftError?e:new DraftError('Illustration generation was interrupted. Saved images will be reused; uncertain requests will not be charged again automatically.');}
   }
-  images.push({beatIndex,assetId});onProgress?.({stage:'illustrating',percent:Math.floor(images.length/scenes.length*100)});
+  images.push({beatIndex,nodeIndex,assetId});onProgress?.({stage:'illustrating',percent:Math.floor(images.length/scenes.length*100)});
  }
  const latest=await readTemplatePlan(root,input.id);
  if(latest.version!==input.version)throw new DraftError('The edit changed while creating illustrations. Images are saved for reuse; reopen the current edit.');
@@ -46,11 +46,17 @@ export async function generateTemplateIllustrations(root:string,raw:unknown,auth
 }
 export async function renderIllustrations(root:string,plan:any):Promise<RenderIllustration[]>{
  const proposal=editProposalSchema.parse(plan.proposal),brand=editBrandSchema.parse(plan.brand??defaultEditBrand),result:RenderIllustration[]=[];
- for(const {beat,beatIndex} of illustrationScenes(proposal)){
-  const assetId=assetKey(illustrationPrompt(beat,brand));
-  if(!plan.illustrations?.some((a:SavedIllustration)=>a.beatIndex===beatIndex&&a.assetId===assetId))continue;
+ for(const {beat,beatIndex,nodeIndex} of illustrationScenes(proposal)){
+  const assetId=assetKey(illustrationPrompt(beat,brand,nodeIndex));
+  if(!plan.illustrations?.some((a:SavedIllustration)=>a.beatIndex===beatIndex&&a.nodeIndex===nodeIndex&&a.assetId===assetId))continue;
   const bytes=await readFile(resolve(root,'edit/illustrations',`${assetId}.png`));if(!validPng(bytes))throw new DraftError('A saved illustration could not be read. Your original recording is safe.');
-  result.push({beatIndex,dataUri:`data:image/png;base64,${bytes.toString('base64')}`});
+  result.push({beatIndex,nodeIndex,dataUri:`data:image/png;base64,${bytes.toString('base64')}`});
+ }
+ // Keep previously generated scene-level artwork usable after this upgrade.
+ for(const saved of (plan.illustrations??[]) as SavedIllustration[]){
+  if(saved.nodeIndex!==undefined||!idSchema.safeParse(saved.assetId).success||!proposal.beats[saved.beatIndex])continue;
+  const bytes=await readFile(resolve(root,'edit/illustrations',`${saved.assetId}.png`)).catch(()=>null);
+  if(bytes&&validPng(bytes))result.push({beatIndex:saved.beatIndex,dataUri:`data:image/png;base64,${bytes.toString('base64')}`});
  }
  return result;
 }
