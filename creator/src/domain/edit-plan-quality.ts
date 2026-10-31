@@ -1,9 +1,10 @@
+import {transcriptFigures} from './transcript-figures.ts';
 import type {EditProposal,EditSource} from './edit-templates.ts';
 // Conservative checks, not a substitute for editorial review. Never silently rewrite claims.
 export function assertDirectedPlanQuality(plan:EditProposal,source:EditSource){
  if(plan.templateId!=='popout-explainer')return;
  const figures=(text:string)=>text.replace(/(\d)[,\s]+(?=\d{3}(?:\D|$))/g,'$1').match(/\d+(?:\.\d+)?/g)?.filter(n=>Number(n)>=10)??[];
- const supported=new Set(figures(source.words.map(w=>w.text).join(' ')));
+ const supported=new Set(transcriptFigures(source).map(f=>String(f.value)));
  for(const beat of plan.beats){
   const text=[beat.headline,...(beat.graphics?.nodes??[]).map(n=>n.label)].join(' ');
   if(figures(text).some(n=>!supported.has(n)))throw Error('EDIT_UNSUPPORTED_FIGURE');

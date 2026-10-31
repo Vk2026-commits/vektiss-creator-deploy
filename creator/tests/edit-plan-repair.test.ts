@@ -74,3 +74,12 @@ it('allows a verified earlier attribution as context without moving unsupported 
  expect(fixed.beats.flatMap(b=>b.graphics?.nodes??[]).find(n=>n.label==='Business Insider report')?.revealWord).toBeGreaterThanOrEqual(p.beats[1].firstWord);
  expect(()=>repairEditPlan(p,source,p.templateId)).toThrow('EDIT_REVEAL_WORD');
 });
+
+it('preserves not-higher meaning instead of asserting lower credit limits',()=>{
+ const words="doesn't mean higher credit limits".split(' ').map((text,i)=>({text,start:i,end:i+.9}));
+ const s={...source,words,duration:5};
+ const p=templateSample('popout-explainer');p.beats=[{...p.beats[0],firstWord:0,lastWord:4,headline:'Credit limits',graphics:{nodes:[{label:'Lower credit limits',shape:'box',x:50,y:50,revealWord:2}],links:[]}}];
+ expect(repairEditPlan(p,s,p.templateId).beats.flatMap(b=>b.graphics?.nodes??[])[0].label).toBe('Not higher credit limits');
+ const positive={...s,words:words.map(w=>({...w,text:w.text==="doesn't"?'does':w.text}))};
+ expect(repairEditPlan(p,positive,p.templateId).beats.flatMap(b=>b.graphics?.nodes??[])[0].label).toBe('Lower credit limits');
+});

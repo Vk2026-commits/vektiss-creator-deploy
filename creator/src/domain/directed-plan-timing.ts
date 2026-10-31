@@ -2,20 +2,14 @@ import type {EditProposal,EditSource} from './edit-templates.ts';
 
 type Beat=EditProposal['beats'][number];
 type Figure={value:number;lastWord:number;qualifier?:string};
-const figurePattern=()=>/\d{1,3}(?:[,\s]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
-const numberValue=(text:string)=>Number(text.replace(/[,\s]/g,''));
+import {figurePattern,numberValue,transcriptFigures} from './transcript-figures.ts';
 
 /** Digit figures only: never infer quantities from prose or invent a number. */
 function figures(text:string){
  return [...text.matchAll(figurePattern())].map(match=>numberValue(match[0])).filter(value=>value>=10);
 }
 function spokenFigures(beat:Beat,source:EditSource):Figure[]{
- let text='';const ends:{end:number;word:number}[]=[];
- for(let word=beat.firstWord;word<=beat.lastWord;word++){
-  if(text)text+=' ';
-  text+=source.words[word].text;ends.push({end:text.length,word});
- }
- return [...text.matchAll(figurePattern())].map(match=>({value:numberValue(match[0]),qualifier:text.slice(0,match.index).match(/(up to|at least|more than|less than|over|about|approximately|estimated)\s*[$£€]?\s*$/i)?.[1],lastWord:ends.find(item=>item.end>=(match.index??0)+match[0].length)!.word})).filter(item=>item.value>=10);
+ return transcriptFigures(source).filter(f=>f.firstWord>=beat.firstWord&&f.lastWord<=beat.lastWord);
 }
 function supportWord(text:string,spoken:Figure[]){
  const indices=figures(text).flatMap(value=>{const found=spoken.find(item=>item.value===value);return found?[found.lastWord]:[];});

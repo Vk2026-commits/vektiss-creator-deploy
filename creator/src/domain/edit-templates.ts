@@ -20,6 +20,7 @@ export const editTemplates=[
 const word=z.object({start:z.number().nonnegative(),end:z.number().positive(),text:z.string().min(1).max(120)}).strict();
 export const editSourceSchema=z.object({
  kind:z.enum(['avatar','upload']),assetId:z.string().uuid(),revision:z.string().min(1).max(200),
+ transcriptText:z.string().max(40000).optional(),
  duration:z.number().positive().max(1800),words:z.array(word).min(1).max(12000),
 }).strict().superRefine((s,ctx)=>{
  s.words.forEach((w,i)=>{if(w.end<=w.start||w.end>s.duration||i>0&&w.start<s.words[i-1].end)ctx.addIssue({code:'custom',message:'Transcript words must have ordered, nonoverlapping times within the actual media.',path:['words',i]});});

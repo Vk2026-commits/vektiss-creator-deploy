@@ -28,6 +28,18 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
  if(template==='popout-explainer')for(const beat of plan.beats){
   if(beat.visual==='presenter'&&beat.graphics?.nodes.length){beat.visual='diagram';beat.layout='bottom-presenter';}
  }
+ // Preserve a spoken negation rather than reversing it into a directional claim.
+ for(const beat of plan.beats){
+  const speech=source.words.slice(beat.firstWord,beat.lastWord+1).map(w=>w.text).join(' ').toLowerCase();
+  for(const node of beat.graphics?.nodes??[]){
+   const match=node.label.match(/^Lower ([a-z ]+)$/i);
+   if(match){
+    const subject=match[1].toLowerCase();
+    const higher=speech.indexOf('higher '+subject);
+    if(higher>=0&&/\b(?:not|doesn't|don't|isn't|aren't)\b/.test(speech.slice(Math.max(0,higher-90),higher))&&!speech.includes('lower '+subject))node.label='Not higher '+match[1];
+   }
+  }
+ }
  const starts=plan.beats.map((b,i)=>i===0?0:b.firstWord);
  if(!starts.length||starts.some((s,i)=>s>=source.words.length||i>0&&s<=starts[i-1]))throw Error('EDIT_SPEECH_COVERAGE');
  // Keep every explicit word anchor and the scene order. Adjust only a shared

@@ -65,6 +65,8 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   source=editSourceSchema.parse({assetId:randomUUID(),revision,kind:options.exportId?'avatar':'upload',duration,words:editTranscriptWords(transcript,duration)});
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
+ // Enrich old source caches from the already-saved transcription; no provider call.
+ try{const rawTranscript=JSON.parse(await readFile(resolve(folder,`${revision}.transcript.json`),'utf8'));if(typeof rawTranscript.text==='string')source=editSourceSchema.parse({...source,transcriptText:rawTranscript.text});}catch{/* Keep validated word timing when verbatim text is unavailable. */}
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
  const resolvedStyle=resolveEditStyle((await readEditBrand(root)).brand,{},options.brand??{});
  const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
