@@ -1,9 +1,8 @@
 import {it,expect} from 'vitest';
 import {popoutPresenterMotion} from '../src/domain/popout-motion';
-it('enters, holds and exits at scene boundaries without restarting footage',()=>{
- expect(popoutPresenterMotion(0,0,4).opacity).toBe(0);
- expect(popoutPresenterMotion(.4,0,4)).toEqual({opacity:1,translateY:0,scale:1});
- expect(popoutPresenterMotion(3.8,0,4).translateY).toBeGreaterThan(0);
- expect(popoutPresenterMotion(4,0,4).opacity).toBe(0);
- expect(popoutPresenterMotion(2,0,4)).toEqual(popoutPresenterMotion(2,0,4));
+it('keeps the presenter visible and continuous through every scene boundary',()=>{
+ for(const t of [0,3.8,3.99,4,4.01,7,32]){
+  const a=popoutPresenterMotion(t,0,4),b=popoutPresenterMotion(t,4,8);
+  expect(a).toEqual(b);expect(a.opacity).toBe(1);expect(Math.abs(a.translateY)).toBeLessThanOrEqual(8);expect(a.scale).toBeGreaterThan(.99);
+ }
 });

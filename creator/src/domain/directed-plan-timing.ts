@@ -40,7 +40,7 @@ export function timeDirectedPlan(plan:EditProposal,source:EditSource):EditPropos
    const q=spoken.find(f=>f.value===numberValue(match.replace(/[$£€]/g,'')))?.qualifier;
    if(!q||text.slice(0,offset).toLowerCase().endsWith(q.toLowerCase()+' ')||text.slice(0,offset).toLowerCase().endsWith(q.toLowerCase()+' $'))return match;
    return q+' '+match;
-  });
+  }).replace(/(\bover \d[\d,]*)\+/gi,'$1');
   let nodes=beat.graphics.nodes.map(node=>{
    node={...node,label:qualify(node.label)};
    if(node.revealWord===undefined)return node;
@@ -54,10 +54,10 @@ export function timeDirectedPlan(plan:EditProposal,source:EditSource):EditPropos
   }
   const timed={...beat,headline:qualify(beat.headline),graphics:{...beat.graphics,nodes,links}};
   // Missing anchors must not be guessed. Charts retain their own source timing.
-  if(nodes.some(node=>node.revealWord===undefined)||beat.graphics.chart)return [timed];
+  if(nodes.some(node=>node.revealWord===undefined)||beat.graphics.chart||figures(beat.headline).length)return [timed];
   const first=Math.min(...nodes.map(node=>node.revealWord!));
   if(first<=beat.firstWord||first>beat.lastWord||source.words[first].start-source.words[beat.firstWord].start<=1.25)return [timed];
-  const lead:Beat={...beat,lastWord:first-1,layout:'bottom-presenter',visual:'typography',headline:figures(beat.headline).length?source.words.slice(beat.firstWord,Math.min(first,beat.firstWord+4)).map(w=>w.text).join(' ').replace(/\d.*$/,'').trim().slice(0,100):beat.headline,scene:'spotlight',illustration:'',motion:'',graphics:{nodes:[],links:[]}};
+  const lead:Beat={...beat,lastWord:first-1,layout:'bottom-presenter',visual:'typography',headline:beat.headline,scene:'spotlight',illustration:'',motion:'',graphics:{nodes:[],links:[]}};
   return [lead,{...timed,firstWord:first}];
  });
  return {...plan,beats};

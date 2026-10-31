@@ -23,6 +23,11 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
    if(tokens.length>=2&&tokens.every(w=>spoken.includes(w)))node.revealWord=beat.firstWord;
   }
  }
+ // Legacy candidates sometimes mark a populated graphic as presenter-only.
+ // Normalize before timing so numeric word anchors still receive validation.
+ if(template==='popout-explainer')for(const beat of plan.beats){
+  if(beat.visual==='presenter'&&beat.graphics?.nodes.length){beat.visual='diagram';beat.layout='bottom-presenter';}
+ }
  const starts=plan.beats.map((b,i)=>i===0?0:b.firstWord);
  if(!starts.length||starts.some((s,i)=>s>=source.words.length||i>0&&s<=starts[i-1]))throw Error('EDIT_SPEECH_COVERAGE');
  // Keep every explicit word anchor and the scene order. Adjust only a shared

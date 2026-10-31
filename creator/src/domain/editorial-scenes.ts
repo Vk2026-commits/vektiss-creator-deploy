@@ -118,11 +118,15 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   if(nodes[0])body+=reveal(at(0),focus(at(0),until(0),0,0,`<circle class="ed-orbit" r="170"/>${attention(at(0),until(0),'<circle class="ed-focus-ring" r="151"/>')}<circle class="ed-hub" r="145"/><circle class="ed-orbit-inner" r="126"/>${editorialAsset(nodes[0].label,-25,-100,50,nodes[0].asset)}${label(nodes[0].label,-112,-45,224,110,nodes[0].label.length>24?28:35,'ed-center')}`),hub.x,hub.y);
   body+=others.map((n,i)=>reveal(at(i+1),focus(at(i+1),until(i+1),0,0,`<rect class="ed-satellite" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>${attention(at(i+1),until(i+1),`<rect class="ed-selection" x="-160" y="-${Math.min(48,gap/2-7)}" width="320" height="${Math.min(96,gap-14)}" rx="14"/>`)}${editorialAsset(n.label,-140,-16,32,n.asset)}${label(n.label,editorialAsset(n.label,0,0,1,n.asset)?-95:-140,-Math.min(40,gap/2-12),editorialAsset(n.label,0,0,1,n.asset)?235:280,Math.min(80,gap-24),n.label.length>30?22:others.length>3?26:32)}`),pos[i+1].x,pos[i+1].y)).join('');
  }else if(kind==='statistic'){
-  // A source-labelled hero figure; never derive bar lengths or percentages from
-  // text. This also supports non-numeric source takeaways without coercion.
-  body=reveal(firstContent,panel(44,60,812,520)+`<path class="ed-muted-line" d="M84 125H816"/><circle class="ed-dot" cx="88" cy="98" r="5"/>`);
-  if(nodes[0])body+=reveal(at(0),label(nodes[0].label,84,148,732,205,nodes[0].label.length>24?58:82,'ed-stat'));
-  body+=nodes.slice(1).map((n,i)=>reveal(at(i+1),`<path class="ed-muted-line" d="M84 ${385+i*80}H816"/>${label(n.label,84,393+i*80,732,66,30,'ed-context')}`)).join('');
+  // Give each supported figure equal, readable prominence. Context must not
+  // occupy the hero slot while a later figure is still waiting for its anchor.
+  const figures=nodes.map((n,i)=>({n,i})).filter(({n})=>/\d/.test(n.label));
+  const context=nodes.map((n,i)=>({n,i})).filter(({n})=>! /\d/.test(n.label));
+  if(figures.length){
+   const width=812/figures.length;
+   body=figures.map(({n,i},column)=>reveal(at(i),panel(0,0,width-20,360)+label(n.label,28,40,width-76,270,figures.length===1?94:64,'ed-stat'),44+column*width,100)).join('');
+   body+=context.map(({n,i},row)=>reveal(at(i),label(n.label,60,480+row*50,780,48,26,'ed-ink ed-center'))).join('');
+  }else body=nodes.map((n,i)=>reveal(at(i),panel(44,60+i*150,812,150)+label(n.label,84,90+i*150,732,100,56,'ed-stat'))).join('');
  }else if(kind==='comparison'){
   const cols=nodes.length===1?1:2,rows=Math.ceil(nodes.length/cols),w=790/cols,h=Math.min(238,490/Math.max(1,rows));
   body=nodes.map((n,i)=>reveal(at(i),panel(0,0,w-20,h-20)+`${index(i,26,44)}${editorialAsset(n.label,w-84,20,36,n.asset)}<path class="ed-accent-stroke" d="M26 65H${w-46}"/>${label(n.label,26,82,w-72,h-120,rows>2?24:n.label.length>30?30:36)}`,55+(i%cols)*w,70+Math.floor(i/cols)*h)).join('');
@@ -133,7 +137,7 @@ export function editorialScene(source:EditSource,beat:EditorialBeat):string{
   const gap=480/statements.length;
   body=statements.map((text,i)=>reveal(nodes.length?at(i):beat.start,`${i===0?'<path class="ed-accent-stroke" d="M60 25H150"/>':''}${label(text,60,45,780,gap-35,statements.length>3?(text.length>30?26:36):text.length>28?56:74,i%2?'ed-serif ed-ink':'ed-ink')}`,0,45+i*gap)).join('');
  }
- return `<svg class="diagram editorial-scene" data-editorial-kind="${kind}" viewBox="0 0 900 ${kind==='process'&&nodes.length<=3?520:640}" role="img" aria-label="${esc(beat.headline)}">${body}</svg>`;
+ return `<svg class="diagram editorial-scene" data-editorial-kind="${kind}" viewBox="${kind==='document'&&nodes.length<=3?'0 20 900 350':kind==='process'&&nodes.length<=3?'0 20 900 480':kind==='statistic'?'0 70 900 510':'0 0 900 640'}" role="img" aria-label="${esc(beat.headline)}">${body}</svg>`;
 }
 
 export const editorialSceneStyles=`
@@ -141,11 +145,11 @@ export const editorialSceneStyles=`
 .editorial-scene .ed-panel{fill:#142333;stroke:#ffffff24;stroke-width:1;filter:drop-shadow(0 16px 15px #10263d20)}
 .editorial-scene .ed-signal{fill:#f7fbff;filter:drop-shadow(0 0 5px var(--ed-accent))}.editorial-scene .ed-signal-tail{fill:var(--ed-accent)}
 .editorial-scene .ed-click-ring{fill:none;stroke:var(--ed-accent);stroke-width:2}.editorial-scene .ed-result-rule{fill:none;stroke:var(--ed-accent);stroke-width:2;stroke-linecap:round}
-.editorial-scene .ed-label{fill:#f6f8fc;color:#f6f8fc;font-family:Arial,sans-serif;font-weight:650;line-height:1.13;letter-spacing:-.7px;overflow-wrap:anywhere;box-sizing:border-box}
+.editorial-scene .ed-label{fill:#f6f8fc;color:#f6f8fc;font-family:var(--editorial-font,Arial),sans-serif;font-weight:650;line-height:1.13;letter-spacing:-.7px;overflow-wrap:anywhere;box-sizing:border-box}
 .editorial-scene .ed-selection{fill:var(--ed-accent);fill-opacity:.13;stroke:var(--ed-accent);stroke-width:2}
 .editorial-scene .ed-search-field{fill:#091725;stroke:#ffffff25;stroke-width:1.5}.editorial-scene .ed-query{font-size:35px;font-weight:650;white-space:nowrap;overflow:hidden}.editorial-scene .ed-caret{color:var(--ed-accent);font-weight:400;margin-left:3px}
 .editorial-scene .ed-cursor{fill:#f6f8fc;stroke:#091725;stroke-width:1.5;filter:drop-shadow(0 3px 4px #0006)}.editorial-scene .ed-focus-ring{fill:none;stroke:var(--ed-accent);stroke-width:3}
-.editorial-scene .ed-center{justify-content:center;text-align:center}.editorial-scene .ed-serif{font-family:Georgia,serif;font-style:italic;font-weight:400}.editorial-scene .ed-ink{fill:var(--ed-ink);color:var(--ed-ink)}
+.editorial-scene .ed-center{justify-content:center;text-align:center}.editorial-scene .ed-serif{font-family:var(--editorial-font,Arial),sans-serif;font-style:italic;font-weight:400}.editorial-scene .ed-ink{fill:var(--ed-ink);color:var(--ed-ink)}
 .editorial-scene .ed-stat{font-weight:800;letter-spacing:-3px}.editorial-scene .ed-context{fill:#c0cedd;color:#c0cedd;font-weight:500}
 .editorial-scene .ed-index{fill:#bfd1df;font:18px Arial,sans-serif;letter-spacing:2px}.editorial-scene .ed-row{fill:#0b1726;stroke:#ffffff08;stroke-width:1}
 .editorial-scene .ed-muted-line{fill:none;stroke:#ffffff20;stroke-width:1.5}.editorial-scene .ed-accent-stroke{fill:none;stroke:var(--ed-accent);stroke-width:3;stroke-linecap:round}

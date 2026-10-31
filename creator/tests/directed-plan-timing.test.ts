@@ -5,10 +5,10 @@ const source:EditSource={assetId:'00000000-0000-4000-8000-000000000001',kind:'up
 const plan:EditProposal={version:1,rendererVersion:2,sourceRevision:source.revision,templateId:'popout-explainer',beats:[{firstWord:0,lastWord:9,layout:'full-graphic',visual:'diagram',scene:'statistic',headline:'Over 35,000 people, up to $30',purpose:'Source claim',illustration:'Figure',motion:'Reveal',graphics:{nodes:[{label:'Over 35,000 people, up to $30',shape:'box',x:50,y:50,revealWord:4}],links:[]}}]};
 it('waits for the last spoken numeric component and preserves every original word',()=>{
  const fixed=timeDirectedPlan(plan,source);
- expect(fixed.beats.map(beat=>[beat.firstWord,beat.lastWord])).toEqual([[0,8],[9,9]]);
- expect(fixed.beats[0].visual).toBe('typography');expect(fixed.beats[0].headline).toBe('One company reports over');
- expect(fixed.beats[1].graphics!.nodes[0]).toEqual({...plan.beats[0].graphics!.nodes[0],revealWord:9});
- expect(fixed.beats[1].headline).toBe(plan.beats[0].headline);
+ expect(fixed.beats.map(beat=>[beat.firstWord,beat.lastWord])).toEqual([[0,9]]);
+ expect(fixed.beats[0].visual).toBe('diagram');
+ expect(fixed.beats[0].graphics!.nodes[0]).toEqual({...plan.beats[0].graphics!.nodes[0],revealWord:9});
+ expect(fixed.beats[0].headline).toBe(plan.beats[0].headline);
  expect(plan.beats[0].graphics!.nodes[0].revealWord).toBe(4);
  expect(validateEditProposal(fixed,source,'popout-explainer')).toEqual(fixed);
  expect(timeDirectedPlan(fixed,source)).toEqual(fixed);
