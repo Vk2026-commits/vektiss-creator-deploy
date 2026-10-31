@@ -1,3 +1,4 @@
+import {popoutBrand} from '../src/domain/popout-brand';
 import React,{useLayoutEffect,useMemo,useRef} from 'react';
 import {AbsoluteFill,Easing,interpolate,OffthreadVideo,useCurrentFrame} from 'remotion';
 import {editStoryboard,type EditSource,type EditProposal} from '../src/domain/edit-templates';
@@ -25,6 +26,7 @@ function Graphic({source,beat,time,brand,image,full=false}:{source:EditSource;be
  </div>;
 }
 export function ReferencePopout({sourceUrl,presenterUrl,source,proposal,brand,illustrations=[]}:{illustrations?:RenderIllustration[];sourceUrl:string;presenterUrl:string;source:EditSource;proposal:EditProposal;brand:EditBrand}){
+ brand=popoutBrand(brand);
  const frame=useCurrentFrame(),t=frame/30,beats=useMemo(()=>editStoryboard(popoutDisplayPlan(proposal),source),[proposal,source]);
  const index=popoutBeatIndex(beats,t),rawBeat=beats[index];
  const beat=rawBeat;
@@ -33,10 +35,10 @@ export function ReferencePopout({sourceUrl,presenterUrl,source,proposal,brand,il
  const caption=editorialCaptions(source.words).find(c=>t>=c.start&&t<c.end),wide=proposal.aspectRatio==='16:9';
  // The portrait artboard is letterboxed for widescreen; never stretch a face.
  return <AbsoluteFill style={{background:brand.background}}><div style={{position:'absolute',width:1080,height:1920,left:wide?656.25:0,top:0,transform:wide?'scale(.5625)':'none',transformOrigin:'0 0',overflow:'hidden',fontFamily:`${brand.fontFamily??'Arial'},sans-serif`,'--editorial-accent':brand.primary,'--editorial-ink':brand.text,'--editorial-font':brand.fontFamily??'Arial'} as React.CSSProperties}>
- <style>{editorialSceneStyles+'.reference-art>svg{width:100%;height:100%;overflow:hidden}'}</style>
+ <style>{editorialSceneStyles+`.reference-art>svg{width:100%;height:100%;overflow:hidden}.reference-art .ed-panel,.reference-art .ed-row,.reference-art .ed-frame,.reference-art .ed-hub,.reference-art .ed-satellite,.reference-art .ed-search-field,.reference-art .ed-check-box,.reference-art .ed-step-ring{fill:#F7F7F7;stroke:#D8D8D8}.reference-art .ed-label{fill:#171717;color:#171717}.reference-art .ed-context,.reference-art .ed-index{fill:#555555;color:#555555}.reference-art .ed-muted-line,.reference-art .ed-frame-rule,.reference-art .ed-orbit-inner{stroke:#D8D8D8}`}</style>
  <div style={{position:'absolute',...(presenterOnly?{left:0,top:0,width:1080,height:1920}:layout.presenter),opacity:fullGraphic?0:presenterMotion.opacity,transform:`translateY(${presenterMotion.translateY}px) scale(${presenterMotion.scale})`,transformOrigin:'50% 100%'}}>
- {<OffthreadVideo src={sourceUrl} muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:!presenterOnly&&brand.presenterTreatment==='cutout'?0:1,clipPath:presenterOnly?'none':brand.presenterTreatment==='window'?'inset(0 round 30px)':'inset(38% 0 0 round 30px)'}}/>}
- {<OffthreadVideo src={presenterUrl} transparent muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:presenterOnly||brand.presenterTreatment==='window'?0:1,clipPath:brand.presenterTreatment==='cutout'?undefined:'inset(0 0 62% 0)'}}/>}
+ {<OffthreadVideo src={sourceUrl} muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:!presenterOnly&&brand.presenterTreatment==='cutout'?0:1,maskImage:!presenterOnly&&brand.presenterTreatment!=='window'?'linear-gradient(to bottom, transparent 28%, black 32%)':undefined,clipPath:presenterOnly?'none':brand.presenterTreatment==='window'?'inset(0 round 30px)':'inset(0 round 30px)'}}/>}
+ {<OffthreadVideo src={presenterUrl} transparent muted style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:presenterOnly||brand.presenterTreatment==='window'?0:1,maskImage:brand.presenterTreatment==='cutout'?undefined:'linear-gradient(to bottom, black 32%, transparent 36%)'}}/>}
  <div style={{position:'absolute',inset:'48% 0 0',background:'linear-gradient(transparent,#08101eaa)'}}/>
  </div>
  <div data-popout-region="graphics" style={{position:'absolute',left:0,right:0,...(fullGraphic?{top:0,height:1700}:layout.graphics),opacity:presenterOnly?0:1,overflow:'hidden'}}>
