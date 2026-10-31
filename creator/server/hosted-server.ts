@@ -147,6 +147,12 @@ export function hostedHandler(c:HostingConfig){
    }
    const logoMatch=path.match(/^\/api\/local-capture\/template-logos\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&logoMatch){res.setHeader('Content-Type','image/png');return res.end(await logoBytes(root,logoMatch[1]));}
+   const editProject=path.match(/^\/api\/local-capture\/edit-projects\/([a-f0-9]{64})$/);
+   if(req.method==='GET'&&editProject){
+    const saved=await readFile(resolve(root,'edit/compositions',`${editProject[1]}.project.json`),'utf8').catch(()=>null);
+    if(!saved)return json(res,404,{error:'This export does not have a saved editing project.'});
+    return json(res,200,JSON.parse(saved));
+   }
    const templatePreview=path.match(/^\/api\/local-capture\/template-previews\/([a-f0-9]{64})$/);
    if(req.method==='GET'&&templatePreview){const file=resolve(root,'edit/template-previews',`${templatePreview[1]}.mp4`);return await serveMediaFile(req,res,file,'video/mp4');}
    if(req.method==='GET'&&path===`${prefix}/template-plans`)return json(res,200,await listTemplatePlans(root));

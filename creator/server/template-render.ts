@@ -56,6 +56,15 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   if(video?.width!==dimensions.width*scale||video?.height!==dimensions.height*scale||!probe.streams.some((s:{codec_type:string})=>s.codec_type==='audio')||Math.abs(Number(probe.format.duration)-result.duration)>.2)throw Error('Rendered media did not pass export checks.');
   // Reject a concurrently changed plan rather than attaching stale output.
   checkRenderApproval(input,await readTemplatePlan(root,input.id));
+  // Keep a reproducible editing record alongside every version, never overwrite its source.
+  const project={version:1,exportId:id,planId:input.id,planVersion:input.version,rendererVersion:EDIT_RENDER_VERSION,
+   sourceRevision:revision,source,proposal,brand,resolvedStyle:plan.resolvedStyle??null,
+   instructions:plan.instructions??'',logos:plan.logos??[],illustrations:plan.illustrations??[],
+   timeline:{fps:30,cuts:[{sourceStart:0,sourceEnd:source.duration,outputStart:0,speed:1}]},
+   review:{status:'review_incomplete',localChecks:['dimensions','duration','audio presence'],
+    limitations:['Audiovisual provider review has not run.','No exhaustive frame or speech-continuity inspection.']},
+   created:new Date().toISOString()};
+  await writeFile(resolve(outputFolder,`${id}.project.json`),JSON.stringify(project,null,2),{mode:0o600});
   await rename(muxed,output);
   if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});
   return result;
