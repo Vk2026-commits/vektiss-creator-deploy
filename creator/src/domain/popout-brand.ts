@@ -1,8 +1,9 @@
 import type {EditBrand} from './edit-brand';
-/** Pop-out uses a fixed light canvas; brand color remains an accent, never a wall. */
+export const popoutDark=(brand:EditBrand)=>parseInt(brand.background.slice(1,3),16)*.2126+parseInt(brand.background.slice(3,5),16)*.7152+parseInt(brand.background.slice(5,7),16)*.0722<128;
+/** Keep the creator palette, with readable text and a restrained accent glow. */
 export function popoutBrand(brand:EditBrand):EditBrand{
- let rgb=brand.primary.slice(1).match(/../g)!.map(v=>parseInt(v,16));
- const luminance=()=>rgb.map(v=>{const s=v/255;return s<=.04045?s/12.92:((s+.055)/1.055)**2.4;}).reduce((n,v,i)=>n+v*[.2126,.7152,.0722][i],0);
- while(1.05/(luminance()+.05)<4.5)rgb=rgb.map(v=>Math.floor(v*.95));
- return {...brand,background:'#FFFFFF',text:'#171717',primary:'#'+rgb.map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase()};
+ return {...brand,text:popoutDark(brand)?'#FFFFFF':'#171717'};
+}
+export function popoutBackground(brand:EditBrand):string{
+ return `radial-gradient(ellipse at 95% 12%, ${brand.primary}${popoutDark(brand)?'30':'12'} 0%, transparent 65%), ${brand.background}`;
 }
