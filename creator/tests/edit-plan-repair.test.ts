@@ -65,3 +65,12 @@ it('repairs the observed 25–30 word anchors before a scene starting at word 14
  expect(graphicBeats[0].graphics!.nodes.map(n=>n.revealWord)).toEqual([25,30]);
  expect(graphicBeats[1].graphics!.nodes[0].revealWord).toBe(36);
 });
+
+it('allows a verified earlier attribution as context without moving unsupported anchors',()=>{
+ const p=templateSample('popout-explainer');
+ const s={...source,words:source.words.map((w,i)=>({...w,text:i===0?'Business':i===1?'Insider':w.text}))};
+ p.beats[1].graphics!.nodes[0]={...p.beats[1].graphics!.nodes[0],label:'Business Insider report',asset:'document',revealWord:0};
+ const fixed=repairEditPlan(p,s,p.templateId);
+ expect(fixed.beats.flatMap(b=>b.graphics?.nodes??[]).find(n=>n.label==='Business Insider report')?.revealWord).toBeGreaterThanOrEqual(p.beats[1].firstWord);
+ expect(()=>repairEditPlan(p,source,p.templateId)).toThrow('EDIT_REVEAL_WORD');
+});

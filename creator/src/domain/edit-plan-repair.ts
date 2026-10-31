@@ -12,6 +12,17 @@ export function editPlanDiagnostic(error:unknown){
 export function repairEditPlan(raw:unknown,source:EditSource,template:EditProposal['templateId']){
  const plan=editProposalSchema.parse(normalizeEditResponse(raw));
  if(plan.sourceRevision!==source.revision||plan.templateId!==template)throw Error('EDIT_SOURCE_CHANGED');
+ // A source attribution may be reused later as context. If its anchor points
+ // to an earlier spoken mention, reveal it at this scene's start only when the
+ // actual transcript verifies every meaningful label word. Never move figures.
+ for(const beat of plan.beats){
+  for(const node of beat.graphics?.nodes??[]){
+   if(node.asset!=='document'||! /\breports?\b/i.test(node.label)||node.revealWord===undefined||node.revealWord>=beat.firstWord||/\d/.test(node.label))continue;
+   const tokens=node.label.toLowerCase().match(/[a-z]+/g)?.filter(w=>!['a','an','the','report','reports','according','to'].includes(w))??[];
+   const spoken=source.words.slice(Math.max(0,node.revealWord-2),Math.min(beat.firstWord,node.revealWord+6)).map(w=>w.text.toLowerCase().replace(/[^a-z]/g,''));
+   if(tokens.length>=2&&tokens.every(w=>spoken.includes(w)))node.revealWord=beat.firstWord;
+  }
+ }
  const starts=plan.beats.map((b,i)=>i===0?0:b.firstWord);
  if(!starts.length||starts.some((s,i)=>s>=source.words.length||i>0&&s<=starts[i-1]))throw Error('EDIT_SPEECH_COVERAGE');
  // Keep every explicit word anchor and the scene order. Adjust only a shared
