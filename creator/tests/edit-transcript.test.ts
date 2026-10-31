@@ -11,3 +11,14 @@ it('rejects materially broken timing instead of fabricating or dropping speech',
  expect(()=>editTranscriptWords({words:[{word:'One',start:4,end:5}]},2)).toThrow();
  expect(()=>editTranscriptWords({words:[]},2)).toThrow();
 });
+
+it('ignores empty provider entries without moving or dropping spoken words',()=>{
+ const words=editTranscriptWords({words:[
+  {word:'First',start:0,end:.3},
+  {word:'',start:.3,end:.9},
+  {word:'  ',start:.9,end:1},
+  {word:'second',start:.4,end:.8},
+ ]},1);
+ expect(words).toEqual([{text:'First',start:0,end:.3},{text:'second',start:.4,end:.8}]);
+ expect(()=>editTranscriptWords({words:[{word:' ',start:0,end:.2}]},1)).toThrow();
+});

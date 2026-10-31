@@ -1,11 +1,15 @@
 import {z} from 'zod';
 
-const transcriptSchema=z.object({words:z.array(z.object({word:z.string().trim().min(1).max(120),start:z.number().finite().nonnegative(),end:z.number().finite().nonnegative()})).min(1).max(12000)});
+const transcriptSchema=z.object({words:z.array(z.object({word:z.string().trim().max(120),start:z.number().finite().nonnegative(),end:z.number().finite().nonnegative()})).min(1).max(12000)});
 
 // Speech services can return touching, overlapping, or zero-duration words.
 // Repair only small timing artifacts; retain every word and its original order.
 export function editTranscriptWords(raw:unknown,duration:number){
- const {words}=transcriptSchema.parse(raw);
+ const parsed=transcriptSchema.parse(raw);
+ // Whisper may include empty punctuation/silence entries with valid timestamps.
+ // They are not spoken words and must not advance the timing cursor.
+ const words=parsed.words.filter(w=>w.word.length>0);
+ if(!words.length)throw Error('EDIT_TRANSCRIPT_TIMING');
  let previous=0;
  return words.map(w=>{
   const start=Math.max(previous,Math.min(w.start,duration-.01));
