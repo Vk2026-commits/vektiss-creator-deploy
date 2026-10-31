@@ -1,3 +1,4 @@
+import {hydrateEditSource,readEditSource} from './edit-source';
 import {resolveEditStyle} from '../src/domain/edit-style';
 import {planningProgress} from '../src/domain/edit-planning-progress';
 import type {EditProgress} from '../src/domain/edit-progress';
@@ -65,8 +66,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   source=editSourceSchema.parse({assetId:randomUUID(),revision,kind:options.exportId?'avatar':'upload',duration,words:editTranscriptWords(transcript,duration)});
   await writeFile(sourceCache,JSON.stringify(source),{mode:0o600});
  }
- // Enrich old source caches from the already-saved transcription; no provider call.
- try{const rawTranscript=JSON.parse(await readFile(resolve(folder,`${revision}.transcript.json`),'utf8'));if(typeof rawTranscript.text==='string')source=editSourceSchema.parse({...source,transcriptText:rawTranscript.text});}catch{/* Keep validated word timing when verbatim text is unavailable. */}
+ source=await hydrateEditSource(folder,source);
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
  const resolvedStyle=resolveEditStyle((await readEditBrand(root)).brand,{},options.brand??{});
  const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
@@ -127,7 +127,7 @@ export async function saveTemplatePlan(root:string,raw:unknown){
  if((previous.version??1)!==input.baseVersion)throw new DraftError('This plan changed. Reload the saved plan before editing again.');
  // Use the persisted source, never a transcript or filename supplied by the client.
  const revision=planId.parse(previous.proposal.sourceRevision);
- const source=editSourceSchema.parse(JSON.parse(await readFile(resolve(root,'edit/template-plans',`${revision}.source.json`),'utf8')));
+ const source=await readEditSource(resolve(root,'edit/template-plans'),revision);
  const proposal=validateEditProposal(input.proposal,source,previous.proposal.templateId);
  let logos=logoSuggestionSchema.array().max(8).parse(previous.logos??[]);
  if(input.logos){
