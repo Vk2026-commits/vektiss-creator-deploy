@@ -410,7 +410,8 @@ Deno.serve(async (request) => {
       for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
       if(job.incremental_delivery&&freshSources.length){
         const action=wantsVisibleAction(brief.data);
-        const selected=action?freshSources.slice(0,5):freshSources;
+        // Small action batches publish finished checks instead of waiting for five serial media imports.
+        const selected=action?freshSources.slice(0,Math.min(2,Math.max(1,Number(job.requested_count)-Number(job.delivered_count)))):freshSources;
         const next={...providerMetadata,fastDelivery:true,stage:action?'pilot_inspection':'fast_delivery',
           inspectionStartedAt:new Date().toISOString(),inspectionSources:selected,inspectionAllSources:selected,
           inspectionCandidates:[],inspectionUsage:{},nativeSources:selected,pilotReviewed:!action,

@@ -18,3 +18,14 @@ export function actionFormatRejection(brief:ResearchBrief,source:ResearchSource)
 export function actionEvidenceInstruction(brief:ResearchBrief):string {
  return wantsVisibleAction(brief)?'STRICT FORMAT REQUIREMENT: This profile wants the situation/action itself on screen, not a person merely recounting it. Reject narration-only car monologues, storytimes, generic safety lectures and reaction-only clips. Recorded conversations can qualify when the interaction itself contains observable warning signs or decision points. Apply the selected profile’s rules for demonstrations, simulations and reenactments; do not override an explicit permission with a blanket ban. Label simulated or promotional footage in the title and summary, never as a verified real incident. News-account footage can qualify when it shows the situation rather than only reporting it. Require source evidence of the requested visual format; a caption merely saying an event happened is insufficient. If the format cannot be established, omit the lead rather than using Watch first to waive this requirement. Never claim to have watched footage from metadata alone. Keep the practical teaching relevance; action does not mean gratuitous violence.':'';
 }
+
+export function actionSearchQuery(query:string,index=0):string{
+ if(/caught on camera|cctv|bodycam|dashcam|demonstration|incident footage/i.test(query))return query;
+ return `${query} ${['caught on camera','incident footage','demonstration'][index%3]}`;
+}
+export function actionReviewEligible(brief:ResearchBrief,source:ResearchSource):boolean{
+ return !wantsVisibleAction(brief)||(!actionFormatRejection(brief,source)&&!(source.durationSeconds!==undefined&&source.durationSeconds>180));
+}
+export function actionRetrievalScore(source:ResearchSource):number{
+ return /caught on camera|cctv|bodycam|dashcam|footage shows|demonstrat|interven|rescue/i.test(source.title+' '+source.snippet)?1:0;
+}

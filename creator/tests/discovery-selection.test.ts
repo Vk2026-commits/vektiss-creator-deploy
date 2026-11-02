@@ -64,3 +64,11 @@ it('does not turn a generic first-client story into an AI recommendation using a
  expect(sourceTopicSupported({...generic,review:{level:'video_sampled',accessibility:'accessible',reviewedAt:new Date().toISOString(),timestamps:[1],transcript:'',claims:'',observations:'No AI tools are visible.',limitations:'',generationIds:[]}},brief)).toBe(false);
  expect(sourceTopicSupported({...generic,snippet:'I use ChatGPT to draft client proposals for my service business.'},brief)).toBe(true);
 });
+
+it('action searches request footage and skip explicit storytimes and unsupported lengths before paid review',()=>{
+ const action={...brief,visibleActionOnly:true,searchQuery:'public safety, women safety'};
+ expect(scrapeTasks(action,'abc').every(t=>/caught on camera|incident footage/.test(t.query??''))).toBe(true);
+ const rows=[{...source(1),title:'Storytime about safety'},{...source(2),durationSeconds:231},{...source(3),title:'CCTV footage shows an intervention'}];
+ expect(shortlist(rows,action).map(s=>s.providerSourceId)).toEqual([3]);
+ expect(shortlist(rows,{...action,visibleActionOnly:false})).toHaveLength(3);
+});

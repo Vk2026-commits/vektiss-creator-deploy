@@ -1,3 +1,4 @@
+import {wantsVisibleAction,actionReviewEligible,actionRetrievalScore} from '../../../src/domain/search-intent.ts';
 import type {ResearchBrief,ResearchSource} from '../../../src/domain/research.ts';
 import {discoveryFiltersSchema,engagementFailure,collectEngagement} from '../../../src/domain/discovery-engagement.ts';
 import {dedupeVideos,videoIdentity} from '../../../src/domain/discovery-pilot.ts';
@@ -25,7 +26,7 @@ export function topicScore(s:ResearchSource,b:ResearchBrief):number{
 export function prioritize(sources:ResearchSource[],brief:ResearchBrief):ResearchSource[]{
  return [...sources].sort((a,b)=>{
   const tier=(s:ResearchSource)=>confirmedFailure(s,brief)?0:selectionReason(s,brief)?1:2;
-  return tier(b)-tier(a)||topicScore(b,brief)-topicScore(a,brief)||(b.engagement?.views??b.engagement?.likes??0)-(a.engagement?.views??a.engagement?.likes??0);
+  return tier(b)-tier(a)||(wantsVisibleAction(brief)?actionRetrievalScore(b)-actionRetrievalScore(a):0)||topicScore(b,brief)-topicScore(a,brief)||(b.engagement?.views??b.engagement?.likes??0)-(a.engagement?.views??a.engagement?.likes??0);
  });
 }
 export function mergePool(old:ResearchSource[],incoming:ResearchSource[],brief:ResearchBrief):ResearchSource[]{
@@ -37,7 +38,7 @@ export function mergePool(old:ResearchSource[],incoming:ResearchSource[],brief:R
 export function shortlist(pool:ResearchSource[],brief:ResearchBrief,excluded:string[]=[],limit=40):ResearchSource[]{
  const seen=new Set(excluded.map(videoIdentity));
  const f=brief.discoveryFilters??discoveryFiltersSchema.parse({});
- return dedupeVideos(prioritize(pool.filter(s=>!seen.has(videoIdentity(s.url))&&!engagementFailure(s,{...f,mode:'engaged'})),brief),limit);
+ return dedupeVideos(prioritize(pool.filter(s=>!seen.has(videoIdentity(s.url))&&actionReviewEligible(brief,s)&&!engagementFailure(s,{...f,mode:'engaged'})),brief),limit);
 }
 export function selectionDiagnostics(pool:ResearchSource[],brief:ResearchBrief,requireBaseline=false){
  const excluded:Record<string,number>={};let passed=0;
