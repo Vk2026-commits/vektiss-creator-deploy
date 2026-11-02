@@ -1,3 +1,4 @@
+import {mediaQuotaCount,mediaQuotaMessage} from './media-quota';
 import {importCreativeVideo} from './creative-import';
 import {generateTemplateIllustrations} from './template-illustrations';
 import {serveMediaFile} from './serve-media-file';
@@ -176,9 +177,9 @@ export function hostedHandler(c:HostingConfig){
     // Fixed one-worker pilot: reserve headroom for input, conversion and final composition.
     const disk=await statfs(c.data);
     if(disk.bavail*disk.bsize<2*1024**3||await bytesUsed(c.data)>7*1024**3)return json(res,507,{error:'Pilot storage is nearly full. Download your work and contact the owner before adding more media.'});
-    const today=new Date().toISOString().slice(0,10);let count=0;
-    for(const file of await readdir(jobs)){if(file.endsWith('.json')&&(await readFile(resolve(jobs,file),'utf8')).includes(`"created":"${today}`))count++;}
-    if(count>=60)return json(res,429,{error:'Daily pilot media-processing limit reached. Try again tomorrow.'});
+    const today=new Date().toISOString().slice(0,10);const quotaJobs=[];
+    for(const file of await readdir(jobs)){if(file.endsWith('.json'))quotaJobs.push(JSON.parse(await readFile(resolve(jobs,file),'utf8')));}
+    if(mediaQuotaCount(quotaJobs,path,today)>=60)return json(res,429,{error:mediaQuotaMessage(path)});
     const type=req.headers['content-type']?.split(';')[0]??'';
     const resolving=path.endsWith('/source-resolve');
     const graphic=path.endsWith('/graphic-source')||(resolving&&type.startsWith('image/'));
