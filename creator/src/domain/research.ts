@@ -95,6 +95,7 @@ export const researchBriefSchema = z
   .object({
     searchQuery: z.string().trim().max(300).optional(),
     profileRankingOnly: z.boolean().optional(),
+    profileVerificationRequired: z.boolean().optional(),
     visibleActionOnly: z.boolean().optional(),
     expertise: z.string().trim().max(2000),
     experience: z.string().trim().max(2000),

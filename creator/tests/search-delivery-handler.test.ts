@@ -75,6 +75,21 @@ it('publishes four immediately, continues, and completes only after the fifth pr
  expect(state.job.provider_metadata.contentReviewReports[0]).toMatchObject({id:'failed-review',status:'incomplete',incompleteReason:'max_output_tokens'});
  expect(state.job.delivered_count).toBe(0);
 
+ // Profile verification rejects an explicitly rejected clip even on the fast
+ // visual-inspection route; speed must not bypass the creator's criteria.
+ state.rows=[];state.job.input_snapshot.profileVerificationRequired=true;
+ state.job.input_snapshot.profileRankingOnly=false;
+ state.job.provider_metadata={stage:'pilot_relevance',fastDelivery:true,selectionVersion:2,pilot:true,
+   postReviewRunId:'profile-review',postReviewSourceIds:[1],postReviewStartedAt:new Date().toISOString(),
+   inspectionAllSources:[source(1)],inspectionCandidates:[],scPool:[source(2)],scKnownIds:[],
+   scScreenedUrls:[source(1).url],scTasks:[],scLedger:[]};
+ state.run={id:'profile-review',status:'completed',sources:[source(1)],candidates:[candidate(1)],
+   decisions:[{sourceId:1,outcome:'rejected',reason:'Unrelated to the selected audience.'}],usage:{},raw:{}};
+ await state.handler(request());
+ expect(state.rows).toHaveLength(0);expect(state.job.delivered_count).toBe(0);
+ expect(state.job.status).toBe('researching');
+ state.job.input_snapshot.profileVerificationRequired=false;
+
  // Direct results publish without a provider run, including when profile
  // ranking would normally require a high AI relevance score.
  state.rows=[];state.job.delivered_count=0;state.job.requested_count=1;

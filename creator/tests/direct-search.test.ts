@@ -7,7 +7,7 @@ import {buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack
 const brief=researchBriefSchema.parse({expertise:'security',experience:'security',industries:['security'],communicationStyle:'direct',creatorTone:[],phrasesToAvoid:[],preferredCtaStyle:'',creatorContext:'security only',audienceName:'Safety',primaryAudience:'guards',audienceProblems:[],audienceInterests:['safety'],contentPillars:['safety'],sourceTopics:['personal safety'],reactionAngles:[],desiredOutcomes:[],profileTone:[],thingsToAvoid:['food'],profileContext:'Only safety clips',researchScreeningCriteria:'visible action only',researchReferenceUrls:['https://example.com/safety'],discoveryPilot:true});
 describe('direct search',()=>{
  it('removes inherited topic and screening restrictions when profile is off',()=>{const result=directSearchBrief(brief,'fast food fries rankings',false);expect(result.thingsToAvoid).toEqual([]);expect(result.creatorContext).toBe('');expect(result.researchReferenceUrls).toEqual([]);expect(result.researchScreeningCriteria).not.toContain('visible action');expect(result.sourceTopics).toEqual(['fast food fries rankings']);expect(brief.sourceTopics).toEqual(['personal safety']);});
- it('preserves explicit action format while ranking topic fit and querying every platform',()=>{const result=directSearchBrief(brief,'fast food fries rankings',true);expect(result.researchScreeningCriteria).toContain('Visible action required');expect(result.profileContext).toContain('visible action');expect(result.thingsToAvoid).toEqual([]);for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['fast food fries rankings']);expect(result.discoveryPilot).toBe(true);});
+ it('preserves explicit action format while ranking topic fit and querying every platform',()=>{const result=directSearchBrief(brief,'fast food fries rankings',true);expect(result.researchScreeningCriteria).toContain('Visible action required');expect(result.researchScreeningCriteria).toContain('visible action');expect(result.thingsToAvoid).toEqual(['food']);for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['fast food fries rankings']);expect(result.discoveryPilot).toBe(true);});
  it('rejects empty profile-free requests and defaults old clients to profile mode',()=>{const base={profileId:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),requestedCount:3};expect(researchRequestSchema.parse(base).useContentProfile).toBe(true);expect(researchRequestSchema.safeParse({...base,useContentProfile:false,searchQuery:'  '}).success).toBe(false);});
 });
 
@@ -20,16 +20,16 @@ it('searches each keyword phrase on every platform without joining them',()=>{
 it('limits ranking context and keeps explicit keyword evidence separate',()=>{
  const result=directSearchBrief({...brief,profileContext:'x'.repeat(5000)},'restaurant reviews',true);
  expect(result.profileContext.length).toBeLessThanOrEqual(5000);
- expect(result.profileRankingOnly).toBe(true);
+ expect(result.profileRankingOnly).toBe(false);expect(result.profileVerificationRequired).toBe(true);
  expect(result.sourceTopics).toEqual(['restaurant reviews']);
 });
 
-it('ranks profile fit rather than applying legacy audience vetoes',()=>{
+it('requires evidence-backed audience relevance when profile verification is enabled',()=>{
  const prompt=nativeScreeningInstructions(directSearchBrief(brief,'restaurant reviews',true),5,15,[]);
- expect(prompt).toContain('STRICT FORMAT REQUIREMENT remains mandatory');
+ expect(prompt).toContain('Verify each clip');
  expect(prompt).toContain('omit the lead rather than using Watch first');
- expect(prompt).not.toContain('For an AI-income audience, acceptance requires');
- expect(prompt).not.toContain('reject news/reaction/compilation packaging');
+ expect(prompt).toContain('Audience relevance is required, not optional');
+ expect(prompt).toContain('Keyword overlap alone is insufficient');
 });
 
 it('keeps accepted topic matches with lower profile scores in search mode',()=>{
@@ -55,3 +55,5 @@ it('lets the action toggle override the profile in both directions',async()=>{
  expect(nativeScreeningInstructions(enabled,5,15,[])).toContain('This profile wants the situation/action itself');
  expect(researchRequestSchema.parse({profileId:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),requestedCount:5,visibleActionOnly:true}).visibleActionOnly).toBe(true);
 });
+
+it('disables profile verification only when the user switches the profile off',()=>{expect(directSearchBrief(brief,'security',false).profileVerificationRequired).toBe(false);expect(directSearchBrief(brief,'security',true).profileVerificationRequired).toBe(true);});

@@ -275,8 +275,9 @@ Deno.serve(async (request) => {
       if(check.state==='pending'&&Date.now()-Date.parse(String(providerMetadata.inspectionStartedAt))<(providerMetadata.fastDelivery?120000:30*60*1000))return reply(headers,{job},202);
       const results=check.state==='completed'?check.results:[];
       const merged=mergePilotEvidence(nativeSources(providerMetadata.inspectionAllSources),retainedCandidates(providerMetadata.inspectionCandidates),results);
-      if(providerMetadata.selectionVersion===2&&!providerMetadata.fastDelivery){
-        const reviewable=merged.sources.filter(s=>results.some(r=>r.providerSourceId===s.providerSourceId&&r.review.level!=='metadata_only'));
+      if(providerMetadata.selectionVersion===2&&(!providerMetadata.fastDelivery||brief.data.profileVerificationRequired)){
+        const actionIds=new Set(fastClipCandidates(merged.sources,brief.data).flatMap(c=>c.sourceIds));
+        const reviewable=merged.sources.filter(s=>results.some(r=>r.providerSourceId===s.providerSourceId&&r.review.level!=='metadata_only')&&(!providerMetadata.fastDelivery||actionIds.has(s.providerSourceId)));
         if(reviewable.length){
           const reviewAt=new Date().toISOString();
           const claim=await db.from('creator_research_jobs').update({status:'reviewing_sources',provider_metadata:{...providerMetadata,stage:'pilot_relevance_starting',postReviewStartedAt:reviewAt,postReviewSourceIds:reviewable.map(s=>s.providerSourceId),inspectionAllSources:merged.sources,inspectionCandidates:merged.candidates},updated_at:reviewAt}).eq('id',job.id).eq('status','researching').select('id').maybeSingle();if(claim.error)throw Error('POST_REVIEW_CLAIM');if(!claim.data)return reply(headers,{job},202);
@@ -295,7 +296,7 @@ Deno.serve(async (request) => {
           const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:'Checking audience relevance against reviewed content…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>postReviewStartedAt',reviewAt).select('*').maybeSingle();if(saved.error)throw Error('POST_REVIEW_SAVE');return reply(headers,{job:saved.data??job},202);
         }
       }
-      inspectionRun={id:String(job.provider_response_id),status:'completed',...merged,...(providerMetadata.fastDelivery?{candidates:fastClipCandidates(merged.sources,brief.data)}:{}),raw:{},usage:providerMetadata.inspectionUsage as Record<string,unknown>??{}};
+      inspectionRun={id:String(job.provider_response_id),status:'completed',...merged,...(providerMetadata.fastDelivery?{candidates:brief.data.profileVerificationRequired?[]:fastClipCandidates(merged.sources,brief.data)}:{}),raw:{},usage:providerMetadata.inspectionUsage as Record<string,unknown>??{}};
       providerMetadata.pilotReviewed=true;providerMetadata.reviewDiagnostics=check.state==='completed'?{inspected:check.inspectedCount,elapsedMs:check.elapsedMs,transcriptReviewed:check.results.filter(r=>r.review.transcript).length,videoSampled:check.results.filter(r=>r.review.level==='video_sampled').length,generationIds:check.results.flatMap(r=>r.review.generationIds)}: {inspected:0,reason:check.state==='failed'?check.reason:'Media review deadline exceeded'};
       const kept=await db.from('creator_research_jobs').update({provider_metadata:providerMetadata,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching');if(kept.error)throw Error('PERSISTENCE');
     }
@@ -408,7 +409,7 @@ Deno.serve(async (request) => {
       }
       const freshByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
       for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
-      if(job.incremental_delivery&&freshSources.length){
+      if(job.incremental_delivery&&freshSources.length&&(!brief.data.profileVerificationRequired||wantsVisibleAction(brief.data))){
         const action=wantsVisibleAction(brief.data);
         // Small action batches publish finished checks instead of waiting for five serial media imports.
         const selected=action?freshSources.slice(0,Math.min(2,Math.max(1,Number(job.requested_count)-Number(job.delivered_count)))):freshSources;
@@ -622,7 +623,7 @@ Deno.serve(async (request) => {
     const blockedUrls = new Set(brief.data.researchBlockedUrls.map(canonicalResearchUrl).filter(Boolean));
     const sourcesById = new Map(providerRun.sources.map(source => [source.providerSourceId, source]));
     const eligibleCandidates = brief.data.sourceMode === 'videos'
-      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= (providerMetadata.fastDelivery||brief.data.profileRankingOnly?0:70) && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= (!brief.data.profileVerificationRequired&&(providerMetadata.fastDelivery||brief.data.profileRankingOnly)?0:70) && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
       : qualifyArticleCandidates(providerRun.candidates,providerRun.sources,brief.data);
     if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={requiredLanguage:'en',publisherPolicy:'established_news_editorial',approvedDomains:[...ARTICLE_NEWS_DOMAINS],minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
     const requestedCount = Number(job.requested_count);

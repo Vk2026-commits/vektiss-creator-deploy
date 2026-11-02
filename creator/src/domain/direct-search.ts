@@ -6,17 +6,15 @@ export function directSearchBrief(brief:ResearchBrief,query:string,useProfile:bo
  const searchQuery=query.trim();
  if(!useProfile&&!searchQuery)throw new Error('SEARCH_QUERY_REQUIRED');
  const actionRequired=visibleActionOnly??(useProfile&&wantsVisibleAction(brief));
- const result={...brief,profileRankingOnly:true,...(visibleActionOnly!==undefined?{visibleActionOnly}: {})};
+ const result={...brief,profileRankingOnly:!useProfile,profileVerificationRequired:useProfile,...(visibleActionOnly!==undefined?{visibleActionOnly}: {})};
  if(!useProfile){
   for(const key of ['expertise','experience','communicationStyle','preferredCtaStyle','creatorContext','primaryAudience','profileContext','researchScreeningCriteria','researchSeekSituations'] as const)result[key]='';
   for(const key of ['industries','creatorTone','phrasesToAvoid','audienceProblems','audienceInterests','contentPillars','sourceTopics','reactionAngles','desiredOutcomes','profileTone','thingsToAvoid','researchReferenceUrls','researchBlockedUrls'] as const)result[key]=[];
   result.audienceName='Direct search';result.researchSourcePlatforms=['TikTok','Instagram','YouTube'];
  }
- // Profile preferences influence ranking; they must not veto a topic match.
+ // An enabled profile is an explicit relevance requirement, not a decorative score.
  if(useProfile){
-  result.profileContext=[result.profileContext,`Ranking preferences only: ${result.researchScreeningCriteria}`,result.thingsToAvoid.length?`Lower-priority topics: ${result.thingsToAvoid.join(', ')}`:''].filter(Boolean).join('\n').slice(0,5000);
-  result.researchScreeningCriteria='Match the requested topic. Use the content profile to rank useful ideas and suggest original angles, not to exclude a topic-matching source for a different format, audience, or presentation style. Reject genuinely off-topic or unverifiable sources; never invent relevance.';
-  result.thingsToAvoid=[];
+  result.researchScreeningCriteria=[result.researchScreeningCriteria,'Verify each clip against the creator’s audience, expertise, topics, and exclusions. Require a concrete useful connection supported by source evidence. Keyword overlap alone is insufficient; reject unrelated entertainment or incidental mentions. Explain the profile connection without inventing one.'].filter(Boolean).join('\n').slice(0,12000);
  }
  if(searchQuery){result.searchQuery=searchQuery;result.sourceTopics=searchKeywords(searchQuery);result.researchSeekSituations=searchQuery;result.researchScreeningCriteria=[`Find content matching at least one of these keyword phrases: ${searchKeywords(searchQuery).join("; ")}. Search each phrase separately; do not require every phrase in one clip. Do not substitute adjacent topics.`,result.researchScreeningCriteria].filter(Boolean).join('\n').slice(0,12000);}
  if(actionRequired)result.researchScreeningCriteria+='\nVisible action required. '+actionEvidenceInstruction({...brief,visibleActionOnly:true});
