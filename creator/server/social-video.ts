@@ -28,10 +28,10 @@ export function socialVideoUrl(value:string):string|null{
  if(h==='tiktok.com'){const path=u.pathname.match(/^\/@[\w.-]+\/video\/\d+\/?$/);if(!path)throw Error('VIDEO_LINK');return `https://www.tiktok.com${path[0]}`;}
  return null;
 }
-export async function importVideo(root:string,value:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>){
+export async function importVideo(root:string,value:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>,timeoutMs=600000){
  const social=socialVideoUrl(value);
- if(social)return cobaltVideo(social,consume);
- if(consume)return publicVideo(value,consume,AbortSignal.timeout(600000));
+ if(social)return cobaltVideo(social,consume,timeoutMs);
+ if(consume)return publicVideo(value,consume,AbortSignal.timeout(timeoutMs));
  const media=await publicResource(value,AbortSignal.timeout(60000),0,10*1024*1024);
  const type=media.headers['content-type']?.split(';')[0];
  if(media.status!==200||!['video/mp4','video/webm','audio/mp4','audio/webm','audio/x-m4a'].includes(type)||!media.body.length)throw Error('VIDEO_FORMAT');

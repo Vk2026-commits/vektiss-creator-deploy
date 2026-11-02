@@ -1,15 +1,15 @@
 import {loadEnv} from 'vite';
 // Server-only configuration. Never expose these values through VITE_* variables.
 const hostedOrigin = 'https://mc-4rr8dq8lv6.bunny.run';
-export async function cobaltMedia(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>,videoOnly=false) {
+export async function cobaltMedia(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>,videoOnly=false,timeoutMs=600000) {
  const env=loadEnv(process.env.NODE_ENV??'development',process.cwd(),'CREATOR_COBALT_');
  const origin=env.CREATOR_COBALT_URL??'http://127.0.0.1:9000';
  const key=env.CREATOR_COBALT_KEY;
  if(!['http://127.0.0.1:9000',hostedOrigin].includes(origin)||(origin===hostedOrigin&&!key))throw Error('VIDEO_SETUP');
- const signal=AbortSignal.timeout(600000);
+ const signal=AbortSignal.timeout(timeoutMs);
  let response:Response;
  try { response=await fetch(origin+'/',{method:'POST',redirect:'error',signal,headers:{Accept:'application/json','Content-Type':'application/json',...(key?{Authorization:`Api-Key ${key}`}:{})},body:JSON.stringify({url,videoQuality:'480',localProcessing:'disabled',alwaysProxy:true})}); }
- catch { throw Error('VIDEO_SETUP'); }
+ catch { throw Error(signal.aborted?'VIDEO_TIMEOUT':'VIDEO_SETUP'); }
  const result=await response.json();
  if(!response.ok||result.status==='error')throw Error(/login|private|age|sensitive|auth/i.test(result.error?.code??'')?'VIDEO_LOGIN':'VIDEO_EXTRACT');
  const first=result.status==='picker'?result.picker?.[0]:null;
@@ -29,4 +29,4 @@ export async function cobaltMedia(url:string,consume?:(source:AsyncIterable<Uint
  if(!size)throw Error('VIDEO_FORMAT');
  return {body:Buffer.concat(chunks),type:type!,firstOnly:!!first};
 }
-export async function cobaltVideo(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>){return cobaltMedia(url,consume,true);}
+export async function cobaltVideo(url:string,consume?:(source:AsyncIterable<Uint8Array>)=>Promise<{body:Buffer;type:string}>,timeoutMs=600000){return cobaltMedia(url,consume,true,timeoutMs);}

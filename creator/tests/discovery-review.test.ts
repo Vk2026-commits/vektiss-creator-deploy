@@ -22,3 +22,15 @@ it('preserves transcript evidence when visual analysis fails and reports the lim
 it('enforces the five-source maximum before any provider calls',async()=>{vi.stubGlobal('fetch',vi.fn(async()=>Response.json([{...job,provider_metadata:{...job.provider_metadata,inspectionSources:Array(6).fill(source)}}])));await expect(reviewDiscovery(dir,{jobId},'Bearer test',config)).rejects.toThrow();expect(mocks.importer).not.toHaveBeenCalled();});
 
 it('skips paid transcription when the validated file has no audio stream',async()=>{mocks.prepare.mockImplementation(async(stream,preserve)=>{for await(const _ of stream){}if(preserve)await preserve(file);return {body:Buffer.from('media'),hasAudio:false};});const actions:string[]=[];vi.stubGlobal('fetch',vi.fn(async(_url,options)=>{if(!options?.body)return Response.json([job]);actions.push(String((options.body as FormData).get('action')));return Response.json({report:{summary:'Visual only',claims:'A caption claim',observations:'Dashboard',angle:'Explain costs',limitations:'No speech'}});}));const r=await reviewDiscovery(dir,{jobId},'Bearer test',config);expect(actions).toEqual(['video-analysis']);expect(r.results[0].review.transcript).toBe('');expect(r.results[0].review.limitations).toContain('Speech unavailable');});
+
+it('fast discovery checks visuals without full paid transcription and bounds imports',async()=>{
+ const actions:string[]=[];vi.stubGlobal('fetch',vi.fn(async(_url,options)=>{
+ if(!options?.body)return Response.json([{...job,provider_metadata:{...job.provider_metadata,fastDelivery:true}}]);
+ actions.push(String((options.body as FormData).get('action')));
+ return Response.json({report:{summary:'Visible demonstration',claims:'None',observations:'A person demonstrates a rescue',angle:'Safety',limitations:'Sampled frames only'}});
+ }));
+ const result=await reviewDiscovery(dir,{jobId},'Bearer test',config);
+ expect(actions).toEqual(['video-analysis']);
+ expect(mocks.importer.mock.calls[0][3]).toBe(20000);
+ expect(result.results[0].review.level).toBe('video_sampled');
+});
