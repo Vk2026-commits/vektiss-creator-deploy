@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {actionFormatRejection} from './search-intent.ts';
 import type {ProviderResearchCandidate,ResearchSource,ResearchBrief} from './research.ts';
 export const screeningDecisionSchema=z.object({sourceId:z.number().int().positive(),outcome:z.enum(['accepted','rejected','needs_content_review']),reason:z.string().min(1).max(300)});
 export type ScreeningDecision=z.infer<typeof screeningDecisionSchema>;
@@ -11,6 +12,8 @@ export function sourceTopicSupported(s:ResearchSource,brief?:ResearchBrief):bool
 export function screeningDecisions(sources:ResearchSource[],candidates:ProviderResearchCandidate[],supplied:ScreeningDecision[]=[],brief?:ResearchBrief):ScreeningDecision[]{
  const byId=new Map(supplied.map(d=>[d.sourceId,d]));
  return sources.map(s=>{
+  const formatReason=brief? actionFormatRejection(brief,s):null;
+  if(formatReason)return {sourceId:s.providerSourceId,outcome:'rejected' as const,reason:formatReason};
   const decision=byId.get(s.providerSourceId)??{sourceId:s.providerSourceId,outcome:'needs_content_review' as const,reason:'No explicit metadata verdict; content review required.'};
   return decision.outcome==='accepted'&&!sourceTopicSupported(s,brief)?{...decision,outcome:'needs_content_review' as const,reason:'Source evidence does not establish an AI connection; a hypothetical reaction angle is insufficient.'}:decision;
  });

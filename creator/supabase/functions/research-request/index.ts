@@ -144,7 +144,7 @@ Deno.serve(async (request) => {
       brief.researchSeekSituations = quality.seekSituations;
       brief.researchBlockedUrls = quality.badExamples;
     }
-    brief = directSearchBrief(brief,input.searchQuery,input.useContentProfile);
+    brief = directSearchBrief(brief,input.searchQuery,input.useContentProfile,input.visibleActionOnly);
     brief.sourceMode=input.sourceMode;
     if(input.sourceMode==='videos'&&input.discoveryFilters){brief.discoveryFilters=input.discoveryFilters;brief.researchSourcePlatforms=input.discoveryFilters.platform==='all'?['TikTok','Instagram','YouTube']:[input.discoveryFilters.platform];}
     if(input.sourceMode==='articles'){

@@ -53,3 +53,9 @@ it('retains query and collection diagnostics without treating missing historical
  expect(data).toMatchObject({queryPack:['security intervention'],sourceCount:0,rawCount:12,invalidCount:8,formatRejectedCount:4});
  expect(discoveryDiagnostics({sources:[]}).rawCount).toBeNull();
 });
+
+it('rejects an explicitly observed talking head even if the model accepts the topic',async()=>{
+ const {screeningDecisions}=await import('../src/domain/pilot-screening');
+ const source={providerSourceId:1,title:'Safety tips',snippet:'Personal safety',url:'https://example.com/video',publishedAt:null,sourceType:'instagram-reels-native',review:{observations:'Talking head describing safety tips.'}} as any;
+ expect(screeningDecisions([source],[],[{sourceId:1,outcome:'accepted',reason:'Relevant safety topic'}],brief)[0].outcome).toBe('rejected');
+});

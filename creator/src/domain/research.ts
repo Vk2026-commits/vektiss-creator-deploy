@@ -95,6 +95,7 @@ export const researchBriefSchema = z
   .object({
     searchQuery: z.string().trim().max(300).optional(),
     profileRankingOnly: z.boolean().optional(),
+    visibleActionOnly: z.boolean().optional(),
     expertise: z.string().trim().max(2000),
     experience: z.string().trim().max(2000),
     industries: z.array(z.string().trim().max(160)).max(20),
@@ -131,6 +132,7 @@ export const researchRequestSchema = z
   .object({
     searchQuery: z.string().trim().max(300).default('').refine(value=>searchKeywords(value).length<=5,'Use up to five keyword phrases.'),
     useContentProfile: z.boolean().default(true),
+    visibleActionOnly: z.boolean().optional(),
     profileId: z.string().uuid(),
     requestedCount: z.number().int().min(1).max(10),
     idempotencyKey: z.string().uuid(),

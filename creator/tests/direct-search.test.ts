@@ -7,7 +7,7 @@ import {buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack
 const brief=researchBriefSchema.parse({expertise:'security',experience:'security',industries:['security'],communicationStyle:'direct',creatorTone:[],phrasesToAvoid:[],preferredCtaStyle:'',creatorContext:'security only',audienceName:'Safety',primaryAudience:'guards',audienceProblems:[],audienceInterests:['safety'],contentPillars:['safety'],sourceTopics:['personal safety'],reactionAngles:[],desiredOutcomes:[],profileTone:[],thingsToAvoid:['food'],profileContext:'Only safety clips',researchScreeningCriteria:'visible action only',researchReferenceUrls:['https://example.com/safety'],discoveryPilot:true});
 describe('direct search',()=>{
  it('removes inherited topic and screening restrictions when profile is off',()=>{const result=directSearchBrief(brief,'fast food fries rankings',false);expect(result.thingsToAvoid).toEqual([]);expect(result.creatorContext).toBe('');expect(result.researchReferenceUrls).toEqual([]);expect(result.researchScreeningCriteria).not.toContain('visible action');expect(result.sourceTopics).toEqual(['fast food fries rankings']);expect(brief.sourceTopics).toEqual(['personal safety']);});
- it('uses profile screening as ranking preferences and queries every platform',()=>{const result=directSearchBrief(brief,'fast food fries rankings',true);expect(result.researchScreeningCriteria).not.toContain('visible action');expect(result.profileContext).toContain('visible action');expect(result.thingsToAvoid).toEqual([]);for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['fast food fries rankings']);expect(result.discoveryPilot).toBe(true);});
+ it('preserves explicit action format while ranking topic fit and querying every platform',()=>{const result=directSearchBrief(brief,'fast food fries rankings',true);expect(result.researchScreeningCriteria).toContain('Visible action required');expect(result.profileContext).toContain('visible action');expect(result.thingsToAvoid).toEqual([]);for(const build of [buildTikTokQueryPack,buildCrossPlatformQueryPack,buildInstagramQueryPack])expect(build(result)).toEqual(['fast food fries rankings']);expect(result.discoveryPilot).toBe(true);});
  it('rejects empty profile-free requests and defaults old clients to profile mode',()=>{const base={profileId:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),requestedCount:3};expect(researchRequestSchema.parse(base).useContentProfile).toBe(true);expect(researchRequestSchema.safeParse({...base,useContentProfile:false,searchQuery:'  '}).success).toBe(false);});
 });
 
@@ -26,7 +26,8 @@ it('limits ranking context and keeps explicit keyword evidence separate',()=>{
 
 it('ranks profile fit rather than applying legacy audience vetoes',()=>{
  const prompt=nativeScreeningInstructions(directSearchBrief(brief,'restaurant reviews',true),5,15,[]);
- expect(prompt).toContain('ranking preference, never an additional topic or format gate');
+ expect(prompt).toContain('STRICT FORMAT REQUIREMENT remains mandatory');
+ expect(prompt).toContain('omit the lead rather than using Watch first');
  expect(prompt).not.toContain('For an AI-income audience, acceptance requires');
  expect(prompt).not.toContain('reject news/reaction/compilation packaging');
 });
@@ -36,4 +37,21 @@ it('keeps accepted topic matches with lower profile scores in search mode',()=>{
  const decisions=[{sourceId:1,outcome:'accepted',reason:'Matches topic'},{sourceId:2,outcome:'rejected',reason:'Off topic'}] as any;
  expect(acceptedCandidates(candidates,decisions,0)).toEqual([candidates[0]]);
  expect(acceptedCandidates(candidates,decisions)).toEqual([]);
+});
+
+it('retains the action requirement after keyword replacement but clears it with profile off',()=>{
+ const original={...brief,researchScreeningCriteria:'',researchSeekSituations:'real incident footage'};
+ const on=directSearchBrief(original,'security protection',true);
+ expect(nativeScreeningInstructions(on,5,15,[])).toContain('STRICT FORMAT REQUIREMENT');
+ const off=directSearchBrief(original,'security protection',false);
+ expect(nativeScreeningInstructions(off,5,15,[])).not.toContain('This profile wants the situation/action itself');
+});
+
+it('lets the action toggle override the profile in both directions',async()=>{
+ const {wantsVisibleAction}=await import('../src/domain/search-intent');
+ expect(wantsVisibleAction(directSearchBrief(brief,'security',true,false))).toBe(false);
+ const enabled=directSearchBrief(brief,'security',false,true);
+ expect(wantsVisibleAction(enabled)).toBe(true);
+ expect(nativeScreeningInstructions(enabled,5,15,[])).toContain('This profile wants the situation/action itself');
+ expect(researchRequestSchema.parse({profileId:crypto.randomUUID(),idempotencyKey:crypto.randomUUID(),requestedCount:5,visibleActionOnly:true}).visibleActionOnly).toBe(true);
 });
