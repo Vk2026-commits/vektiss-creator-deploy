@@ -1,7 +1,7 @@
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {PublicError} from './avatar-contract.ts';
 import {engineEstimate} from './avatar-engine.ts';
-import {providerVideo,testExcerpt,testPayload,fullScript,isCreditError,creditErrorMessage,type TestCommand} from './presenter-test.ts';
+import {providerVideo,validateVoiceEngine,testExcerpt,testPayload,fullScript,isCreditError,creditErrorMessage,type TestCommand} from './presenter-test.ts';
 import {credentialVault,type SealedCredential} from './credential-crypto.ts';
 import {HeyGenCatalog} from './heygen.ts';
 import {selectedVoiceForPlan} from './selected-voice.ts';
@@ -90,7 +90,11 @@ export function presenterTestService(db:SupabaseClient,vault:ReturnType<typeof c
    engineSnapshot.avatar_engine=plan.avatar_engine;
    avatarType=look.avatar_type;
   }
-  if(plan.voice_engine&&plan.voice_engine!=='auto')engineSnapshot.voice_engine=plan.voice_engine;
+  if(plan.voice_engine&&plan.voice_engine!=='auto'){
+   const voice=await new HeyGenCatalog(await keyFor(user,avatar.connection_id)).getVoice(snapshot.voice_id!);
+   validateVoiceEngine(plan.voice_engine,voice.available_engines);
+   engineSnapshot.voice_engine=plan.voice_engine;
+  }
   if(plan.voice_speed!==undefined&&plan.voice_speed!==1)engineSnapshot.voice_speed=plan.voice_speed;
   // A new test revision is needed to certify the current look. Full-render
   // revisions remain unchanged so existing paid outputs are still recoverable.
