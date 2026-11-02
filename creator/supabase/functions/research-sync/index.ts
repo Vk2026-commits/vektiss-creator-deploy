@@ -456,7 +456,7 @@ Deno.serve(async (request) => {
         provider_response_id: screeningRuns[0]?.id ?? job.provider_response_id, status: "researching",
         phase: currentRound > 1 ? `Checking clip quality (round ${currentRound} of 3; ${Number(providerMetadata.acceptedCountSoFar ?? 0)} of ${job.requested_count} strong clips so far)…` : "Ranking direct video leads…",
         provider_metadata: {
-          ...providerMetadata, stage: "multi_screening", apifyStatus: discovery.status,
+          ...providerMetadata, fastDelivery:false, stage: "multi_screening", apifyStatus: discovery.status,
           discoveryRuns: undefined, discoverySummary: multi ? checkedRuns.map(discoveryDiagnostics) : [discoveryDiagnostics({id:job.provider_response_id,platform:"TikTok",...discovery})],
           screeningStartedAt:new Date().toISOString(),screeningRuns, screeningLaunchFailures: started.length - screeningRuns.length,
           pendingScreeningBatches:pendingReviewBatches(batches,started.map(result=>result.status==='fulfilled')).map(sources=>sources.map(source=>source.providerSourceId)),
