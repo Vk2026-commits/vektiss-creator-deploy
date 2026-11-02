@@ -1,3 +1,5 @@
+import {fastClipCandidates} from '../../../src/domain/fast-discovery.ts';
+import {wantsVisibleAction} from '../../../src/domain/search-intent.ts';
 import {createSearchCache,searchCacheKey} from '../_shared/search-cache.ts';
 import {refillDecision} from '../../../src/domain/search-delivery.ts';
 import {ARTICLE_NEWS_DOMAINS} from '../../../src/domain/article-policy.ts';
@@ -270,10 +272,10 @@ Deno.serve(async (request) => {
     if(providerMetadata.stage==='pilot_inspection'){
       if(Date.parse(String(providerMetadata.postReviewRetryAt))>Date.now())return reply(headers,{job},202);
       let check;try{check=await inspectPilot(String(job.id),request.headers.get('authorization')!);}catch{check={state:'failed' as const,reason:'Media inspection unavailable; watch original.'};}
-      if(check.state==='pending'&&Date.now()-Date.parse(String(providerMetadata.inspectionStartedAt))<30*60*1000)return reply(headers,{job},202);
+      if(check.state==='pending'&&Date.now()-Date.parse(String(providerMetadata.inspectionStartedAt))<(providerMetadata.fastDelivery?120000:30*60*1000))return reply(headers,{job},202);
       const results=check.state==='completed'?check.results:[];
       const merged=mergePilotEvidence(nativeSources(providerMetadata.inspectionAllSources),retainedCandidates(providerMetadata.inspectionCandidates),results);
-      if(providerMetadata.selectionVersion===2){
+      if(providerMetadata.selectionVersion===2&&!providerMetadata.fastDelivery){
         const reviewable=merged.sources.filter(s=>results.some(r=>r.providerSourceId===s.providerSourceId&&r.review.level!=='metadata_only'));
         if(reviewable.length){
           const reviewAt=new Date().toISOString();
@@ -293,7 +295,7 @@ Deno.serve(async (request) => {
           const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:'Checking audience relevance against reviewed content…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>postReviewStartedAt',reviewAt).select('*').maybeSingle();if(saved.error)throw Error('POST_REVIEW_SAVE');return reply(headers,{job:saved.data??job},202);
         }
       }
-      inspectionRun={id:String(job.provider_response_id),status:'completed',...merged,raw:{},usage:providerMetadata.inspectionUsage as Record<string,unknown>??{}};
+      inspectionRun={id:String(job.provider_response_id),status:'completed',...merged,...(providerMetadata.fastDelivery?{candidates:fastClipCandidates(merged.sources,brief.data)}:{}),raw:{},usage:providerMetadata.inspectionUsage as Record<string,unknown>??{}};
       providerMetadata.pilotReviewed=true;providerMetadata.reviewDiagnostics=check.state==='completed'?{inspected:check.inspectedCount,elapsedMs:check.elapsedMs,transcriptReviewed:check.results.filter(r=>r.review.transcript).length,videoSampled:check.results.filter(r=>r.review.level==='video_sampled').length,generationIds:check.results.flatMap(r=>r.review.generationIds)}: {inspected:0,reason:check.state==='failed'?check.reason:'Media review deadline exceeded'};
       const kept=await db.from('creator_research_jobs').update({provider_metadata:providerMetadata,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching');if(kept.error)throw Error('PERSISTENCE');
     }
@@ -406,6 +408,18 @@ Deno.serve(async (request) => {
       }
       const freshByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
       for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
+      if(job.incremental_delivery&&freshSources.length){
+        const action=wantsVisibleAction(brief.data);
+        const selected=action?freshSources.slice(0,5):freshSources;
+        const next={...providerMetadata,fastDelivery:true,stage:action?'pilot_inspection':'fast_delivery',
+          inspectionStartedAt:new Date().toISOString(),inspectionSources:selected,inspectionAllSources:selected,
+          inspectionCandidates:[],inspectionUsage:{},nativeSources:selected,pilotReviewed:!action,
+          scScreenedUrls:[...new Set([...(providerMetadata.scScreenedUrls as string[]??[]),...selected.map(s=>s.url)])]};
+        const saved=await db.from('creator_research_jobs').update({provider_metadata:next,
+          phase:action?'Checking visible action in shortlisted clips…':'Publishing matching clips…',updated_at:new Date().toISOString()})
+          .eq('id',job.id).eq('status','researching').select('*').maybeSingle();
+        if(saved.error)throw Error('FAST_DELIVERY_SAVE');return reply(headers,{job:saved.data??job},202);
+      }
       if (!freshSources.length) {
         const updated = await db.from("creator_research_jobs").update({
           status: "researching", phase: `Round ${currentRound} found no new clips; checking ${priorCandidates.length} candidates…`,
@@ -463,7 +477,8 @@ Deno.serve(async (request) => {
     const noNewScreening = providerMetadata.stage === "multi_screening" && Array.isArray(providerMetadata.screeningRuns) && providerMetadata.screeningRuns.length === 0;
     if (screeningStage && !suppliedSources?.length && !noNewScreening) throw new Error("NATIVE_SOURCES_MISSING");
     let providerRun: ProviderRun | CompletedResearchRun;
-    if(inspectionRun)providerRun=inspectionRun;
+    if(providerMetadata.stage==='fast_delivery')providerRun={id:String(job.provider_response_id),status:'completed',sources:nativeSources(providerMetadata.nativeSources),candidates:fastClipCandidates(nativeSources(providerMetadata.nativeSources),brief.data),raw:{},usage:{}};
+    else if(inspectionRun)providerRun=inspectionRun;
     else if (providerMetadata.stage === "multi_screening") {
       if(Date.parse(String(providerMetadata.screeningRetryAt))>Date.now())return reply(headers,{job},202);
       const runs = Array.isArray(providerMetadata.screeningRuns) ? providerMetadata.screeningRuns as Array<{ id: string; sourceIds: number[] }> : [];
@@ -537,7 +552,7 @@ Deno.serve(async (request) => {
     }
     if (!("candidates" in providerRun)) throw new Error("RESEARCH_EVIDENCE_MISSING");
 
-    if(providerMetadata.selectionVersion===2&&!providerMetadata.pilotReviewed&&!inspectionRun){
+    if(providerMetadata.selectionVersion===2&&!providerMetadata.fastDelivery&&!providerMetadata.pilotReviewed&&!inspectionRun){
       const priorDecisions=(providerMetadata.metadataDecisions??[]) as ScreeningDecision[];
       const decisions=screeningDecisions(providerRun.sources,providerRun.candidates,[...priorDecisions,...providerRun.decisions??[]],brief.data);
       const approved=acceptedCandidates(providerRun.candidates,decisions,brief.data.profileRankingOnly?0:70);
@@ -606,7 +621,7 @@ Deno.serve(async (request) => {
     const blockedUrls = new Set(brief.data.researchBlockedUrls.map(canonicalResearchUrl).filter(Boolean));
     const sourcesById = new Map(providerRun.sources.map(source => [source.providerSourceId, source]));
     const eligibleCandidates = brief.data.sourceMode === 'videos'
-      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= (brief.data.profileRankingOnly?0:70) && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
+      ? providerRun.candidates.filter((candidate) => candidate.relevanceScore >= (providerMetadata.fastDelivery||brief.data.profileRankingOnly?0:70) && !candidate.sourceIds.some(id => blockedUrls.has(canonicalResearchUrl(sourcesById.get(id)?.url ?? ""))))
       : qualifyArticleCandidates(providerRun.candidates,providerRun.sources,brief.data);
     if(brief.data.sourceMode==='articles')providerMetadata.articleScreening={requiredLanguage:'en',publisherPolicy:'established_news_editorial',approvedDomains:[...ARTICLE_NEWS_DOMAINS],minimumRelevance:70,candidateCount:providerRun.candidates.length,belowMinimum:providerRun.candidates.filter(c=>c.relevanceScore<70).length,unsupportedOrBlocked:providerRun.candidates.filter(c=>c.relevanceScore>=70).length-eligibleCandidates.length,eligibleCount:eligibleCandidates.length};
     const requestedCount = Number(job.requested_count);

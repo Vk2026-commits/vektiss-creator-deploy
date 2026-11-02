@@ -230,7 +230,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
               <div className="opportunity-meta">
                 <span className="signal-category">{opportunity.category}</span>
                 <span className={needsCheck ? "signal-status signal-status-check" : "signal-status"}>{needsCheck ? <><Eye size={14}/> {isArticle ? 'Read first' : 'Watch first'}</> : <><ShieldCheck size={14}/> Ready to use</>}</span>
-                <small>Audience fit {Math.round(opportunity.relevance_score)}%</small>
+                {opportunity.category==='Search result'?<small>Direct search result</small>:<small>Audience fit {Math.round(opportunity.relevance_score)}%</small>}
               </div>
               {!isArticle&&!source?.engagement&&<div className="clip-engagement"><small>Performance data unavailable. This is an idea match, not a verified viral result.</small></div>}
               {!isArticle&&source?.engagement&&<div className="clip-engagement" aria-label="Reported clip engagement"><strong>{source.engagement.views===null?'Views unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.views)+' views'}</strong><span>{source.engagement.likes===null?'Likes unavailable':new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1}).format(source.engagement.likes)+' likes'}</span><span>{source.engagement.rate===null?'Engagement unavailable':source.engagement.rate.toFixed(1)+'% engagement'}</span>{source.engagement.baseline&&<strong>{source.engagement.baseline.ratio.toFixed(1)}× creator median · {source.engagement.baseline.sampleSize} recent videos</strong>}<small>{source.engagement.provider} snapshot · {new Date(source.engagement.observedAt).toLocaleDateString()}</small></div>}
@@ -242,11 +242,11 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
                 </div>
 
               </div>
-              <div className="signal-take">
+              {opportunity.category!=='Search result'&&opportunity.recommended_angle&&<div className="signal-take">
                 <span><Sparkles size={15}/> YOUR ORIGINAL ANGLE</span>
                 <p>{opportunity.recommended_angle}</p>
               </div>
-              <details className="idea-details"><summary>Why this idea works &amp; source details</summary>
+              }<details className="idea-details"><summary>Why this idea works &amp; source details</summary>
               <div className="signal-points">
                 <div><span>WHY IT FITS YOUR AUDIENCE</span><p>{opportunity.creator_connection}</p></div>
                 {opportunity.suggested_hook && <div><span>A HOOK TO MAKE YOUR OWN</span><p>{opportunity.suggested_hook}</p></div>}

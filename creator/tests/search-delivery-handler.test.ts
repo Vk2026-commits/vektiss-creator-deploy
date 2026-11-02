@@ -75,4 +75,15 @@ it('publishes four immediately, continues, and completes only after the fifth pr
  expect(state.job.provider_metadata.contentReviewReports[0]).toMatchObject({id:'failed-review',status:'incomplete',incompleteReason:'max_output_tokens'});
  expect(state.job.delivered_count).toBe(0);
 
+ // Direct results publish without a provider run, including when profile
+ // ranking would normally require a high AI relevance score.
+ state.rows=[];state.job.delivered_count=0;state.job.requested_count=1;
+ state.job.input_snapshot.visibleActionOnly=false;
+ state.job.provider_metadata={stage:'fast_delivery',fastDelivery:true,pilot:true,pilotReviewed:true,selectionVersion:2,nativeSources:[source(1)],scScreenedUrls:[source(1).url],scPool:[],scTasks:[],scLedger:[]};
+ state.run=null;
+ const direct=await state.handler(request());
+ expect(direct.status).toBe(200);expect(state.job.status).toBe('ready');
+ expect(state.rows).toHaveLength(1);expect(state.rows[0].category).toBe('Search result');
+ expect(fetch).not.toHaveBeenCalled();
+
 });
