@@ -409,7 +409,7 @@ Deno.serve(async (request) => {
       }
       const freshByPlatform = { TikTok: 0, Instagram: 0, YouTube: 0 };
       for (const source of freshSources) freshByPlatform[sourcePlatform(source)] += 1;
-      if(job.incremental_delivery&&freshSources.length&&(!brief.data.profileVerificationRequired||wantsVisibleAction(brief.data))){
+      if(job.incremental_delivery&&freshSources.length&&!brief.data.profileVerificationRequired){
         const action=wantsVisibleAction(brief.data);
         // Small action batches publish finished checks instead of waiting for five serial media imports.
         const selected=action?freshSources.slice(0,Math.min(2,Math.max(1,Number(job.requested_count)-Number(job.delivered_count)))):freshSources;
@@ -575,7 +575,9 @@ Deno.serve(async (request) => {
       const inspectionCandidates=providerRun.candidates.filter(c=>c.relevanceScore>=70).sort((a,b)=>b.relevanceScore-a.relevanceScore);
       const ids=providerMetadata.selectionVersion===2?inspectionIds(inspectionCandidates,providerMetadata.metadataDecisions as ScreeningDecision[]??[]):[...new Set(inspectionCandidates.map(c=>c.sourceIds[0]))].slice(0,INSPECTION_LIMIT);
       if(ids.length){
-        const next={...providerMetadata,stage:'pilot_inspection',inspectionStartedAt:new Date().toISOString(),inspectionSources:providerRun.sources.filter(s=>ids.includes(s.providerSourceId)),inspectionAllSources:providerRun.sources,inspectionCandidates:providerRun.candidates,inspectionUsage:providerRun.usage};
+        const quickAction=Boolean(job.incremental_delivery&&wantsVisibleAction(brief.data));
+        const selected=providerRun.sources.filter(s=>ids.includes(s.providerSourceId));
+        const next={...providerMetadata,fastDelivery:quickAction,stage:'pilot_inspection',inspectionStartedAt:new Date().toISOString(),inspectionSources:selected,inspectionAllSources:quickAction?selected:providerRun.sources,inspectionCandidates:quickAction?[]:providerRun.candidates,inspectionUsage:providerRun.usage};
         const update=await db.from('creator_research_jobs').update({provider_metadata:next,phase:'Inspecting shortlisted video and speech evidence…',updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','researching').eq('provider_metadata->>stage',String(providerMetadata.stage)).select('*').maybeSingle();if(update.error)throw Error('PERSISTENCE_INSPECTION');
         return reply(headers,{job:update.data??job},202);
       }
