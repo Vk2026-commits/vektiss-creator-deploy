@@ -34,3 +34,25 @@ it('fast discovery checks visuals without full paid transcription and bounds imp
  expect(mocks.importer.mock.calls[0][3]).toBe(20000);
  expect(result.results[0].review.level).toBe('video_sampled');
 });
+
+it('checks two sources concurrently without letting a failed source block the others',async()=>{
+ const sources=Array.from({length:5},(_,i)=>({...source,providerSourceId:i+1}));
+ let active=0,peak=0;
+ mocks.importer.mockImplementation(async(_root,_url,read)=>{
+  active++;peak=Math.max(peak,active);
+  await new Promise(resolve=>setTimeout(resolve,10));
+  active--;
+  return read((async function*(){yield Buffer.from('source');})());
+ });
+ let analyses=0;
+ vi.stubGlobal('fetch',vi.fn(async(_url,options)=>{
+  if(!options?.body)return Response.json([{...job,provider_metadata:{...job.provider_metadata,fastDelivery:true,inspectionSources:sources}}]);
+  if(++analyses===1)return new Response('{}',{status:503});
+  return Response.json({report:{summary:'Visible demonstration',claims:'None',observations:'A rescue is demonstrated',angle:'Safety',limitations:'Sampled frames'}});
+ }));
+ const result=await reviewDiscovery(dir,{jobId},'Bearer test',config);
+ expect(peak).toBe(2);
+ expect(result.inspectedCount).toBe(5);
+ expect(result.results.filter(r=>r.review.level==='video_sampled')).toHaveLength(4);
+ expect(mocks.frames.mock.calls.every(call=>call[2]===true)).toBe(true);
+});

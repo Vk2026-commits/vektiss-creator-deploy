@@ -19,6 +19,8 @@ it('extracts timestamped JPEGs and duration without a browser, including a silen
   const blob=await readFile(path);const input=()=> (async function*(){yield blob;})();
   const result=await extractVideoFrames(input());expect(result.duration).toBe(1);expect(result.frames.length).toBeGreaterThanOrEqual(2);
   expect(result.frames.every(f=>f.time>=0&&f.time<1&&f.image.startsWith('data:image/jpeg;base64,/9j/'))).toBe(true);
+  const quick=await extractVideoFrames(input(),undefined,true);
+  expect(quick.frames).toHaveLength(8);expect(quick.frames[0].time).toBe(0);expect(quick.frames[7].time).toBeCloseTo(.9);
   const refined=await extractVideoFrames(input(),[.25,.5]);expect(refined.frames.map(f=>f.time)).toEqual([.25,.5]);
   await expect(extractVideoFrames(input(),[2])).rejects.toThrow('outside');
   const tailPath=join(dir,'audio-tail.mp4');
