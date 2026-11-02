@@ -271,7 +271,7 @@ Deno.serve(async (request) => {
     }
     if(providerMetadata.stage==='pilot_inspection'){
       if(Date.parse(String(providerMetadata.postReviewRetryAt))>Date.now())return reply(headers,{job},202);
-      let check;try{check=await inspectPilot(String(job.id),request.headers.get('authorization')!);}catch{check={state:'failed' as const,reason:'Media inspection unavailable; watch original.'};}
+      let check;try{check=await inspectPilot(String(job.id),request.headers.get('authorization')!,providerMetadata.fastDelivery?String(providerMetadata.inspectionStartedAt):undefined);}catch{check={state:'failed' as const,reason:'Media inspection unavailable; watch original.'};}
       if(check.state==='pending'&&Date.now()-Date.parse(String(providerMetadata.inspectionStartedAt))<(providerMetadata.fastDelivery?120000:30*60*1000))return reply(headers,{job},202);
       const results=check.state==='completed'?check.results:[];
       const merged=mergePilotEvidence(nativeSources(providerMetadata.inspectionAllSources),retainedCandidates(providerMetadata.inspectionCandidates),results);

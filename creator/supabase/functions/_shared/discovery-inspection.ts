@@ -3,10 +3,12 @@ import {sourceReviewSchema,metadataReview} from '../../../src/domain/discovery-p
 import {researchSourceSchema,providerResearchCandidateSchema,type ResearchSource,type ProviderResearchCandidate} from '../../../src/domain/research.ts';
 declare const Deno:{env:{get(k:string):string|undefined}};
 const resultsSchema=z.object({results:z.array(z.object({providerSourceId:z.number().int(),review:sourceReviewSchema,summary:z.string().max(2500).optional(),angle:z.string().max(1800).optional()})).max(5),elapsedMs:z.number(),inspectedCount:z.number()});
-export async function inspectPilot(jobId:string,authorization:string){
+export async function inspectPilot(jobId:string,authorization:string,checkpoint?:string){
  const origin=Deno.env.get('CREATOR_MEDIA_ORIGIN')??'https://creator.vektiss.com';const u=new URL(origin);if(u.protocol!=='https:'||u.origin!==origin)throw Error('MEDIA_ORIGIN');
- const headers={authorization,'x-creator-capture':'1','content-type':'application/json','x-creator-job':jobId};
- const existing=await fetch(`${origin}/api/local-capture/jobs/${jobId}`,{headers,signal:AbortSignal.timeout(15000)});
+ let requestId=jobId;
+ if(checkpoint){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(jobId+':'+checkpoint)))).map(b=>b.toString(16).padStart(2,'0')).join('');requestId=`${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-8${hash.slice(17,20)}-${hash.slice(20,32)}`;}
+ const headers={authorization,'x-creator-capture':'1','content-type':'application/json','x-creator-job':requestId};
+ const existing=await fetch(`${origin}/api/local-capture/jobs/${requestId}`,{headers,signal:AbortSignal.timeout(15000)});
  if(existing.status===202)return {state:'pending' as const};
  if(existing.ok)return {state:'completed' as const,...resultsSchema.parse(await existing.json())};
  if(existing.status!==404){if([429,503].includes(existing.status))return {state:'pending' as const};return {state:'failed' as const,reason:`Media review ${existing.status}; watch original.`};}
