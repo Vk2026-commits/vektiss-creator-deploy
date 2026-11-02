@@ -7,7 +7,7 @@ vi.mock('@supabase/supabase-js',()=>({createClient:()=>({
  update(v:any){patch=v;return q;},insert(){return q;},upsert(){return q;},
  result(single=false){
   if(table==='creator_research_jobs'){
-   const matches=filters.every(([k,v])=>state.job[k]===v);
+   const matches=filters.every(([k,v])=>(k.startsWith('provider_metadata->>')?state.job.provider_metadata[k.split('->>')[1]]:state.job[k])===v);
    if(patch&&matches)Object.assign(state.job,patch);
    return {data:matches?(single?structuredClone(state.job):[structuredClone(state.job)]):null,error:null};
   }
@@ -49,4 +49,15 @@ it('publishes four immediately, continues, and completes only after the fifth pr
  expect(state.job.delivered_count).toBe(5);
  expect(state.rows).toHaveLength(5);
  expect(fetch).not.toHaveBeenCalled();
+ // A single qualifying candidate must start review without waiting for ten
+ // or draining the remaining retrieval tasks.
+ state.job.status='researching';state.job.delivered_count=0;
+ state.job.provider_metadata={stage:'scrape_discovery_v2',selectionVersion:2,pilot:true,scPool:[source(1)],scKnownIds:[],scScreenedUrls:[],scLedger:[],scTasks:[{id:'pending',kind:'search',platform:'TikTok',query:'business'}]};
+ const early=await state.handler(request());
+ expect(early.status).toBe(202);
+ expect(state.job.provider_metadata.stage).toBe('multi_discovery');
+ expect(state.job.provider_metadata.additionalSources).toHaveLength(1);
+ expect(state.job.provider_metadata.scTasks[0].state).toBeUndefined();
+ expect(fetch).not.toHaveBeenCalled();
+
 });

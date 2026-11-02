@@ -171,8 +171,16 @@ Deno.serve(async (request) => {
       pool=pool.filter(s=>!knownIds.has(videoIdentity(s.url)));
       const remaining=40-ledger.length-(brief.data.discoveryFilters?.mode==='outliers'&&!providerMetadata.baselineRuns?5:0);
       let pending=tasks.filter(t=>!t.state);
-      const target=Math.min(120-screened.length,Math.max((Number(job.requested_count)-Number(job.delivered_count))*2,job.incremental_delivery?3:10));
+      // Incremental delivery reviews any available eligible batch before more retrieval.
+      const target=job.incremental_delivery?1:Math.min(120-screened.length,Math.max((Number(job.requested_count)-Number(job.delivered_count))*2,10));
       const eligible=shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],Math.max(0,Math.min(job.incremental_delivery?Math.max(3,(Number(job.requested_count)-Number(job.delivered_count))*2):40,120-screened.length)));
+      // Enrich existing candidates before draining every pending search lane.
+      // These tasks still consume the same bounded retrieval ledger.
+      if(job.incremental_delivery&&eligible.length===0&&remaining>0&&!scrapeUnavailable(ledger)){
+        const details=detailTasks(pool.filter(s=>!screened.includes(s.url)),tasks,Math.min(3,remaining),brief.data);
+        tasks.push(...details);
+        pending=[...tasks.filter(t=>!t.state&&t.kind==='detail'),...tasks.filter(t=>!t.state&&t.kind!=='detail')];
+      }
       if(!pending.length&&remaining>0&&!scrapeUnavailable(ledger)&&eligible.length<target){
         const details=detailTasks(pool.filter(s=>!screened.includes(s.url)),tasks,Math.min(3,remaining),brief.data);
         const expansion=expansionTask(tasks);
@@ -192,7 +200,7 @@ Deno.serve(async (request) => {
       const byId=new Map(batch.map((t,i)=>[t.id,results[i]]));
       if(job.incremental_delivery)for(let i=0;i<batch.length;i++){const t=batch[i],status=results[i].ledger.status;if((status===429||status>=500)&&!t.id.endsWith('-retry')&&!tasks.some(x=>x.id===t.id+'-retry'))tasks.push({...t,id:t.id+'-retry',state:undefined});}
       const next={...providerMetadata,scTasks:tasks.map(t=>byId.has(t.id)?{...t,state:byId.get(t.id)!.diagnostic?'failed':'done',nextCursor:byId.get(t.id)!.nextCursor}:t),scPool:pool,scLedger:[...ledger,...results.map(r=>r.ledger)],scRawReturned:Number(providerMetadata.scRawReturned??0)+results.reduce((n,r)=>n+(r.ledger.id.startsWith('detail-')?0:r.sources.length),0),scInFlight:[],providerDiagnostics:[...providerMetadata.providerDiagnostics as string[]??[],...results.flatMap(r=>r.diagnostic?[r.diagnostic]:[])]};
-      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:`${pool.length} unique clips checked; selecting qualifying matches`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_RESULTS');return reply(headers,{job:saved.data??job},202);
+      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:`${pool.length} candidates collected · ${shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],120).length} pass date and engagement filters; ${screened.length} reviewed`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_RESULTS');return reply(headers,{job:saved.data??job},202);
     }
     if(providerMetadata.stage==='scrape_discovery'){
       const tasks=(Array.isArray(providerMetadata.scTasks)?providerMetadata.scTasks:[]) as SCTask[];
