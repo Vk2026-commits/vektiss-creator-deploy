@@ -49,6 +49,20 @@ it('publishes four immediately, continues, and completes only after the fifth pr
  expect(state.job.delivered_count).toBe(5);
  expect(state.rows).toHaveLength(5);
  expect(fetch).not.toHaveBeenCalled();
+ // Profile-only search publishes an explicitly AI-approved source without
+ // blocking on downloads or transcription. Unresolved metadata is not accepted.
+ state.rows=[];state.job.status='researching';state.job.requested_count=1;
+ state.job.delivered_count=0;state.job.reserved_count=1;
+ state.job.input_snapshot.visibleActionOnly=false;
+ state.job.input_snapshot.profileVerificationRequired=true;
+ state.job.provider_metadata={...metadata([source(1)]),pilotReviewed:false};
+ state.run={id:'review',status:'completed',sources:[source(1)],candidates:[candidate(1)],
+   decisions:[{sourceId:1,outcome:'accepted',reason:'Concrete service relevant to owners.'}],usage:{},raw:{}};
+ const profileOnly=await state.handler(request());
+ expect(profileOnly.status).toBe(200);expect(state.rows).toHaveLength(1);
+ expect(state.job.status).toBe('ready');expect(fetch).not.toHaveBeenCalled();
+ state.job.requested_count=5;state.job.input_snapshot.profileVerificationRequired=false;
+
  // A single qualifying candidate must start review without waiting for ten
  // or draining the remaining retrieval tasks.
  state.job.status='researching';state.job.delivered_count=0;

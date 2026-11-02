@@ -565,6 +565,9 @@ Deno.serve(async (request) => {
       providerMetadata.metadataRejectionCount=decisions.filter(d=>d.outcome==='rejected').length;
       providerMetadata.engagementDiagnostics={...providerMetadata.engagementDiagnostics as Record<string,unknown>,metadataReviewed:(providerMetadata.scExplicitReviewedIds as number[]).length,relevanceRejected:decisions.filter(d=>d.outcome==='rejected').length,needsContentReview:decisions.filter(d=>d.outcome==='needs_content_review').length};
       providerRun.candidates=approved;
+      // Profile relevance has already been reviewed. Without an explicit action
+      // requirement, publish supported metadata matches without downloading/transcribing.
+      if(job.incremental_delivery&&!wantsVisibleAction(brief.data))providerMetadata.pilotReviewed=true;
       const ledger=(providerMetadata.scLedger??[]) as SCLedger[];
       if(!job.incremental_delivery&&approved.length<Number(job.requested_count)&&checkedUrls.length<40&&ledger.length<40&&!scrapeUnavailable(ledger)&&!['no_more_results','provider_limited'].includes(String((providerMetadata.searchDiagnostics as Record<string,unknown>)?.stopReason))){
         const next={...providerMetadata,stage:'scrape_discovery_v2',round:Number(providerMetadata.round??1)+1,accumulatedSources:providerRun.sources,accumulatedCandidates:approved,accumulatedCost:providerCost(providerRun.usage)??0,scInFlight:[]};
