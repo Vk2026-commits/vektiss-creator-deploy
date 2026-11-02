@@ -11,7 +11,7 @@ import {startWatchlistDiscovery,startPlatformDiscovery} from '../_shared/platfor
 import {inspectPilot,mergePilotEvidence} from '../_shared/discovery-inspection.ts';
 import {dedupeVideos,INSPECTION_LIMIT,canonicalVideo,videoIdentity} from '../../../src/domain/discovery-pilot.ts';
 import {providerText} from '../../../src/domain/provider-text.ts';
-import {reviewWaitExpired} from '../../../src/domain/review-wait.ts';
+import {reviewWaitExpired,contentReviewRecovery} from '../../../src/domain/review-wait.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { getDeepResearchRun as fetchResearchRun, startDeepResearch, startNativeVideoScreening as startScreening, type CompletedResearchRun, type ProviderRun } from "../_shared/research-provider.ts";
@@ -249,8 +249,17 @@ Deno.serve(async (request) => {
       const checked=providerMetadata.postReviewRunId?await getDeepResearchRun(String(providerMetadata.postReviewRunId),brief.data,all.filter(s=>ids.has(s.providerSourceId))):{status:'failed'};
       if(checked.status!=='completed'){
         if(['queued','in_progress'].includes(checked.status)&&!reviewWaitExpired(providerMetadata.postReviewStartedAt))return reply(headers,{job},202);
-        providerMetadata.relevanceReviewLimited=true;
+        const recovery=contentReviewRecovery(providerMetadata.contentReviewFailures,checked.status);
+        providerMetadata.contentReviewFailures=recovery.failures;
+        providerMetadata.relevanceReviewLimited=recovery.limited;
       }
+      // Keep the provider ID and failure evidence after the round resets its fields.
+      providerMetadata.contentReviewReports=[...(providerMetadata.contentReviewReports as unknown[]??[]),{
+        id:providerMetadata.postReviewRunId??null,status:checked.status,
+        incompleteReason:'incompleteReason' in checked?checked.incompleteReason:null,
+        sourceIds:[...ids],at:new Date().toISOString(),
+        usage:'usage' in checked?checked.usage:{},
+      }];
       const original=retainedCandidates(providerMetadata.inspectionCandidates).filter(c=>!ids.has(c.sourceIds[0]));
       const complete='candidates' in checked?checked as CompletedResearchRun:undefined;
       const decisions=complete?screeningDecisions(complete.sources,complete.candidates,complete.decisions,brief.data):[];

@@ -60,4 +60,19 @@ it('publishes four immediately, continues, and completes only after the fifth pr
  expect(state.job.provider_metadata.scTasks[0].state).toBeUndefined();
  expect(fetch).not.toHaveBeenCalled();
 
+ // A terminal failure reviewing one inspected clip preserves the pool and
+ // advances to other candidates; it never approves the unresolved clip.
+ state.job.provider_metadata={stage:'pilot_relevance',selectionVersion:2,pilot:true,
+   postReviewRunId:'failed-review',postReviewSourceIds:[1],postReviewStartedAt:new Date().toISOString(),
+   inspectionAllSources:[source(1)],inspectionCandidates:[],scPool:[source(2)],scKnownIds:[],
+   scScreenedUrls:[source(1).url],scTasks:[],scLedger:[]};
+ state.run={id:'failed-review',status:'incomplete',incompleteReason:'max_output_tokens',usage:{}};
+ const recovered=await state.handler(request());
+ expect(recovered.status).toBe(202);
+ expect(state.job.status).toBe('researching');
+ expect(state.job.provider_metadata.stage).toBe('scrape_discovery_v2');
+ expect(state.job.provider_metadata.contentReviewFailures).toBe(1);
+ expect(state.job.provider_metadata.contentReviewReports[0]).toMatchObject({id:'failed-review',status:'incomplete',incompleteReason:'max_output_tokens'});
+ expect(state.job.delivered_count).toBe(0);
+
 });
