@@ -1,4 +1,5 @@
 import {deliveryProgress} from '../domain/search-delivery';
+import {useSavedSearchKeywords} from '../lib/use-saved-search-keywords';
 import {searchKeywords} from '../domain/search-keywords';
 import {DiscoverFilters} from './DiscoverFilters';
 import {discoveryFiltersSchema,type DiscoveryFilters} from '../domain/discovery-engagement';
@@ -72,8 +73,7 @@ export function Discover({ profiles, selectedId, onSelectProfile, onCreate }: { 
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState<string>("not_relevant");
   const [refining, setRefining] = useState<string | null>(null);
-  const [searchQuery,setSearchQuery]=useState('');
-  const [keywordDraft,setKeywordDraft]=useState('');
+  const {searchQuery,keywordDraft,setSearchQuery,setKeywordDraft}=useSavedSearchKeywords(profile?.id);
   const effectiveQuery=searchKeywords([searchQuery,keywordDraft].join(',')).join(', ');
   function addKeyword(){if(searchKeywords(effectiveQuery).length>5||effectiveQuery.length>300){setError('Use up to five phrases, totaling 300 characters.');return;}setSearchQuery(effectiveQuery);setKeywordDraft('');}
   const [useContentProfile,setUseContentProfile]=useState(true);
