@@ -112,14 +112,14 @@ Deno.serve(async (request) => {
     let resumeBrief:ReturnType<typeof researchBriefSchema.parse>|undefined;
     if(input.resumeJobId){
       const parent=await db.from('creator_research_jobs').select('*').eq('id',input.resumeJobId).eq('user_id',userId).eq('content_profile_id',input.profileId).maybeSingle();
-      if(parent.error||!parent.data?.incremental_delivery||!['failed','cancelled'].includes(parent.data.status))return reply(headers,{code:'RESUME_UNAVAILABLE'},409);
+      if(parent.error||!(parent.data?.incremental_delivery||parent.data?.input_snapshot?.sourceMode==='articles')||!(['failed','cancelled'].includes(parent.data.status)||(parent.data.input_snapshot?.sourceMode==='articles'&&parent.data.status==='ready'&&parent.data.delivered_count<parent.data.requested_count)))return reply(headers,{code:'RESUME_UNAVAILABLE'},409);
       const child=await db.from('creator_research_jobs').select('*').eq('resume_of',input.resumeJobId).eq('user_id',userId).maybeSingle();
       if(child.error)throw Error('PERSISTENCE');
       if(child.data)return reply(headers,{job:child.data,reused:true});
       input.requestedCount=Number(parent.data.requested_count)-Number(parent.data.delivered_count);
       if(input.requestedCount<=0)return reply(headers,{code:'RESUME_UNAVAILABLE'},409);
       resumeBrief=researchBriefSchema.parse(parent.data.input_snapshot);
-      input.sourceMode='videos';
+      input.sourceMode=resumeBrief.sourceMode;
     }
     const { data: config, error: configError } = await db.from("creator_research_config")
       .select("feature_enabled,candidate_multiplier").eq("id", true).maybeSingle();
@@ -185,7 +185,7 @@ Deno.serve(async (request) => {
 
     reservation=0; // After insertion the job's terminal transition settles quota atomically.
     if(input.sourceMode==='articles'){
-      const run=await startDeepResearch({brief,requestedCount:input.requestedCount,candidateMultiplier:1});
+      const run=await startDeepResearch({brief,requestedCount:input.requestedCount,candidateMultiplier:2});
       const updated=await db.from('creator_research_jobs').update({provider_response_id:run.id,status:'researching',phase:'Finding relevant web articles…',started_at:new Date().toISOString(),provider_metadata:{stage:'article_research',sourceMode:'articles'},updated_at:new Date().toISOString()}).eq('id',jobId).select('*').maybeSingle();
       if(updated.error||!updated.data)throw Error('PERSISTENCE');
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:jobId,user_id:userId,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{requestedCount:input.requestedCount,sourceMode:'articles',articleWindow:brief.articleWindow}});

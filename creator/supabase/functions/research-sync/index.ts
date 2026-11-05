@@ -537,11 +537,17 @@ Deno.serve(async (request) => {
       return reply(headers, { job: updated.data ?? job }, 202);
     }
     if (["failed", "cancelled", "incomplete"].includes(providerRun.status)) {
-      await markFailed(job, `PROVIDER_${providerRun.status.toUpperCase()}`, providerRun.status === "cancelled", providerRun);
-      return reply(headers, { code: `PROVIDER_${providerRun.status.toUpperCase()}` }, 503);
+      if(brief.data.sourceMode==='articles' && retainedCandidates(providerMetadata.accumulatedCandidates).length){
+        // Deliver the accepted prior round even when a later provider attempt fails.
+        providerMetadata.unavailableRound=currentRound;
+        providerRun={...providerRun,status:'completed',sources:[],candidates:[]};
+      }else{
+        await markFailed(job, `PROVIDER_${providerRun.status.toUpperCase()}`, providerRun.status === "cancelled", providerRun);
+        return reply(headers, { code: `PROVIDER_${providerRun.status.toUpperCase()}` }, 503);
+      }
     }
     if (providerRun.status !== "completed" || !("candidates" in providerRun)) return reply(headers, { code: "PROVIDER" }, 502);
-    if(providerMetadata.stage==='indexed_video_search'){
+    if(providerMetadata.stage==='indexed_video_search'||providerMetadata.stage==='article_research'){
       const merged=mergeSearchRound({sources:nativeSources(providerMetadata.accumulatedSources),candidates:retainedCandidates(providerMetadata.accumulatedCandidates)},providerRun);
       const roundCost=providerCost(providerRun.usage)??0;
       providerMetadata.screeningCompletedCount=1;
@@ -764,6 +770,28 @@ Deno.serve(async (request) => {
       await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{round:nextRound,route:'indexed_video_search',queryHints}});
       return reply(headers,{job:update.data??job},202);
     }
+    // Articles must refill after qualification and deduplication, just like clips.
+    // Retain accepted evidence between bounded attempts without changing the brief.
+    if (brief.data.sourceMode === 'articles' && ranked.length < requestedCount && currentRound < 3 && !providerMetadata.unavailableRound) {
+      try {
+        const excludeUrls = [...new Set([...duplicateHistory.flatMap(item => item.sourceSnapshot.map(source => source.url)), ...providerRun.sources.map(source => source.url)])];
+        const run = await startDeepResearch({brief:brief.data,requestedCount:requestedCount-ranked.length,candidateMultiplier:2,excludeUrls});
+        const saved = await db.from('creator_research_jobs').update({
+          status:'researching',provider_response_id:run.id,
+          phase:`${ranked.length} of ${requestedCount} articles found; finding the remaining stories…`,
+          provider_metadata:{...providerMetadata,stage:'article_research',round:currentRound+1,
+            acceptedCountSoFar:ranked.length,accumulatedSources:providerRun.sources,
+            accumulatedCandidates:ranked.map(r=>providerResearchCandidateSchema.strip().parse(r)),
+            accumulatedCost:providerCost(providerRun.usage)??0},updated_at:new Date().toISOString(),
+        }).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
+        if(saved.error)throw Error('PERSISTENCE_ARTICLE_REFILL');
+        await db.from('creator_research_usage').insert({id:crypto.randomUUID(),job_id:job.id,user_id:auth.user.id,operation:'deep_research_start',provider_response_id:run.id,model:run.model,status:'started',request_metadata:{round:currentRound+1,sourceMode:'articles'}});
+        return reply(headers,{job:saved.data??job},202);
+      } catch(error) {
+        if(error instanceof Error && error.message.startsWith('PERSISTENCE'))throw error;
+        providerMetadata.unavailableRound=currentRound+1;
+      }
+    }
     if (!ranked.length) {
 
       const phase=brief.data.sourceMode==='articles'
@@ -771,7 +799,7 @@ Deno.serve(async (request) => {
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
           : brief.data.discoveryFilters?filteredSearchPhase():completedSearchPhase(0,Number(job.requested_count),currentRound);
-      const result=await db.from('creator_research_jobs').update({status:'ready',reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
+      const result=await db.from('creator_research_jobs').update({status:brief.data.sourceMode==='articles'?'failed':'ready',interruption_reason:brief.data.sourceMode==='articles'?'retrieval_limit':null,reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
       if(result.error)throw Error('PERSISTENCE');
@@ -836,7 +864,7 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: "ready", reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} articles ready.${delivered<Number(job.requested_count)?' Fewer relevant, dated, new stories were available in this window.':''}`:completedSearchPhase(delivered,Number(job.requested_count),currentRound,Number(providerMetadata.unavailableRound)||undefined), delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: brief.data.sourceMode==='articles'&&delivered<Number(job.requested_count)?"failed":"ready", interruption_reason:brief.data.sourceMode==='articles'&&delivered<Number(job.requested_count)?"retrieval_limit":null, reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} of ${job.requested_count} articles ready.${delivered<Number(job.requested_count)?' Search limit reached; results saved.':' Search complete.'}`:completedSearchPhase(delivered,Number(job.requested_count),currentRound,Number(providerMetadata.unavailableRound)||undefined), delivered_count: delivered, candidate_count: providerRun.candidates.length,
       provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).eq("status", "ranking").select("*").maybeSingle();

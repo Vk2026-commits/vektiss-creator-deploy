@@ -68,3 +68,13 @@ it('requires original English news text and extracts source-linked editorial evi
  mock({id:'test',status:'completed',output_text:JSON.stringify({opportunities:[],articleReviews:[{sourceId:1,language:'en',editorialType:'reporting',excerpt:source.snippet}]}),output:[]});
  const result=await getDeepResearchRun('test',brief,[source]);expect('sources' in result&&result.sources[0].articleReview?.language).toBe('en');
 });
+
+it('overfetches articles and excludes prior stories while keeping the publication filter',async()=>{
+ const fetcher=mock({id:'refill',status:'queued'});
+ await startDeepResearch({brief,requestedCount:2,candidateMultiplier:2,excludeUrls:['https://www.reuters.com/example']});
+ const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
+ expect(body.input).toContain('Find up to 4');
+ expect(body.input).toContain('https://www.reuters.com/example');
+ expect(body.input).toContain('Keep the original publication window');
+ expect(body.tools[0].filters.search_after_date_filter).toBe('09/28/2026');
+});
