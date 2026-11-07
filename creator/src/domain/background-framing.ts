@@ -14,5 +14,5 @@ export function backgroundFilter(w:number,h:number,value?:BackgroundFraming){
 
 // Video reactions retain the complete source, centered in the output canvas.
 export function reactionVideoFilter(w:number,h:number){
- return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=0xe8edf4`;
+ return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black`;
 }

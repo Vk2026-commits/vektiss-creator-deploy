@@ -3,7 +3,7 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {writeFile} from 'node:fs/promises';
 const exec=promisify(execFile);
-export const REACTION_SEQUENCE_VERSION='source-then-reaction-v3-centered-source';
+export const REACTION_SEQUENCE_VERSION='source-then-reaction-v4-black-centered-source';
 export const ENDING_HOLD_SECONDS=1;
 export function segmentAudio(duration:number){
  return `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.03,afade=t=out:st=${Math.max(0,duration-.03)}:d=0.03`;

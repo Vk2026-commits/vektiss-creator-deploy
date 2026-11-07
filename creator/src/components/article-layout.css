@@ -37,3 +37,6 @@
 .background-options{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .background-controls button{border:1px solid #c8dbf2;border-radius:10px;background:white;padding:10px 14px;font-weight:650;min-height:44px;color:#193a63}
 .background-options button[aria-pressed=true]{background:#087df0;color:white;border-color:#087df0}
+
+/* Reaction footage keeps its full aspect ratio against black letterboxing. */
+.free-presenter-stage:has(video.placement-background){background:#000}
