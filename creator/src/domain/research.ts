@@ -133,6 +133,7 @@ export const researchRequestSchema = z
   .object({
     searchQuery: z.string().trim().max(300).default('').refine(value=>searchKeywords(value).length<=5,'Use up to five keyword phrases.'),
     useContentProfile: z.boolean().default(true),
+    speedFirst: z.boolean().default(false),
     visibleActionOnly: z.boolean().optional(),
     profileId: z.string().uuid(),
     requestedCount: z.number().int().min(1).max(10),

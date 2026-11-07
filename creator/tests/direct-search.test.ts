@@ -57,3 +57,12 @@ it('lets the action toggle override the profile in both directions',async()=>{
 });
 
 it('disables profile verification only when the user switches the profile off',()=>{expect(directSearchBrief(brief,'security',false).profileVerificationRequired).toBe(false);expect(directSearchBrief(brief,'security',true).profileVerificationRequired).toBe(true);});
+
+it('fast search keeps profile query context without blocking publication on audience review',()=>{
+ const result=directSearchBrief(brief,'',true,false,true);
+ expect(result.sourceTopics).toEqual(brief.sourceTopics);
+ expect(result.profileVerificationRequired).toBe(false);
+ expect(result.profileRankingOnly).toBe(true);
+ expect(result.visibleActionOnly).toBe(false);
+ expect(directSearchBrief(brief,'safety',true,true,true).visibleActionOnly).toBe(true);
+});

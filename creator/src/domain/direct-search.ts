@@ -2,11 +2,11 @@ import {wantsVisibleAction,actionEvidenceInstruction} from './search-intent.ts';
 import {searchKeywords} from './search-keywords.ts';
 import {researchBriefSchema,type ResearchBrief} from './research.ts';
 /** Build a per-request brief. Never mutate the saved profile. */
-export function directSearchBrief(brief:ResearchBrief,query:string,useProfile:boolean,visibleActionOnly?:boolean):ResearchBrief {
+export function directSearchBrief(brief:ResearchBrief,query:string,useProfile:boolean,visibleActionOnly?:boolean,speedFirst=false):ResearchBrief {
  const searchQuery=query.trim();
  if(!useProfile&&!searchQuery)throw new Error('SEARCH_QUERY_REQUIRED');
  const actionRequired=visibleActionOnly??(useProfile&&wantsVisibleAction(brief));
- const result={...brief,profileRankingOnly:!useProfile,profileVerificationRequired:useProfile,...(visibleActionOnly!==undefined?{visibleActionOnly}: {})};
+ const result={...brief,profileRankingOnly:speedFirst||!useProfile,profileVerificationRequired:useProfile&&!speedFirst,...(visibleActionOnly!==undefined?{visibleActionOnly}: {})};
  if(!useProfile){
   for(const key of ['expertise','experience','communicationStyle','preferredCtaStyle','creatorContext','primaryAudience','profileContext','researchScreeningCriteria','researchSeekSituations'] as const)result[key]='';
   for(const key of ['industries','creatorTone','phrasesToAvoid','audienceProblems','audienceInterests','contentPillars','sourceTopics','reactionAngles','desiredOutcomes','profileTone','thingsToAvoid','researchReferenceUrls','researchBlockedUrls'] as const)result[key]=[];
