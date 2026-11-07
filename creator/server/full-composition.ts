@@ -15,7 +15,7 @@ import {renderReactionSequence,REACTION_SEQUENCE_VERSION,ENDING_HOLD_SECONDS} fr
 import {screenshotStorySchema,validateStoryScript,storyRevisionInput,type ScreenshotStory} from '../src/domain/screenshot-story';
 import {STORY_COMPOSITION_VERSION} from './story-alignment';
 import {storyBackground} from './story-background';
-import {backgroundFilter} from '../src/domain/background-framing';
+import {backgroundFilter,reactionVideoFilter} from '../src/domain/background-framing';
 import {reusablePresenter} from '../src/domain/video-versions';
 const exec=promisify(execFile);
 export const fullCompositionSchema=composeSchema.extend({original_setting:z.literal(true).optional(),capture_id:z.string().uuid().optional(),video_id:z.string().uuid().optional(),presenter_only:z.literal(true).optional(),story:z.literal(true).optional(),story_revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),job_id:z.string().uuid(),script_id:z.string().uuid(),framing:z.literal(STEPHEN_FRAMING).optional(),presenter_framing:avatarFramingSchema.optional(),presenter_framing_amount:z.number().int().min(30).max(100).optional(),presenter_framing_position:z.number().int().min(0).max(100).optional()}).strict().refine(c=>[c.original_setting,c.capture_id,c.video_id,c.presenter_only,c.story].filter(Boolean).length===1,'Choose one background or explicit presenter-only export');
@@ -94,7 +94,7 @@ export async function fullComposition(root:string,input:unknown,authorization:st
 	 const crop=avatarFramingCrop(fixedPresenterCrop(c.framing,stream.width,stream.height)??presenterBaseCrop(detected,verified?.crop,stream.width,stream.height),c.presenter_framing,c.presenter_framing_amount,c.presenter_framing_position);
  const [w,h]=c.format==='portrait'?[720,1280]:c.format==='landscape'?[1280,720]:[720,720];
  const {width,height,x,y}=presenterLayout(c.format,c.position,c.size,c.placement,crop.width/crop.height);
- const filter=`[0:v]${backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
+ const filter=`[0:v]${c.video_id?reactionVideoFilter(w,h):backgroundFilter(w,h,c.background_framing)},setsar=1,fps=25,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[bg];[1:v]${cleanup}crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},despill=type=green:mix=0.5:green=-1,scale=${width}:${height},setsar=1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${ENDING_HOLD_SECONDS}[fg];[bg][fg]overlay=${x}:${y}:shortest=1,format=yuv420p[out]`;
  const temp=resolve(folder,`${id}.partial.mp4`);
  let background=resolve(root,'.local-captures',c.video_id?`${c.video_id}.video`:`${c.capture_id}.png`);
  let totalDuration=duration+ENDING_HOLD_SECONDS;

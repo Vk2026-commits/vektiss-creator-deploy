@@ -1,8 +1,9 @@
+import {reactionVideoFilter} from '../src/domain/background-framing';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {writeFile} from 'node:fs/promises';
 const exec=promisify(execFile);
-export const REACTION_SEQUENCE_VERSION='source-then-reaction-v2-ending-hold';
+export const REACTION_SEQUENCE_VERSION='source-then-reaction-v3-centered-source';
 export const ENDING_HOLD_SECONDS=1;
 export function segmentAudio(duration:number){
  return `aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=${duration},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.03,afade=t=out:st=${Math.max(0,duration-.03)}:d=0.03`;
@@ -15,7 +16,7 @@ export async function renderReactionSequence({ffmpeg,background,source,output,fi
  const run=(args:string[])=>exec(ffmpeg,['-hide_banner','-loglevel','error','-y',...args],{timeout:600000,maxBuffer:1024*1024});
  // Independent segments start at zero; concat shifts the entire reaction (both
  // image and voice) to the end of the source. No avatar frames/audio in intro.
- const introFilter=`[0:v]scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:0:color=0xe8edf4,setsar=1,fps=25,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=0.04[v];[${hasSourceAudio?'0':'1'}:a]${segmentAudio(introDuration)}[a]`;
+ const introFilter=`[0:v]${reactionVideoFilter(w,h)},setsar=1,fps=25,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=0.04[v];[${hasSourceAudio?'0':'1'}:a]${segmentAudio(introDuration)}[a]`;
  await run(['-i',background,...(hasSourceAudio?[]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']),'-filter_complex',introFilter,'-map','[v]','-map','[a]','-t',String(introDuration),...codecs,intro]);
  await run(['-stream_loop','-1','-i',background,'-c:v','libvpx-vp9','-i',source,'-filter_complex',`${filter};[1:a]${segmentAudio(tailDuration)}[a]`,'-map','[out]','-map','[a]','-t',String(tailDuration),...codecs,reaction]);
  const list=output.replace(/\.mp4$/,'.concat.txt');

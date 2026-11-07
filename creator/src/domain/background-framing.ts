@@ -11,3 +11,8 @@ export function backgroundFilter(w:number,h:number,value?:BackgroundFraming){
  const v=backgroundFramingSchema.parse(value);
  return `scale=${w}:${h}:force_original_aspect_ratio=increase,scale=ceil(iw*${v.zoom}/2)*2:ceil(ih*${v.zoom}/2)*2,crop=${w}:${h}:(iw-ow)*${v.x}:(ih-oh)*${v.y}`;
 }
+
+// Video reactions retain the complete source, centered in the output canvas.
+export function reactionVideoFilter(w:number,h:number){
+ return `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=0xe8edf4`;
+}
