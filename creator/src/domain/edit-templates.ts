@@ -34,7 +34,7 @@ const beat=z.object({
  headline:z.string().max(100),purpose:z.string().min(1).max(600),
  illustration:z.string().max(1200),motion:z.string().max(600),
  graphics:z.object({
-  nodes:z.array(z.object({label:z.string().min(1).max(45),asset:z.enum(editorialAssetIds).optional(),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D','E','F']).optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
+  nodes:z.array(z.object({label:z.string().min(1).max(45),asset:z.enum(editorialAssetIds).optional(),shape:z.enum(['box','circle']),x:z.number().min(10).max(90),y:z.number().min(15).max(85),tier:z.enum(['S','A','B','C','D','E','F']).optional(),introducedWord:z.number().int().nonnegative().optional(),revealWord:z.number().int().nonnegative().optional()}).strict()).max(6),
   chart:z.object({unit:z.string().max(30),items:z.array(z.object({label:z.string().min(1).max(45),value:z.number().finite().min(0).max(1e15),sourceWord:z.number().int().nonnegative()}).strict()).min(2).max(4)}).strict().optional(),
   links:z.array(z.object({from:z.number().int().min(0).max(5),to:z.number().int().min(0).max(5)}).strict()).max(8),
  }).strict().optional(),
@@ -61,6 +61,7 @@ export function validateEditProposal(raw:unknown,source:EditSource,templateId:z.
   if(templateId==='walkthrough'&&b.visual==='tier-board'||templateId!=='tier-list'&&b.visual==='tier-board')throw Error('EDIT_TEMPLATE_MISMATCH');
   if(b.graphics?.links.some(l=>l.from>=b.graphics!.nodes.length||l.to>=b.graphics!.nodes.length))throw Error('EDIT_GRAPHIC_LINK');
   if(b.graphics?.nodes.some(n=>n.revealWord!==undefined&&(n.revealWord<b.firstWord||n.revealWord>b.lastWord)))throw Error('EDIT_REVEAL_WORD');
+  if(b.graphics?.nodes.some(n=>n.introducedWord!==undefined&&(templateId!=='tier-list'||n.revealWord===undefined||n.introducedWord>n.revealWord||n.introducedWord<0||n.introducedWord>=source.words.length)))throw Error('EDIT_INTRODUCED_WORD');
   if(plan.rendererVersion===2&&b.graphics&&((b.scene==='statistic'&&b.graphics.nodes.length>3)||((b.scene==='comparison'||b.scene==='document')&&b.graphics.nodes.length>4)))throw Error('EDIT_SCENE_DENSITY');
   if(templateId==='charts-comparisons'&&(b.graphics?.nodes.length??0)>4)throw Error('EDIT_SCENE_DENSITY');
   if(b.graphics?.chart){

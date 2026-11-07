@@ -9,7 +9,7 @@ export function editResponseFormat(rawSource:EditSource,template:unknown){
  const text=(maxLength:number,minLength=0)=>({type:'string',minLength,maxLength});
  const enumeration=(values:readonly unknown[])=>({type:'string',enum:values});
  const word={type:'integer',minimum:0,maximum:source.words.length-1};
- const node=object({label:text(styles.length===1&&styles[0]==='popout-explainer'?32:45,1),asset:{anyOf:[enumeration(editorialAssetIds),{type:'null'}]},shape:enumeration(['box','circle']),x:{type:'number',minimum:10,maximum:90},y:{type:'number',minimum:15,maximum:85},tier:{anyOf:[enumeration(['S','A','B','C','D','E','F']),{type:'null'}]},revealWord:{anyOf:[word,{type:'null'}]}});
+ const node=object({label:text(styles.length===1&&styles[0]==='popout-explainer'?32:45,1),asset:{anyOf:[enumeration(editorialAssetIds),{type:'null'}]},shape:enumeration(['box','circle']),x:{type:'number',minimum:10,maximum:90},y:{type:'number',minimum:15,maximum:85},tier:{anyOf:[enumeration(['S','A','B','C','D','E','F']),{type:'null'}]},introducedWord:{anyOf:[word,{type:'null'}]},revealWord:{anyOf:[word,{type:'null'}]}});
  const beat=object({
   scene:enumeration(['process','timeline','comparison','network','statistic','document','spotlight',...(styles.includes('popout-explainer')?['search']:[])]),
   firstWord:word,lastWord:word,
@@ -31,7 +31,7 @@ export function normalizeEditResponse(raw:unknown):unknown{
   const graphics={...beat.graphics};if(graphics.chart===null)delete graphics.chart;
   return {...beat,graphics:{...graphics,nodes:beat.graphics.nodes.map((node:Record<string,unknown>)=>{
    if(!node||typeof node!=='object')return node;
-   const result={...node};if(result.asset===null)delete result.asset;if(result.tier===null)delete result.tier;if(result.revealWord===null)delete result.revealWord;return result;
+   const result={...node};if(result.asset===null)delete result.asset;if(result.tier===null)delete result.tier;if(result.introducedWord===null)delete result.introducedWord;if(result.revealWord===null)delete result.revealWord;return result;
   })}};
  })};
 }
