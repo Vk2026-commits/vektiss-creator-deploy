@@ -407,7 +407,7 @@ export function AvatarLibrary({
           >
             {(picker ? ready : library.avatars).map((a) => (
               <div className="create-panel" key={a.id}>
-                <AvatarPicture url={a.thumbnail_url} name={a.name}/>
+                <AvatarPicture avatarId={a.id} url={a.thumbnail_url} name={a.name}/>
                 <h3>{a.name}</h3>
                 <p>
                   {a.voice_name ?? "Voice not set"} · {a.status}
