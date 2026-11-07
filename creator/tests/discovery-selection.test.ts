@@ -1,6 +1,6 @@
 import {expect,it,vi,afterEach} from 'vitest';
 import {mergePool,shortlist,selectionDiagnostics,confirmedFailure} from '../supabase/functions/_shared/discovery-selection';
-import {detailTasks,runSCTask,expansionTask,scrapeTasks,type SCTask} from '../supabase/functions/_shared/scrape-creators';
+import {detailTasks,runSCTask,expansionTask,expansionTasks,scrapeTasks,type SCTask} from '../supabase/functions/_shared/scrape-creators';
 import {screeningDecisions,acceptedCandidates,inspectionIds,sourceTopicSupported} from '../src/domain/pilot-screening';
 import {getDeepResearchRun,nativeScreeningInstructions,startNativeVideoScreening} from '../supabase/functions/_shared/research-provider';
 import {discoveryFiltersSchema,collectEngagement} from '../src/domain/discovery-engagement';
@@ -71,4 +71,15 @@ it('action searches request footage and skip explicit storytimes and unsupported
  const rows=[{...source(1),title:'Storytime about safety'},{...source(2),durationSeconds:231},{...source(3),title:'CCTV footage shows an intervention'}];
  expect(shortlist(rows,action).map(s=>s.providerSourceId)).toEqual([3]);
  expect(shortlist(rows,{...action,visibleActionOnly:false})).toHaveLength(3);
+});
+
+it('fills a bounded refill batch from independent search families',()=>{
+ const roots:SCTask[]=['TikTok','Instagram','YouTube'].map((platform,i)=>({id:`s${i}`,platform:platform as SCTask['platform'],kind:'search',query:'safety',state:'done',nextCursor:'12'}));
+ const batch=expansionTasks(roots,3);
+ expect(batch).toHaveLength(3);
+ expect(new Set(batch.map(t=>t.parentId)).size).toBe(3);
+ expect(expansionTasks(roots,1)).toHaveLength(1);
+ expect(expansionTasks(roots,0)).toHaveLength(0);
+ expect(expansionTasks([roots[0]],3)).toHaveLength(1);
+ expect(expansionTasks([...roots,...batch],3)).toHaveLength(0);
 });

@@ -66,6 +66,17 @@ export function expansionTask(tasks:SCTask[]):SCTask|undefined{
  }
  return undefined;
 }
+// Queue independent search families together; never request two pages of one
+// family concurrently because its next cursor depends on the preceding response.
+export function expansionTasks(tasks:SCTask[],limit:number):SCTask[]{
+ const batch:SCTask[]=[];
+ while(batch.length<Math.max(0,Math.min(3,limit))){
+  const next=expansionTask([...tasks,...batch]);
+  if(!next)break;
+  batch.push(next);
+ }
+ return batch;
+}
 export function scrapeUnavailable(ledger:SCLedger[]):boolean{return ledger.some(l=>l.remaining===0||[401,402,403].includes(l.status));}
 export async function runSCTask(task:SCTask,brief:ResearchBrief):Promise<{sources:ResearchSource[];ledger:SCLedger;nextCursor?:string;diagnostic?:string}>{
  const key=Deno.env.get('CREATOR_SCRAPECREATORS_API_KEY');if(!key)throw Error('SCRAPECREATORS_NOT_CONFIGURED');

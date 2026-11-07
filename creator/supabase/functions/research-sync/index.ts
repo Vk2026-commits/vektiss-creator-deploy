@@ -6,7 +6,7 @@ import {ARTICLE_NEWS_DOMAINS} from '../../../src/domain/article-policy.ts';
 import {qualifyArticleCandidates} from '../../../src/domain/article-screening.ts';
 import {screeningDecisions,acceptedCandidates,inspectionIds,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import {mergePool,shortlist,selectionDiagnostics,selectionReason} from '../_shared/discovery-selection.ts';
-import {runSCTask as fetchSCTask,detailTasks,balancedSources,expansionTask,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
+import {runSCTask as fetchSCTask,detailTasks,balancedSources,expansionTask,expansionTasks,scrapeUnavailable,SC_REQUEST_LIMIT,type SCGroup,type SCTask,type SCLedger} from '../_shared/scrape-creators.ts';
 import {engagementFailure,sourceCreator,creatorKey,attachBaseline} from '../../../src/domain/discovery-engagement.ts';
 import type {CreatorSource} from '../../../src/domain/discovery-pilot.ts';
 import {startWatchlistDiscovery,startPlatformDiscovery} from '../_shared/platform-discovery.ts';
@@ -187,7 +187,9 @@ Deno.serve(async (request) => {
         const details=detailTasks(pool.filter(s=>!screened.includes(s.url)),tasks,Math.min(3,remaining),brief.data);
         const expansion=expansionTask(tasks);
         const lastWasDetail=ledger.length>0&&tasks.find(t=>t.id===ledger[ledger.length-1].id)?.kind==='detail';
-        pending=details.length&&(!lastWasDetail||!expansion)?details:expansion?[expansion]:details;
+        pending=details.length&&(!lastWasDetail||!expansion)?details:[];
+        pending.push(...expansionTasks([...tasks,...pending],Math.min(3,remaining)-pending.length));
+        if(!pending.length)pending=details;
         tasks.push(...pending);
       }
       if(eligible.length>=target||!pending.length||remaining<=0||scrapeUnavailable(ledger)||screened.length>=120){
@@ -202,7 +204,7 @@ Deno.serve(async (request) => {
       const byId=new Map(batch.map((t,i)=>[t.id,results[i]]));
       if(job.incremental_delivery)for(let i=0;i<batch.length;i++){const t=batch[i],status=results[i].ledger.status;if((status===429||status>=500)&&!t.id.endsWith('-retry')&&!tasks.some(x=>x.id===t.id+'-retry'))tasks.push({...t,id:t.id+'-retry',state:undefined});}
       const next={...providerMetadata,scTasks:tasks.map(t=>byId.has(t.id)?{...t,state:byId.get(t.id)!.diagnostic?'failed':'done',nextCursor:byId.get(t.id)!.nextCursor}:t),scPool:pool,scLedger:[...ledger,...results.map(r=>r.ledger)],scRawReturned:Number(providerMetadata.scRawReturned??0)+results.reduce((n,r)=>n+(r.ledger.id.startsWith('detail-')?0:r.sources.length),0),scInFlight:[],providerDiagnostics:[...providerMetadata.providerDiagnostics as string[]??[],...results.flatMap(r=>r.diagnostic?[r.diagnostic]:[])]};
-      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:`${pool.length} candidates collected · ${shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],120).length} pass date and engagement filters; ${screened.length} reviewed`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_RESULTS');return reply(headers,{job:saved.data??job},202);
+      const saved=await db.from('creator_research_jobs').update({status:'researching',provider_metadata:next,phase:`${pool.length} candidates collected · ${shortlist(pool,brief.data,[...screened,...providerMetadata.scFilterRejectedUrls as string[]??[]],120).length} unreviewed candidates pass date and engagement filters; ${screened.length} reviewed`,updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').eq('provider_metadata->>scPhaseAt',phaseAt).select('*').maybeSingle();if(saved.error)throw Error('PERSISTENCE_SC_RESULTS');return reply(headers,{job:saved.data??job},202);
     }
     if(providerMetadata.stage==='scrape_discovery'){
       const tasks=(Array.isArray(providerMetadata.scTasks)?providerMetadata.scTasks:[]) as SCTask[];
