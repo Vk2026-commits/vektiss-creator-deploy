@@ -1,3 +1,4 @@
+import {avatarCreationSchema} from './avatar-creation.ts';
 import { z } from 'zod';
 import {deliveryProfileSchema} from './delivery.ts';
 import {screenshotStorySchema} from './screenshot-story.ts';
@@ -7,6 +8,7 @@ import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 import {researchSourceSchema} from './research.ts';
 export const briefSchema = z.object({
+  avatar_creation:avatarCreationSchema.optional(),
   template_workflow:z.boolean().optional(),
   delivery_preferences:deliveryProfileSchema.optional(),
   cta_override:ctaSchema.nullable().optional(),

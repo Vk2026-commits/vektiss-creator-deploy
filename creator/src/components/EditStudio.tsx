@@ -1,3 +1,4 @@
+import {avatarCreationSchema,type AvatarCreation} from '../domain/avatar-creation';
 import {popoutBrand} from '../domain/popout-brand';
 import {illustrationScenes,ILLUSTRATION_OUTPUT_ESTIMATE,type SavedIllustration} from '../domain/edit-illustrations';
 import {loadMediaBlob} from '../lib/load-media-blob';
@@ -15,7 +16,7 @@ import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 import {LogoReview,type LogoChoice} from './LogoReview';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];instructions?:string;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
-export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:()=>void}){
+export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:(creation:AvatarCreation)=>void}){
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
  const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
  const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
@@ -123,9 +124,9 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    {dirty&&<p>Save your current edit before opening another.</p>}
    {savedEdits.map(edit=><article key={edit.id}><h3>{edit.title}</h3><p>{editTemplates.find(t=>t.id===edit.templateId)?.name} · {edit.savedAt?new Date(edit.savedAt).toLocaleString():'Saved edit'}</p><button className="button" disabled={busy||dirty} onClick={()=>void openSavedEdit(edit.id)}>{plan?.id===edit.id?'Open edit shown below':'Open saved edit'}</button></article>)}
   </section>
-  {onCreateAvatar&&<div><button type="button" className="button primary" onClick={onCreateAvatar}>Use my avatar · create a script →</button><p>Choose your Content Profile, topic or Discover source, approve your script, then choose the avatar and its setting. Or upload your own footage below.</p></div>}
+  {onCreateAvatar&&<div><button type="button" className="button primary" disabled={!profileId||!brandLoaded||!brandValid} onClick={()=>onCreateAvatar(avatarCreationSchema.parse({template:template==='recommend'?'tier-list':template,brand,format:aspectRatio==='16:9'?'landscape':'portrait'}))}>Create with my avatar →</button><p>Start with your content profile and an idea. No footage or reference link needed. Choose your style, approve a script, then select your avatar.</p></div>}
   {!profileId&&<p role="alert">Select a Content Profile first.</p>}
-  <fieldset disabled={busy}><legend>1. Choose your source</legend>
+  <fieldset disabled={busy}><legend>Edit existing footage</legend>
    <label>Upload a video (MP4 or WebM, up to 3 minutes and 500 MB)<input type="file" accept="video/mp4,video/webm" onChange={e=>{const next=e.target.files?.[0]??null;if(next&&next.size>500*1024*1024){setError('Choose a video smaller than 500 MB.');e.target.value='';return;}setFile(next);setExportId('');setPlan(null);}}/></label>
    <label>Or choose a completed Creator video<select value={exportId} onChange={e=>{setExportId(e.target.value);setFile(null);setPlan(null);}}><option value="">Choose a completed video</option>{exports.map(x=><option key={x.id} value={x.id}>{new Date(x.created_at).toLocaleString()} · {x.id.slice(0,8)}</option>)}</select></label>
   </fieldset>

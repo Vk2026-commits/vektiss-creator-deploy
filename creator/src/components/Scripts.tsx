@@ -1,3 +1,5 @@
+import {rankingScriptError,type AvatarIntent} from '../domain/avatar-creation';
+import {AvatarIdeaIntake} from './AvatarIdeaIntake';
 import {ScriptProgress,type DraftProgress} from './ScriptProgress';
 import {VideoVersions,type VersionIntent} from './VideoVersions';
 import {FinishedVideo} from './FinishedVideo';
@@ -34,7 +36,7 @@ import {watchRender} from '../lib/watch-render';
 import {fullCompositionInput} from '../lib/full-composition-input';
 import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
-export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=0 }: { creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:number }) {
+export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null }: { creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -70,13 +72,13 @@ export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, p
   const screenStep=videoStep(draft.brief,planning);
   useEffect(()=>{if(loading)return;const frame=requestAnimationFrame(()=>{editorRef.current?.focus({preventScroll:true});editorRef.current?.scrollIntoView({block:'start',behavior:'instant'});});return()=>cancelAnimationFrame(frame);},[screenStep,loading]);
   const latest=useRef(draft);latest.current=draft;
-  const handledAvatarIntent=useRef(0);
+  const handledAvatarIntent=useRef<string|null>(null);
   useEffect(()=>{
-    if(!avatarIntent||avatarIntent===handledAvatarIntent.current||loading||busy||sourceProcessing)return;
-    handledAvatarIntent.current=avatarIntent;
+    if(!avatarIntent||avatarIntent.id===handledAvatarIntent.current||loading||busy||sourceProcessing)return;
+    handledAvatarIntent.current=avatarIntent.id;
     if(dirty&&!window.confirm('Start a new avatar video? Unsaved changes in this draft will be left behind.'))return;
     const id=crypto.randomUUID();setWorkspaceId(id);setCurrent(null);setPlanning(false);setLibraryView(false);setEditingScript(false);setVersionIntent(null);setError('');setDraftProgress(null);
-    setDraft({content_profile_id:selectedId??profiles.find(p=>!p.archived_at)?.id??'',title:'',hook:'',body:'',cta:'',brief:{...emptyBrief(),template_workflow:true,cost_project_id:id}});setDirty(false);setMessage('Choose your topic or source, approve your angle, then create your avatar video with template graphics.');
+    setDraft({content_profile_id:avatarIntent.profileId??selectedId??profiles.find(p=>!p.archived_at)?.id??'',title:'',hook:'',body:'',cta:'',brief:{...emptyBrief(),template_workflow:true,avatar_creation:avatarIntent.creation,cost_project_id:id}});setDirty(true);setMessage('Choose a style and an idea. No footage required.');
   },[avatarIntent,loading,busy,sourceProcessing,dirty,selectedId,profiles]);
   function persist(input:ScriptInput,existing:Script|null,rebase?:(latest:Script)=>ScriptInput){
     const task=saveTail.current.catch(()=>undefined).then(()=>rebase?saveScriptWithRebase(repo,input,existing,rebase):saveScriptWithRebase(repo,input,existing));
@@ -89,7 +91,7 @@ export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, p
     if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing||isFinished)return;
     appliedAudience.current=audienceChoice.version;
     if(latest.current.content_profile_id===audienceChoice.id)return;
-    setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
+    setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,...(d.brief.avatar_creation?{avatar_creation:{...d.brief.avatar_creation,topic:'',angle:'',items:[],approved:false},source:'',source_summary:undefined,notes:''}:{}),clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
     setPlanning(false);setDirty(true);setMessage('Audience selected. Your source is still here.');
   },[audienceChoice,loading,busy,sourceProcessing,isFinished]);
   useEffect(()=>{
@@ -278,10 +280,12 @@ export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, p
   }
   async function save(production?:Plan) {
     if(savingPlan.current||busy||sourceProcessing)return;
+    const mismatch=rankingScriptError(draft.brief.avatar_creation,scriptText(draft));
+    if(mismatch){setError(mismatch);return;}
     savingPlan.current=true;
     setBusy(true); setError(''); setMessage('');
     try {
-      const next={...draft,title:draft.title.trim()||'Untitled video',brief:{...draft.brief,...(production?{production}:draft.brief.stage==='review'?{production:{...(draft.brief.production??newVideoPlan()),...(draft.brief.template_workflow?{setting:"original" as const,edit_template:"recommend" as const,format:"portrait" as const}:{}),...(draft.brief.source_cut?{video_background:{id:draft.brief.source_cut.selected_id,source_url:draft.brief.url}}:{}),...(draft.brief.screenshot_story?{screenshot_story:draft.brief.screenshot_story,article_capture:draft.brief.screenshot_story.images[0]}:{}),...(draft.brief.kind==='graphic'&&draft.brief.graphic_capture?{article_capture:draft.brief.graphic_capture}:{}),presenter:'avatar' as const,approved_at:new Date().toISOString(),step:'presenter' as const}}:{})}};
+      const next={...draft,title:draft.title.trim()||'Untitled video',brief:{...draft.brief,...(production?{production}:draft.brief.stage==='review'?{production:{...(draft.brief.production??newVideoPlan()),...(draft.brief.template_workflow?{setting:"original" as const,edit_template:draft.brief.avatar_creation?.template??"recommend" as const,edit_brand:draft.brief.avatar_creation?.brand,format:draft.brief.avatar_creation?.format??"portrait" as const}:{}),...(draft.brief.source_cut?{video_background:{id:draft.brief.source_cut.selected_id,source_url:draft.brief.url}}:{}),...(draft.brief.screenshot_story?{screenshot_story:draft.brief.screenshot_story,article_capture:draft.brief.screenshot_story.images[0]}:{}),...(draft.brief.kind==='graphic'&&draft.brief.graphic_capture?{article_capture:draft.brief.graphic_capture}:{}),presenter:'avatar' as const,approved_at:new Date().toISOString(),step:'presenter' as const}}:{})}};
       const item = await persist(next, current);
       setCurrent(item); setDraft(item); setDirty(false);
       setSaved(items => [item, ...items.filter(s => s.id !== item.id)]);
@@ -331,13 +335,13 @@ export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, p
         {current&&<VideoVersions current={current} items={saved} busy={busy||dirty||sourceProcessing} onSelect={open} onCreate={intent=>void createVersion(intent)}/>}
         {isFinished&&current?.brief.production?.render?.export_id&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<details><summary>Add or change template graphics — reuse this video</summary><EditStudio key={current.brief.production.render.export_id} profileId={current.content_profile_id} preview={preview} initialExportId={current.brief.production.render.export_id} initialTemplate={current.brief.production.edit_template} initialBrand={current.brief.production.edit_brand}/></details>}
         {isFinished&&current?.brief.production?.render?<><p role="status">{message}</p>{error&&<p role="alert">{error}</p>}<FinishedVideo scriptId={current.id} jobId={current.brief.production.render.job_id} plan={current.brief.production} sourceKind={current.brief.kind}/></>:<>
-        <nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{videoSteps[step-1]}</h2></div></div><ol>{videoSteps.map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>
+        <nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{draft.brief.avatar_creation&&step===1?'Idea':videoSteps[step-1]}</h2></div></div><ol>{(draft.brief.avatar_creation?['Idea','Script','Avatar','Video']:videoSteps).map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>
         <p className="save-status" role="status">{dirty?(busy?'Saving your progress…':'Saving shortly…'):current?(preview?'Saved on this device':'All changes saved'):'Your progress saves as you go.'}</p>
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
         {!planning&&draftProgress&&!draftProgress.failed&&draftProgress.percent<100&&<ScriptProgress progress={draftProgress}/>}
         {planning&&draft.brief.production?<VideoPlan editFocus={versionIntent} script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
         <fieldset disabled={loading||busy||sourceProcessing}>
-          {draft.brief.stage==='source'&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<label>Video style<select value={draft.brief.template_workflow?'explainer':'reaction'} onChange={e=>{setDraft(d=>({...d,brief:{...d.brief,template_workflow:e.target.value==='explainer'}}));setDirty(true);}}><option value="explainer">Original video · avatar or my footage</option><option value="reaction">Reaction · include the source on screen</option></select></label>}
+          {!draft.brief.avatar_creation&&draft.brief.stage==='source'&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<label>Video style<select value={draft.brief.template_workflow?'explainer':'reaction'} onChange={e=>{setDraft(d=>({...d,brief:{...d.brief,template_workflow:e.target.value==='explainer'}}));setDirty(true);}}><option value="explainer">Original video · avatar or my footage</option><option value="reaction">Reaction · include the source on screen</option></select></label>}
           {draft.brief.stage==='review'&&<section className="review-script-first" aria-label="Your script">
             {draft.brief.screenshot_story?.sections.length?<StoryScriptReview story={draft.brief.screenshot_story} editing={editingScript} onChange={screenshot_story=>{setDraft(d=>({...d,hook:'',body:screenshot_story.sections.map(s=>s.text).join('\n\n'),cta:'',brief:{...d.brief,screenshot_story,production:d.brief.production?{...d.brief.production,screenshot_story,approved_at:null,step:'approve'}:undefined}}));setDirty(true);}}/>:!editingScript?<div className="ai-script-preview"><p>{draft.hook}</p><p>{draft.body}</p><p>{draft.cta}</p></div>:<><label>Hook<textarea rows={3} maxLength={2000} value={draft.hook} onChange={e=>change('hook',e.target.value)}/></label><label>Main message<textarea rows={10} maxLength={15000} value={draft.body} onChange={e=>change('body',e.target.value)}/></label><label>Call to action<textarea rows={3} maxLength={2000} value={draft.cta} onChange={e=>change('cta',e.target.value)}/></label></>}
             <div className="review-secondary"><button type="button" onClick={()=>setEditingScript(v=>!v)}>{editingScript?'Done editing':'Edit script'}</button><button type="button" disabled={busy||preview} onClick={()=>void runAI('generate')}>Rewrite script</button><button type="button" onClick={()=>updateBrief({...draft.brief,stage:'perspective'})}>Add an angle</button></div>
@@ -365,7 +369,7 @@ export function Scripts({ creativeEnabled=false, profiles, selectedId, userId, p
           }}/></details>}
           {draft.brief.cta_override&&<p>CTA for this video: {draft.brief.cta_override.text}</p>}
           </details>
-          {!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
+          {!loading&&draft.brief.avatar_creation&&draft.brief.stage==='source'?<AvatarIdeaIntake profile={profiles.find(p=>p.id===draft.content_profile_id)} brief={draft.brief} onChange={updateBrief} busy={busy}/>:!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
         </fieldset>
 	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose presenter →</button></div>}

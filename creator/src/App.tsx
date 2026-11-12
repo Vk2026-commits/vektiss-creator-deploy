@@ -1,3 +1,4 @@
+import type {AvatarIntent} from './domain/avatar-creation';
 import {
   useCallback,
   useEffect,
@@ -380,7 +381,7 @@ function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("create");
-  const [avatarIntent,setAvatarIntent]=useState(0);
+  const [avatarIntent,setAvatarIntent]=useState<AvatarIntent|null>(null);
   const [creativeEnabled,setCreativeEnabled]=useState(false);
   const [creativeTab,setCreativeTab]=useState<'looks'|'brands'|'agent'|'videos'>('agent');
   const [creativeSeed,setCreativeSeed]=useState<any>(null);
@@ -653,7 +654,7 @@ function CreatorWorkspace({
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
-              {page === 'edit-studio' && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={()=>{setAvatarIntent(n=>n+1);setPage("create");}}/>}
+              {page === 'edit-studio' && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={creation=>{setAvatarIntent({id:crypto.randomUUID(),profileId:selected?.id??null,creation});setPage("create");}}/>}
               {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity, creationMode) => { setResearchIntent({...opportunity, creationMode}); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
