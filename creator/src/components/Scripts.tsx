@@ -38,7 +38,7 @@ import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
 export function Scripts({ studioMode=false, creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null }: { studioMode?:boolean; creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
-  const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}`;
+  const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}${studioMode?':studio':''}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
   useEffect(()=>recoveryWrite(`${recoveryKey}:workspace`,workspaceId),[recoveryKey,workspaceId]);
   const pendingDraftKey=`vektiss:pending-draft:v1:${userId}`;
@@ -148,7 +148,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     let active = true;
     repo.list().then(items => { if (active) {
       setSaved(items);
-      const restored=items.find(item=>item.id===recoveryRead(recoveryKey));
+      const restored=items.find(item=>item.id===recoveryRead(recoveryKey)&& (studioMode||!item.brief.avatar_creation));
       if(restored){setCurrent(restored);setDraft({...restored,brief:{...restored.brief,cost_project_id:restored.brief.cost_project_id??restored.id}});setPlanning(Boolean(restored.brief.production));}
       const pending=recoveryRead(pendingDraftKey);
       if(!preview&&import.meta.env.PROD&&pending){
@@ -369,6 +369,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
           }}/></details>}
           {draft.brief.cta_override&&<p>CTA for this video: {draft.brief.cta_override.text}</p>}
           </details>
+          {!studioMode&&draft.brief.avatar_creation&&draft.brief.stage==='source'&&<button type="button" className="button" disabled={busy||sourceProcessing} onClick={()=>open(null)}>Start a video from a link or upload →</button>}
           {!loading&&draft.brief.avatar_creation&&draft.brief.stage==='source'?<AvatarIdeaIntake profile={profiles.find(p=>p.id===draft.content_profile_id)} brief={draft.brief} onChange={updateBrief} busy={busy}/>:!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
         </fieldset>
