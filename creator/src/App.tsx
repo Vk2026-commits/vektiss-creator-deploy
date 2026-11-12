@@ -381,6 +381,7 @@ function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState<Page>("create");
+  const [studioAvatar,setStudioAvatar]=useState(false);
   const [avatarIntent,setAvatarIntent]=useState<AvatarIntent|null>(null);
   const [creativeEnabled,setCreativeEnabled]=useState(false);
   const [creativeTab,setCreativeTab]=useState<'looks'|'brands'|'agent'|'videos'>('agent');
@@ -654,7 +655,7 @@ function CreatorWorkspace({
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
-              {page === 'edit-studio' && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={creation=>{setAvatarIntent({id:crypto.randomUUID(),profileId:selected?.id??null,creation});setPage("create");}}/>}
+              {page === 'edit-studio' && !studioAvatar && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={creation=>{setAvatarIntent({id:crypto.randomUUID(),profileId:selected?.id??null,creation});setStudioAvatar(true);}}/>}
               {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity, creationMode) => { setResearchIntent({...opportunity, creationMode}); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
@@ -995,7 +996,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create'}><Scripts creativeEnabled={creativeEnabled} avatarIntent={avatarIntent} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={avatarIntent} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>
