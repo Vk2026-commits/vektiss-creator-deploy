@@ -3,6 +3,7 @@ import {editBrandSchema} from './edit-brand.ts';
 import {videoPlanSchema} from './video-plan.ts';
 import type {ContentProfile} from './strategy.ts';
 export const avatarCreationSchema=z.object({
+ intake_stage:z.enum(['profile','style','idea','review']).optional(),
  template:videoPlanSchema.shape.edit_template.default('tier-list'),
  brand:editBrandSchema.optional(),
  format:z.enum(['portrait','landscape','square']).default('portrait'),

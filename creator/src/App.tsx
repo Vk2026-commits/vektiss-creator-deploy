@@ -14,6 +14,7 @@ import {CreativeTools} from "./components/CreativeTools";
 import {creativeRequest} from "./lib/creative-client";
 import { AvatarLibrary } from "./components/AvatarLibrary";
 import {HeyGenBalanceBadge} from './components/HeyGenBalanceBadge';
+import {recoveryRead,recoveryWrite} from "./lib/recovery-storage";
 import { Scripts } from "./components/Scripts";
 import { UsageDashboard } from './components/UsageDashboard';
 import { SearchQualityAdmin } from './components/SearchQualityAdmin';
@@ -380,8 +381,12 @@ function CreatorWorkspace({
   const [data, setData] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [page, setPage] = useState<Page>("create");
-  const [studioAvatar,setStudioAvatar]=useState(false);
+  const routeKey=`vektiss:workflow:v1:${userId}`;
+  const [page, setPage] = useState<Page>(()=>recoveryRead(routeKey)?.startsWith('studio')?'edit-studio':'create');
+  const [studioAvatar,setStudioAvatar]=useState(()=>recoveryRead(routeKey)==='studio');
+  const [newVideoRequest,setNewVideoRequest]=useState(0);
+  useEffect(()=>recoveryWrite(routeKey,page==='edit-studio'?(studioAvatar?'studio':'studio-footage'):null),[routeKey,page,studioAvatar]);
+  const startReaction=()=>{setPage("create");setNewVideoRequest(n=>n+1);};
   const [avatarIntent,setAvatarIntent]=useState<AvatarIntent|null>(null);
   const [creativeEnabled,setCreativeEnabled]=useState(false);
   const [creativeTab,setCreativeTab]=useState<'looks'|'brands'|'agent'|'videos'>('agent');
@@ -526,7 +531,7 @@ function CreatorWorkspace({
             <small>Creator workspace</small>
           </div>
         </div>
-        <button className="button new-video" onClick={() => {if(creativeEnabled)setPage("new-video");else{setPage("create");window.dispatchEvent(new Event('creator:new-video'));}}}>
+        <button className="button new-video" onClick={() => {startReaction();}}>
           <Plus size={18} /> Create a video <span>↗</span>
         </button>
         <span className="nav-caption">WORKSPACE</span>
@@ -650,12 +655,12 @@ function CreatorWorkspace({
             <>
               {page === "avatars" && <>{creativeEnabled&&<div className="creative-launch"><p>Create a new setting and look while keeping your identity.</p><button className="button primary" onClick={()=>{setCreativeTab('looks');setPage('creative');}}>Create a new look</button></div>}<AvatarLibrary preview={preview} /></>}
               {page==='creative'&&creativeEnabled&&<CreativeTools tab={creativeTab} onTab={setCreativeTab} profiles={data.profiles} selectedId={selected?.id??null} seed={creativeSeed}/>}
-              {page==='new-video'&&<section className="creative-tools"><h1>How would you like to create?</h1><article><h2>Your script + Creator templates</h2><p>Use your avatar or uploaded footage with Creator’s existing editing styles.</p><button className="button primary" onClick={()=>{setPage('create');window.dispatchEvent(new Event('creator:new-video'));}}>Use Creator templates</button></article><article><h2>AI-produced video</h2><p>Use your avatar and brand kit, review the storyboard, then let HeyGen produce the video.</p><button className="button primary" onClick={()=>{setCreativeSeed(null);setCreativeTab('agent');setPage('creative');}}>Create an AI-produced video</button></article></section>}
+              {page==='new-video'&&<section className="creative-tools"><h1>How would you like to create?</h1><article><h2>Your script + Creator templates</h2><p>Use your avatar or uploaded footage with Creator’s existing editing styles.</p><button className="button primary" onClick={()=>{startReaction();}}>Use Creator templates</button></article><article><h2>AI-produced video</h2><p>Use your avatar and brand kit, review the storyboard, then let HeyGen produce the video.</p><button className="button primary" onClick={()=>{setCreativeSeed(null);setCreativeTab('agent');setPage('creative');}}>Create an AI-produced video</button></article></section>}
               {page==='create'&&creativeEnabled&&<div className="creative-launch"><p>Your saved AI-produced videos and storyboards</p><button className="button" onClick={()=>{setCreativeTab('videos');setPage('creative');}}>View AI-produced videos</button></div>}
               {page === 'avatar-costs' && <AvatarCostHelp/>}
               {page === 'costs' && costAdmin && <UsageDashboard/>}
               {page === 'search-quality' && costAdmin && <SearchQualityAdmin/>}
-              {page === 'edit-studio' && !studioAvatar && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={creation=>{setAvatarIntent({id:crypto.randomUUID(),profileId:selected?.id??null,creation});setStudioAvatar(true);}}/>}
+              {page === 'edit-studio' && !studioAvatar && import.meta.env.VITE_EDIT_STUDIO==='true' && <EditStudio recoveryScope={userId} key={selected?.id??'none'} profileId={selected?.id??null} preview={preview} onCreateAvatar={creation=>{setAvatarIntent({id:crypto.randomUUID(),profileId:selected?.id??null,creation});setStudioAvatar(true);}}/>}
               {page === "discover" && <Discover key={selected?.id ?? 'none'} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} onSelectProfile={(id) => { const profile = active.find(item => item.id === id); if (profile) rememberSelection(profile); }} onCreate={(opportunity, creationMode) => { setResearchIntent({...opportunity, creationMode}); setPage("create"); }} />}
               {page === "profiles" && (
                 <>
@@ -996,7 +1001,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts key={page==='edit-studio'&&studioAvatar?'studio-avatar':'video-library'} studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={page==='edit-studio'&&studioAvatar?avatarIntent:null} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={page==='edit-studio'&&studioAvatar?null:researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts onNewVideoHandled={()=>setNewVideoRequest(0)} newVideoRequest={page==='create'?newVideoRequest:0} onOpenStudioProject={id=>{recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio:draft`,null);recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio`,id);setStudioAvatar(true);setPage('edit-studio');}} onLeaveStudio={()=>setStudioAvatar(false)} onAvatarIntentHandled={()=>setAvatarIntent(null)} key={page==='edit-studio'&&studioAvatar?'studio-avatar':'video-library'} studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={page==='edit-studio'&&studioAvatar?avatarIntent:null} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={page==='edit-studio'&&studioAvatar?null:researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>

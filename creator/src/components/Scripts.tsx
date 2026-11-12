@@ -36,12 +36,12 @@ import {watchRender} from '../lib/watch-render';
 import {fullCompositionInput} from '../lib/full-composition-input';
 import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
-export function Scripts({ studioMode=false, creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null }: { studioMode?:boolean; creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null }) {
+export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProject,onLeaveStudio,studioMode=false, creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null, onAvatarIntentHandled }: { newVideoRequest?:number;onNewVideoHandled?:()=>void;onOpenStudioProject?:(id:string)=>void;onLeaveStudio?:()=>void;studioMode?:boolean; creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null; onAvatarIntentHandled?:()=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}${studioMode?':studio':''}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
   useEffect(()=>recoveryWrite(`${recoveryKey}:workspace`,workspaceId),[recoveryKey,workspaceId]);
-  const pendingDraftKey=`vektiss:pending-draft:v1:${userId}`;
+  const pendingDraftKey=`vektiss:pending-draft:v1:${userId}${studioMode?':studio':''}`;
   const draftController=useRef<AbortController|null>(null);
   const saveTail=useRef<Promise<void>>(Promise.resolve());
   useEffect(()=>()=>draftController.current?.abort(),[]);
@@ -77,9 +77,9 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     if(!avatarIntent||avatarIntent.id===handledAvatarIntent.current||loading||busy||sourceProcessing)return;
     handledAvatarIntent.current=avatarIntent.id;
     if(dirty&&!window.confirm('Start a new avatar video? Unsaved changes in this draft will be left behind.'))return;
-    const id=crypto.randomUUID();setWorkspaceId(id);setCurrent(null);setPlanning(false);setLibraryView(false);setEditingScript(false);setVersionIntent(null);setError('');setDraftProgress(null);
-    setDraft({content_profile_id:avatarIntent.profileId??selectedId??profiles.find(p=>!p.archived_at)?.id??'',title:'',hook:'',body:'',cta:'',brief:{...emptyBrief(),template_workflow:true,avatar_creation:avatarIntent.creation,cost_project_id:id}});setDirty(true);setMessage('Choose a style and an idea. No footage required.');
-  },[avatarIntent,loading,busy,sourceProcessing,dirty,selectedId,profiles]);
+    const id=avatarIntent.id;setWorkspaceId(id);setCurrent(null);setPlanning(false);setLibraryView(false);setEditingScript(false);setVersionIntent(null);setError('');setDraftProgress(null);
+    setDraft({content_profile_id:avatarIntent.profileId??selectedId??profiles.find(p=>!p.archived_at)?.id??'',title:'',hook:'',body:'',cta:'',brief:{...emptyBrief(),template_workflow:true,avatar_creation:avatarIntent.creation,cost_project_id:id}});setDirty(true);setMessage('Choose a profile, template and idea. No footage required.');onAvatarIntentHandled?.();
+  },[avatarIntent,loading,busy,sourceProcessing,dirty,selectedId,profiles,onAvatarIntentHandled]);
   function persist(input:ScriptInput,existing:Script|null,rebase?:(latest:Script)=>ScriptInput){
     const task=saveTail.current.catch(()=>undefined).then(()=>rebase?saveScriptWithRebase(repo,input,existing,rebase):saveScriptWithRebase(repo,input,existing));
     saveTail.current=task.then(()=>undefined,()=>undefined);
@@ -91,12 +91,12 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     if(!audienceChoice||appliedAudience.current===audienceChoice.version||loading||busy||sourceProcessing||isFinished)return;
     appliedAudience.current=audienceChoice.version;
     if(latest.current.content_profile_id===audienceChoice.id)return;
-    setDraft(d=>({...d,content_profile_id:audienceChoice.id,brief:{...d.brief,...(d.brief.avatar_creation?{avatar_creation:{...d.brief.avatar_creation,topic:'',angle:'',items:[],approved:false},source:'',source_summary:undefined,notes:''}:{}),clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
+    setDraft(d=>({...d,content_profile_id:audienceChoice.id,hook:'',body:'',cta:'',brief:{...d.brief,...(d.brief.avatar_creation?{avatar_creation:{...d.brief.avatar_creation,topic:'',angle:'',items:[],approved:false,intake_stage:'profile'},source:'',source_summary:undefined,notes:''}:{}),clarified:false,questions:[],summary:'',production:undefined,stage:'source'}}));
     setPlanning(false);setDirty(true);setMessage('Audience selected. Your source is still here.');
   },[audienceChoice,loading,busy,sourceProcessing,isFinished]);
   useEffect(()=>{
     if(!researchIntent){appliedResearchIntent.current=null;return;}
-    if(appliedResearchIntent.current===researchIntent.id||busy||sourceProcessing)return;
+    if(appliedResearchIntent.current===researchIntent.id||loading||busy||sourceProcessing)return;
     const targetProfileId=profiles.some(profile=>profile.id===researchIntent.content_profile_id&&!profile.archived_at)
       ?researchIntent.content_profile_id
       :selectedId??profiles.find(profile=>!profile.archived_at)?.id??'';
@@ -110,7 +110,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     }};
     setWorkspaceId(crypto.randomUUID());setCurrent(null);setPlanning(false);setDraft(next);setDirty(true);setMessage(researchIntent.creationMode==='original'?'Use this source as research for your own original script. Approve your angle, then choose your avatar or upload your recording. The source clip will not be included in the video.':'Your reaction source is ready. Review the source, approve your angle, and write your reaction script.');setError('');
     onResearchIntentHandled?.();
-  },[researchIntent,profiles,selectedId,busy,sourceProcessing,onResearchIntentHandled]);
+  },[researchIntent,profiles,selectedId,loading,busy,sourceProcessing,onResearchIntentHandled]);
   const lastAutoAttempt=useRef<ScriptInput|null>(null);
   function updateRenderPreview(incoming:Plan){
     if(isFinished)return;
@@ -136,6 +136,10 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     return()=>clearTimeout(timer);
   },[draft,current,dirty,busy,sourceProcessing,repo,isFinished]);
   const step=videoStep(draft.brief,planning);
+  const handledNew=useRef(0);
+  useEffect(()=>{if(!studioMode&&!loading&&newVideoRequest&&handledNew.current!==newVideoRequest&&!busy&&!sourceProcessing){handledNew.current=newVideoRequest;open(null);onNewVideoHandled?.();}},[newVideoRequest,studioMode,loading,busy,sourceProcessing]);
+  // Save unsaved inputs immediately; server autosave remains the authoritative project.
+  useEffect(()=>{if(!loading)recoveryWrite(`${recoveryKey}:draft`,JSON.stringify({draft,current,dirty}));},[draft,current,dirty,loading,recoveryKey]);
   useEffect(()=>{
     const create=()=>{if(busy){setMessage('Please wait for saving to finish, then choose New video.');return;}open(null);};
     window.addEventListener('creator:new-video',create);
@@ -148,8 +152,10 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     let active = true;
     repo.list().then(items => { if (active) {
       setSaved(items);
-      const restored=items.find(item=>item.id===recoveryRead(recoveryKey)&& (studioMode||!item.brief.avatar_creation));
+      const restored=items.find(item=>item.id===recoveryRead(recoveryKey)&& (studioMode?Boolean(item.brief.avatar_creation):!item.brief.avatar_creation));
       if(restored){setCurrent(restored);setDraft({...restored,brief:{...restored.brief,cost_project_id:restored.brief.cost_project_id??restored.id}});setPlanning(Boolean(restored.brief.production));}
+      const local=recoveryRead(`${recoveryKey}:draft`);
+      if(local&&!avatarIntent){try{const cached=JSON.parse(local);const parsed=scriptSchema.safeParse({...cached.draft,title:cached.draft?.title||'Untitled video'});if(cached.dirty&&parsed.success&&Boolean(parsed.data.brief.avatar_creation)===studioMode){setDraft(parsed.data);setCurrent(items.find(x=>x.id===cached.current?.id)??null);setDirty(true);}}catch{/* Invalid recovery data is ignored. */}}
       const pending=recoveryRead(pendingDraftKey);
       if(!preview&&import.meta.env.PROD&&pending){
         try{
@@ -172,12 +178,13 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
   }, [dirty]);
   const profile = profiles.find(p => p.id === draft.content_profile_id);
   const words = scriptText(draft).trim().split(/\s+/).filter(Boolean).length;
-  function change(field: keyof ScriptInput, value: string) { setDraft(d => ({ ...d, [field]: value, ...(field==='content_profile_id'?{brief:{...d.brief,clarified:false,questions:[],summary:'',stage:'source' as const}}:['hook','body','cta'].includes(field)&&d.brief.production?{brief:{...d.brief,production:{...d.brief.production,approved_at:null,step:'approve' as const}}}:{}) })); setDirty(true); setMessage(''); }
+  function change(field: keyof ScriptInput, value: string) { setDraft(d => ({ ...d, [field]: value, ...(field==='content_profile_id'?{hook:'',body:'',cta:'',brief:{...d.brief,production:undefined,...(d.brief.avatar_creation?{avatar_creation:{...d.brief.avatar_creation,topic:'',angle:'',items:[],approved:false,intake_stage:'profile' as const},source:'',notes:''}:{}),clarified:false,questions:[],summary:'',stage:'source' as const}}:['hook','body','cta'].includes(field)&&d.brief.production?{brief:{...d.brief,production:{...d.brief.production,approved_at:null,step:'approve' as const}}}:{}) })); setDirty(true); setMessage(''); }
   function open(item: Script | null) {
     if(busy||sourceProcessing||generating.current)return;
     setEditingScript(false);
     setVersionIntent(null);
     if (dirty && !window.confirm('Some changes have not saved yet. Leave this video anyway?')) return;
+    if(item?.brief.avatar_creation&&!studioMode&&onOpenStudioProject){onOpenStudioProject(item.id);return;}
     const nextWorkspace=item?.id??crypto.randomUUID();setWorkspaceId(nextWorkspace);
     const parsed = briefSchema.safeParse(item?.brief);
     setLibraryView(false);setDraftProgress(null);setCurrent(item); setDraft(item ? {...item,brief:{...(parsed.success ? parsed.data : {...emptyBrief(),stage:'review' as const}),cost_project_id:parsed.success?parsed.data.cost_project_id??item.id:item.id}} : {...empty(),brief:{...emptyBrief(),cost_project_id:nextWorkspace}}); setPlanning(Boolean(parsed.success&&parsed.data.production)); setDirty(false); setMessage(''); setError('');
@@ -208,7 +215,11 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     void persist(next,previousScript,latest=>rebaseRenderState(latest,render)).then(item=>{setSaved(items=>[item,...items.filter(value=>value.id!==item.id)]);if(current?.id===item.id){setCurrent(item);setDraft(value=>({...value,brief:{...value.brief,production:{...value.brief.production!,render:item.brief.production?.render}}}));}}).catch(e=>setError(`Could not save render progress: ${explainError(e)}`));
   }
   function viewLibrary(){if(busy||sourceProcessing)return;setLibraryView(true);setCurrent(null);setPlanning(false);setDirty(false);setMessage('Your submitted video continues in My videos.');setError('');}
-  function updateBrief(brief:ScriptBrief){setDraft(d=>({...d,brief}));setDirty(true);setMessage('');}
+  function updateBrief(brief:ScriptBrief){
+    const before=draft.brief.avatar_creation,after=brief.avatar_creation;
+    const changed=before&&after&&JSON.stringify({...before,intake_stage:undefined,approved:undefined})!==JSON.stringify({...after,intake_stage:undefined,approved:undefined});
+    setDraft(d=>({...d,...(changed?{hook:'',body:'',cta:''}:{}),brief:changed?{...brief,production:undefined}:brief}));setDirty(true);setMessage(changed?'Idea changed. Review the rankings and approve a new script.':'');
+  }
   function viewStep(index:number){
     if(index===1){setPlanning(false);setEditingScript(false);}
     else if(draft.brief.production){setPlanning(true);updateBrief({...draft.brief,production:{...draft.brief.production,step:'visuals'}});}
@@ -323,6 +334,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
     })();
   },[saved,renderStates,preview,queueEpoch]);
   return <div className="scripts-workspace">
+    {studioMode&&<button className="button" disabled={busy||sourceProcessing} onClick={onLeaveStudio}>← Studio projects</button>}
     <div className="page-heading"><h1>{studioMode?'Edit Studio · Create with my avatar':'Create video'}</h1></div>
     {creativeEnabled&&draft.brief.stage==='review'&&<div className="creative-launch"><p>Use this script with your brand kit and review an AI-produced storyboard.</p><button className="button" disabled={busy} onClick={()=>window.dispatchEvent(new CustomEvent('creator:creative',{detail:{title:draft.title,profileId:draft.content_profile_id,source:draft.brief.source||draft.brief.source_summary||draft.brief.url,angle:draft.brief.review||draft.brief.notes||draft.brief.summary,script:scriptText(draft),avatarId:draft.brief.production?.avatar_id}}))}>Use this script in AI-produced video</button></div>}
     {!studioMode&&<VideoLibraryPicker items={libraryItems} current={current} disabled={busy||loading||sourceProcessing} renderStates={renderStates} onSelect={open}/>}
@@ -335,7 +347,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
         {current&&!studioMode&&<VideoVersions current={current} items={saved} busy={busy||dirty||sourceProcessing} onSelect={open} onCreate={intent=>void createVersion(intent)}/>}
         {isFinished&&current?.brief.production?.render?.export_id&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<details><summary>Add or change template graphics — reuse this video</summary><EditStudio key={current.brief.production.render.export_id} profileId={current.content_profile_id} preview={preview} initialExportId={current.brief.production.render.export_id} initialTemplate={current.brief.production.edit_template} initialBrand={current.brief.production.edit_brand}/></details>}
         {isFinished&&current?.brief.production?.render?<><p role="status">{message}</p>{error&&<p role="alert">{error}</p>}<FinishedVideo scriptId={current.id} jobId={current.brief.production.render.job_id} plan={current.brief.production} sourceKind={current.brief.kind}/></>:<>
-        <nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{draft.brief.avatar_creation&&step===1?'Idea':videoSteps[step-1]}</h2></div></div><ol>{(draft.brief.avatar_creation?['Idea','Script','Avatar','Video']:videoSteps).map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>
+        {studioMode?<nav className="video-progress" aria-label="Studio progress"><ol>{['Profile','Template','Idea','Script','Avatar','Review & generate'].map((label,i)=>{const active=step===1?(draft.brief.stage==='perspective'?3:({profile:0,style:1,idea:2,review:2}[draft.brief.avatar_creation?.intake_stage??'profile'])):step+1;return <li key={label} aria-current={active===i?'step':undefined} className={active>i?'complete':''}><button type="button" disabled={busy||sourceProcessing||i>active} onClick={()=>{if(i<3){setPlanning(false);updateBrief({...draft.brief,stage:'source',avatar_creation:{...draft.brief.avatar_creation!,intake_stage:(['profile','style','idea'] as const)[i]}});}else if(i===3){setPlanning(false);updateBrief({...draft.brief,stage:draft.body.trim()?'review':'perspective'});}else if(draft.brief.production){setPlanning(true);updateBrief({...draft.brief,production:{...draft.brief.production,step:i===4?'presenter':'review'}});}}}><span>{active>i?'✓':i+1}</span>{label}</button></li>;})}</ol></nav>:<nav className="video-progress" aria-label="Video progress"><div className="video-step-heading"><span className="video-step-number" aria-hidden="true">{step}</span><div><p>Step {step} of 4</p><h2>{draft.brief.avatar_creation&&step===1?'Idea':videoSteps[step-1]}</h2></div></div><ol>{(draft.brief.avatar_creation?['Idea','Script','Avatar','Video']:videoSteps).map((label,i)=><li key={label} className={step>i+1?'complete':''} aria-current={step===i+1?'step':undefined}>{(i===1&&draft.body.trim()||i===2&&draft.brief.production)?<button type="button" disabled={busy||sourceProcessing} onClick={()=>viewStep(i)}><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</button>:<><span aria-hidden="true">{step>i+1?'✓':i+1}</span>{label}</>}</li>)}</ol></nav>}
         <p className="save-status" role="status">{dirty?(busy?'Saving your progress…':'Saving shortly…'):current?(preview?'Saved on this device':'All changes saved'):'Your progress saves as you go.'}</p>
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
         {!planning&&draftProgress&&!draftProgress.failed&&draftProgress.percent<100&&<ScriptProgress progress={draftProgress}/>}
@@ -370,7 +382,7 @@ export function Scripts({ studioMode=false, creativeEnabled=false, profiles, sel
           {draft.brief.cta_override&&<p>CTA for this video: {draft.brief.cta_override.text}</p>}
           </details>
           {!studioMode&&draft.brief.avatar_creation&&draft.brief.stage==='source'&&<button type="button" className="button" disabled={busy||sourceProcessing} onClick={()=>open(null)}>Start a video from a link or upload →</button>}
-          {!loading&&draft.brief.avatar_creation&&draft.brief.stage==='source'?<AvatarIdeaIntake profile={profiles.find(p=>p.id===draft.content_profile_id)} brief={draft.brief} onChange={updateBrief} busy={busy}/>:!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
+          {!loading&&draft.brief.avatar_creation&&draft.brief.stage==='source'?<AvatarIdeaIntake profiles={profiles} onProfileChange={id=>{setDraft(d=>({...d,content_profile_id:id,hook:'',body:'',cta:'',brief:{...d.brief,avatar_creation:{...d.brief.avatar_creation!,topic:'',angle:'',items:[],approved:false,intake_stage:'profile'},production:undefined,stage:'source'}}));setDirty(true);}} profile={profiles.find(p=>p.id===draft.content_profile_id)} brief={draft.brief} onChange={updateBrief} busy={busy}/>:!loading&&<ScriptIntake key={workspaceId} scope={`${userId}:${workspaceId}`} brief={draft.brief} onChange={updateBrief} profileId={draft.content_profile_id} busy={busy} preview={preview} onProcessing={setSourceProcessing} onProgress={setDraftProgress} onAI={runAI}/>}
           {draft.body.trim()&&['perspective','clarify'].includes(draft.brief.stage)&&<button type="button" disabled={busy} onClick={()=>updateBrief({...draft.brief,stage:'review'})}>Back to existing draft</button>}
         </fieldset>
 	{draft.brief.stage==='review'&&<div className="script-actions workflow-action-bar"><small>About {Math.ceil(words/150*60)} seconds</small><button className="button" disabled={busy||!draft.content_profile_id||!draft.body.trim()||Boolean(draft.brief.screenshot_story?.sections.some(section=>!section.text.trim()))} onClick={()=>void save()}>Next: choose presenter →</button></div>}

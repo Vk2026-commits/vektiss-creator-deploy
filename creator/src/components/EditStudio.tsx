@@ -1,3 +1,5 @@
+import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
+import {restoreStudioFile,saveStudioFile} from '../lib/studio-file-recovery';
 import {avatarCreationSchema,type AvatarCreation} from '../domain/avatar-creation';
 import {popoutBrand} from '../domain/popout-brand';
 import {illustrationScenes,ILLUSTRATION_OUTPUT_ESTIMATE,type SavedIllustration} from '../domain/edit-illustrations';
@@ -16,15 +18,18 @@ import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 import {LogoReview,type LogoChoice} from './LogoReview';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];instructions?:string;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
-export function EditStudio({profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:(creation:AvatarCreation)=>void}){
+export function EditStudio({recoveryScope,profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{recoveryScope?:string;profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:(creation:AvatarCreation)=>void}){
+ const recoveryKey=recoveryScope?`vektiss:studio-footage:v1:${recoveryScope}:${profileId??'none'}`:null;
+ const [restored]=useState(()=>{try{return recoveryKey?JSON.parse(recoveryRead(recoveryKey)??'null'):null;}catch{return null;}});
+ const [fileReady,setFileReady]=useState(!recoveryKey);
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
- const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
- const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
- const [step,setStep]=useState<'start'|'source'|'brand'|'style'|'review'>(initialExportId?'source':'start');
+ const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(restored?.exportId??initialExportId);
+ const [template,setTemplate]=useState(restored?.template??initialTemplate),[plan,setPlan]=useState<Plan|null>(restored?.plan??null);
+ const [step,setStep]=useState<'start'|'source'|'brand'|'style'|'review'>(restored?.step??(initialExportId?'source':'start'));
  const stageTop=useRef<HTMLHeadingElement>(null);
  function go(next:typeof step){setStep(next);requestAnimationFrame(()=>{stageTop.current?.scrollIntoView({block:'start'});stageTop.current?.focus();});}
- const [instructions,setInstructions]=useState('');
- const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>('9:16');
+ const [instructions,setInstructions]=useState(restored?.instructions??'');
+ const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>(restored?.aspectRatio??'9:16');
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
  const [rendered,setRendered]=useState<{url:string;id:string;mode:string;version:number}|null>(null);
@@ -42,15 +47,18 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   catch(e){setError(e instanceof Error?e.message:'Saved edit could not open.');}
   finally{pending.current=false;setBusy(false);}
  }
- const [brand,setBrand]=useState<EditBrand>(initialBrand??defaultEditBrand);
+ const [brand,setBrand]=useState<EditBrand>(restored?.brand??initialBrand??defaultEditBrand);
  const [brandRecord,setBrandRecord]=useState({version:0,savedAt:'',brand:defaultEditBrand});
  const [brandLoaded,setBrandLoaded]=useState(preview);
+ useEffect(()=>{let live=true;if(!recoveryKey)return;void restoreStudioFile(recoveryKey).then(saved=>{if(live){setFile(saved);setFileReady(true);if(restored?.hasFile&&!saved&&!restored?.plan){setStep('source');setError('Please select your recording again. Your template and brand choices are saved.');}}});return()=>{live=false;};},[recoveryKey]);
+ useEffect(()=>{if(!recoveryKey||!fileReady)return;recoveryWrite(recoveryKey,JSON.stringify({exportId,template,plan,step,instructions,aspectRatio,brand,hasFile:!!file}));},[recoveryKey,fileReady,exportId,template,plan,step,instructions,aspectRatio,brand,file]);
+ useEffect(()=>{if(recoveryKey&&fileReady)void saveStudioFile(recoveryKey,file);},[recoveryKey,fileReady,file]);
  const brandDirty=JSON.stringify(brand)!==JSON.stringify(brandRecord.brand);
  const brandValid=editBrandSchema.safeParse(brand).success;
  const fixedPopout=(plan?.proposal.templateId??template)==='popout-explainer';
  const displayedBrand=fixedPopout&&brandValid?popoutBrand(brand):brand;
  const planBrand=plan?.proposal.templateId==='popout-explainer'?popoutBrand(plan.brand??defaultEditBrand):(plan?.brand??defaultEditBrand);
- useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/template-brand').then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not load.');if(live){setBrandRecord({...data,brand:initialBrand??data.brand});setBrand(initialBrand??data.brand);setBrandLoaded(true);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
+ useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/template-brand').then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error??'Brand settings could not load.');if(live){setBrandRecord({...data,brand:initialBrand??data.brand});setBrand(restored?.brand??initialBrand??data.brand);setBrandLoaded(true);}}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
  async function saveBrand(){
   if(preview||pending.current||!brandLoaded||!brandValid)return;
   pending.current=true;setBusy(true);setError('');
@@ -120,7 +128,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  return <section className="edit-studio">
   <span className="eyebrow">EDIT STUDIO</span><h1 ref={stageTop} tabIndex={-1}>{step==='start'?'How would you like to create?':step==='source'?'Choose your footage.':step==='brand'?'Make it yours.':step==='style'?'Choose the look.':'Review your edit.'}</h1>
   <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
-  {step!=='start'&&<nav className="studio-steps" aria-label="Editing stages">{(['source','brand','style','review'] as const).map((stage,i)=><button key={stage} type="button" aria-current={step===stage?'step':undefined} disabled={busy||(stage==='review'?!plan:stage!=='source'&&!file&&!exportId)} onClick={()=>go(stage)}>{i+1}. {stage==='source'?'Footage':stage==='brand'?'Brand':stage==='style'?'Style':'Review'}</button>)}</nav>}
+  {step!=='start'&&<nav className="studio-steps" aria-label="Editing stages">{(['source','style','brand','review'] as const).map((stage,i)=><button key={stage} type="button" aria-current={step===stage?'step':undefined} disabled={busy||(stage==='review'?!plan:stage!=='source'&&!file&&!exportId)} onClick={()=>go(stage)}>{i+1}. {stage==='source'?'Footage':stage==='brand'?'Brand & captions':stage==='style'?'Template':'Review'}</button>)}</nav>}
   {step==='start'&&<><div className="studio-entry">
   {onCreateAvatar&&<article><h2>Create with my avatar</h2><p>Start with your profile and an idea. Approve a script, then bring it to life with your avatar.</p><button type="button" className="button primary" disabled={!profileId||!brandLoaded||!brandValid} onClick={()=>onCreateAvatar(avatarCreationSchema.parse({template:template==='recommend'?'tier-list':template,brand,format:aspectRatio==='16:9'?'landscape':'portrait'}))}>Create with my avatar →</button></article>}
   <article><h2>Edit existing footage</h2><p>Upload your recording or choose a completed video, then add your brand and a visual style.</p><button className="button primary" onClick={()=>go('source')}>Choose footage →</button></article></div>
@@ -137,8 +145,8 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <label>Upload a video (MP4 or WebM, up to 3 minutes and 500 MB)<input type="file" accept="video/mp4,video/webm" onChange={e=>{const next=e.target.files?.[0]??null;if(next&&next.size>500*1024*1024){setError('Choose a video smaller than 500 MB.');e.target.value='';return;}setFile(next);setExportId('');setPlan(null);}}/></label>
    <label>Or choose a completed Creator video<select value={exportId} onChange={e=>{setExportId(e.target.value);setFile(null);setPlan(null);}}><option value="">Choose a completed video</option>{exports.map(x=><option key={x.id} value={x.id}>{new Date(x.created_at).toLocaleString()} · {x.id.slice(0,8)}</option>)}</select></label>
   </fieldset>
-  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('start')}>Back</button><button className="button primary" disabled={busy||(!file&&!exportId)} onClick={()=>go('brand')}>Continue to brand →</button></div></>}
-  {step==='brand'&&<><fieldset disabled={busy||!brandLoaded}><legend>2. Brand colors & captions</legend>
+  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('start')}>Back</button><button className="button primary" disabled={busy||(!file&&!exportId)} onClick={()=>go('style')}>Continue to template →</button></div></>}
+  {step==='brand'&&<><fieldset disabled={busy||!brandLoaded}><legend>3. Brand colors & captions</legend>
    <p>Saved for your creator account. New plans use these defaults; existing edits keep their saved look.</p>
    {fixedPopout&&<p>Pop-out Explainer blends your background with a subtle brand-color glow. Text automatically adjusts for readability.</p>}
    <div className="edit-brand-colors">{([['primary','Brand accent'],['background','Background'],['text','Text']] as const).map(([key,label])=><div key={key}><label>{label}<input type="color" aria-label={label} disabled={fixedPopout&&key==='text'} value={/^#[0-9a-f]{6}$/i.test(brand[key])?displayedBrand[key]:brandRecord.brand[key]} onChange={e=>setBrand({...brand,[key]:e.target.value.toUpperCase()})}/></label><label><span className="sr-only">{label} hex code</span><input type="text" aria-label={`${label} hex code`} disabled={fixedPopout&&key==='text'} aria-invalid={!/^#[0-9a-f]{6}$/i.test(brand[key])} aria-describedby="brand-hex-help" placeholder="#671816" value={displayedBrand[key]} spellCheck={false} autoComplete="off" onChange={e=>{const value=e.target.value.trim();setBrand({...brand,[key]:/^[0-9a-f]{6}$/i.test(value)?`#${value.toUpperCase()}`:value.toUpperCase()});}}/></label></div>)}</div>
@@ -152,19 +160,19 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <p role="status">{brandDirty?'Unsaved brand changes':brandRecord.savedAt?`Brand defaults saved at ${new Date(brandRecord.savedAt).toLocaleString()}`:'Default colors — customize and save your brand.'} Saving does not make an AI call or start a render.</p>
    {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setRendered(null);}}>Apply these settings to this edit</button>}
   </fieldset>
-  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('source')}>Back</button><button className="button primary" disabled={busy||!brandLoaded||brandDirty||!brandValid} onClick={()=>go('style')}>Continue to style →</button></div></>}
-  {step==='style'&&<><fieldset disabled={busy}><legend>3. Choose your direction</legend>
-   <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
-   <p>Changing format adapts the layout without a new AI or avatar call. Save your changes, then export. Previewing is optional.</p>
-   <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
-   <TemplateChooser file={file} aspectRatio={plan?.proposal.aspectRatio??aspectRatio} brand={brandValid?displayedBrand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
-  </fieldset>
   <label>Instructions for this video <span>(optional)</span><textarea maxLength={2000} rows={3} disabled={busy} value={instructions} onChange={e=>setInstructions(e.target.value)} placeholder="For example: emphasize the comparison, keep the introduction brief, and use a calm pace."/></label><p>Applies to this edit only. Your saved creator preferences stay unchanged.</p>
   <p>Generating a plan sends speech to the AI provider for transcription and planning and may incur a processing charge. It does not render a video or generate an avatar.</p>
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
   <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{renderProgress?.stage==='planning'?'Building your edit plan…':'Generate edit plan'}</button>
-  <button className="button" disabled={busy} onClick={()=>go('brand')}>Back to brand</button></>}
+  <button className="button" disabled={busy} onClick={()=>go('style')}>Back to template</button></>}
+  {step==='style'&&<><fieldset disabled={busy}><legend>2. Choose your template</legend>
+   <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
+   <p>Changing format adapts the layout without a new AI or avatar call. Save your changes, then export. Previewing is optional.</p>
+   <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
+   <TemplateChooser file={file} aspectRatio={plan?.proposal.aspectRatio??aspectRatio} brand={brandValid?displayedBrand:brandRecord.brand} selected={template} onSelect={id=>{setTemplate(id);setPlan(null);}}/>
+  </fieldset>
+  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('source')}>Back to footage</button><button className="button primary" disabled={busy} onClick={()=>go('brand')}>Continue to brand & captions →</button></div></>}
   {renderProgress?.stage==='planning'&&<div className="edit-planning-panel" role="status" aria-live="polite"><div className="edit-plan-heading"><div><span className="eyebrow">YOUR EDIT IS TAKING SHAPE</span><h2>{renderProgress.activity??'Building your edit plan'}</h2></div><strong className="edit-progress-number">{renderProgress.percent??0}%</strong></div><progress aria-label="Planning checkpoints completed" max={100} value={renderProgress.percent??0}/><ol className="edit-plan-steps">{planningSteps.map((step,i)=><li key={step.id} className={(renderProgress.percent??0)>i*20?'is-done':(renderProgress.percent??0)===i*20?'is-active':''}>{step.label}</li>)}</ol><p>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')} · Percentage shows completed steps, not time remaining. Speech analysis and scene design can take longer than other steps.</p></div>}
   {error&&<p role="alert">{error}</p>}
   {step==='review'&&plan&&<section className="edit-ready-panel" aria-label="Saved edit plan">
