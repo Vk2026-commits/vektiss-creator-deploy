@@ -996,7 +996,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={avatarIntent} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts key={page==='edit-studio'&&studioAvatar?'studio-avatar':'video-library'} studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={page==='edit-studio'&&studioAvatar?avatarIntent:null} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={page==='edit-studio'&&studioAvatar?null:researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>
