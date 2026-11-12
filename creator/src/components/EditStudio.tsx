@@ -20,6 +20,9 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  const [exports,setExports]=useState<{id:string;created_at:string}[]>([]);
  const [file,setFile]=useState<File|null>(null),[exportId,setExportId]=useState(initialExportId);
  const [template,setTemplate]=useState(initialTemplate),[plan,setPlan]=useState<Plan|null>(null);
+ const [step,setStep]=useState<'start'|'source'|'brand'|'style'|'review'>(initialExportId?'source':'start');
+ const stageTop=useRef<HTMLHeadingElement>(null);
+ function go(next:typeof step){setStep(next);requestAnimationFrame(()=>{stageTop.current?.scrollIntoView({block:'start'});stageTop.current?.focus();});}
  const [instructions,setInstructions]=useState('');
  const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>('9:16');
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -35,7 +38,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
  async function openSavedEdit(id:string){
   if(pending.current||dirty)return;
   pending.current=true;setBusy(true);setError('');
-  try{const response=await mediaFetch(`/api/local-capture/template-plans/${id}`);if(!response.ok)throw Error('This saved edit could not open. Please try again.');const saved:Plan=await response.json();setPlan(saved);setInstructions(saved.instructions??'');setTemplate(saved.proposal.templateId);setAspectRatio(saved.proposal.aspectRatio??'9:16');setDirty(false);}
+  try{const response=await mediaFetch(`/api/local-capture/template-plans/${id}`);if(!response.ok)throw Error('This saved edit could not open. Please try again.');const saved:Plan=await response.json();setPlan(saved);setInstructions(saved.instructions??'');setTemplate(saved.proposal.templateId);setAspectRatio(saved.proposal.aspectRatio??'9:16');setDirty(false);go('review');}
   catch(e){setError(e instanceof Error?e.message:'Saved edit could not open.');}
   finally{pending.current=false;setBusy(false);}
  }
@@ -66,7 +69,7 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
    const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio,instructions})},`edit:planner${EDIT_PLANNER_VERSION}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}:${instructions}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created)setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
-   const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);
+   const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);go('review');
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
@@ -115,22 +118,27 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
  return <section className="edit-studio">
-  <span className="eyebrow">EDIT STUDIO</span><h1>Your talking-head video. Your visuals.</h1>
+  <span className="eyebrow">EDIT STUDIO</span><h1 ref={stageTop} tabIndex={-1}>{step==='start'?'How would you like to create?':step==='source'?'Choose your footage.':step==='brand'?'Make it yours.':step==='style'?'Choose the look.':'Review your edit.'}</h1>
   <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
-  <section aria-label="Saved edits"><h2>Saved edits</h2><p>Reopen an edit from this account on any device. Opening it does not generate a plan or start a render.</p>
+  {step!=='start'&&<nav className="studio-steps" aria-label="Editing stages">{(['source','brand','style','review'] as const).map((stage,i)=><button key={stage} type="button" aria-current={step===stage?'step':undefined} disabled={busy||(stage==='review'?!plan:stage!=='source'&&!file&&!exportId)} onClick={()=>go(stage)}>{i+1}. {stage==='source'?'Footage':stage==='brand'?'Brand':stage==='style'?'Style':'Review'}</button>)}</nav>}
+  {step==='start'&&<><div className="studio-entry">
+  {onCreateAvatar&&<article><h2>Create with my avatar</h2><p>Start with your profile and an idea. Approve a script, then bring it to life with your avatar.</p><button type="button" className="button primary" disabled={!profileId||!brandLoaded||!brandValid} onClick={()=>onCreateAvatar(avatarCreationSchema.parse({template:template==='recommend'?'tier-list':template,brand,format:aspectRatio==='16:9'?'landscape':'portrait'}))}>Create with my avatar →</button></article>}
+  <article><h2>Edit existing footage</h2><p>Upload your recording or choose a completed video, then add your brand and a visual style.</p><button className="button primary" onClick={()=>go('source')}>Choose footage →</button></article></div>
+  <details className="studio-saved"><summary>Saved edits ({savedEdits.length})</summary><section aria-label="Saved edits"><p>Reopen an edit from this account on any device. Opening it does not generate a plan or start a render.</p>
    {savedLoading&&<p role="status">Loading saved edits…</p>}
    {savedError&&<p role="alert">{savedError}</p>}
    {!savedLoading&&!savedError&&!savedEdits.length&&<p>No saved edits yet.</p>}
    {dirty&&<p>Save your current edit before opening another.</p>}
    {savedEdits.map(edit=><article key={edit.id}><h3>{edit.title}</h3><p>{editTemplates.find(t=>t.id===edit.templateId)?.name} · {edit.savedAt?new Date(edit.savedAt).toLocaleString():'Saved edit'}</p><button className="button" disabled={busy||dirty} onClick={()=>void openSavedEdit(edit.id)}>{plan?.id===edit.id?'Open edit shown below':'Open saved edit'}</button></article>)}
   </section>
-  {onCreateAvatar&&<div><button type="button" className="button primary" disabled={!profileId||!brandLoaded||!brandValid} onClick={()=>onCreateAvatar(avatarCreationSchema.parse({template:template==='recommend'?'tier-list':template,brand,format:aspectRatio==='16:9'?'landscape':'portrait'}))}>Create with my avatar →</button><p>Start with your content profile and an idea. No footage or reference link needed. Choose your style, approve a script, then select your avatar.</p></div>}
+  </details></>}
   {!profileId&&<p role="alert">Select a Content Profile first.</p>}
-  <fieldset disabled={busy}><legend>Edit existing footage</legend>
+  {step==='source'&&<><fieldset disabled={busy}><legend>Edit existing footage</legend>
    <label>Upload a video (MP4 or WebM, up to 3 minutes and 500 MB)<input type="file" accept="video/mp4,video/webm" onChange={e=>{const next=e.target.files?.[0]??null;if(next&&next.size>500*1024*1024){setError('Choose a video smaller than 500 MB.');e.target.value='';return;}setFile(next);setExportId('');setPlan(null);}}/></label>
    <label>Or choose a completed Creator video<select value={exportId} onChange={e=>{setExportId(e.target.value);setFile(null);setPlan(null);}}><option value="">Choose a completed video</option>{exports.map(x=><option key={x.id} value={x.id}>{new Date(x.created_at).toLocaleString()} · {x.id.slice(0,8)}</option>)}</select></label>
   </fieldset>
-  <fieldset disabled={busy||!brandLoaded}><legend>2. Brand colors & captions</legend>
+  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('start')}>Back</button><button className="button primary" disabled={busy||(!file&&!exportId)} onClick={()=>go('brand')}>Continue to brand →</button></div></>}
+  {step==='brand'&&<><fieldset disabled={busy||!brandLoaded}><legend>2. Brand colors & captions</legend>
    <p>Saved for your creator account. New plans use these defaults; existing edits keep their saved look.</p>
    {fixedPopout&&<p>Pop-out Explainer blends your background with a subtle brand-color glow. Text automatically adjusts for readability.</p>}
    <div className="edit-brand-colors">{([['primary','Brand accent'],['background','Background'],['text','Text']] as const).map(([key,label])=><div key={key}><label>{label}<input type="color" aria-label={label} disabled={fixedPopout&&key==='text'} value={/^#[0-9a-f]{6}$/i.test(brand[key])?displayedBrand[key]:brandRecord.brand[key]} onChange={e=>setBrand({...brand,[key]:e.target.value.toUpperCase()})}/></label><label><span className="sr-only">{label} hex code</span><input type="text" aria-label={`${label} hex code`} disabled={fixedPopout&&key==='text'} aria-invalid={!/^#[0-9a-f]{6}$/i.test(brand[key])} aria-describedby="brand-hex-help" placeholder="#671816" value={displayedBrand[key]} spellCheck={false} autoComplete="off" onChange={e=>{const value=e.target.value.trim();setBrand({...brand,[key]:/^[0-9a-f]{6}$/i.test(value)?`#${value.toUpperCase()}`:value.toUpperCase()});}}/></label></div>)}</div>
@@ -144,7 +152,8 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
    <p role="status">{brandDirty?'Unsaved brand changes':brandRecord.savedAt?`Brand defaults saved at ${new Date(brandRecord.savedAt).toLocaleString()}`:'Default colors — customize and save your brand.'} Saving does not make an AI call or start a render.</p>
    {plan&&<button className="button" disabled={!brandValid} onClick={()=>{setPlan({...plan,brand:{...brand}});setDirty(true);setRendered(null);}}>Apply these settings to this edit</button>}
   </fieldset>
-  <fieldset disabled={busy}><legend>3. Choose your direction</legend>
+  <div className="studio-navigation"><button className="button" disabled={busy} onClick={()=>go('source')}>Back</button><button className="button primary" disabled={busy||!brandLoaded||brandDirty||!brandValid} onClick={()=>go('style')}>Continue to style →</button></div></>}
+  {step==='style'&&<><fieldset disabled={busy}><legend>3. Choose your direction</legend>
    <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
    <p>Changing format adapts the layout without a new AI or avatar call. Save your changes, then export. Previewing is optional.</p>
    <label><input type="radio" name="edit-style" checked={template==='recommend'} onChange={()=>{setTemplate('recommend');setPlan(null);}}/> Recommend a style from my video</label>
@@ -155,9 +164,10 @@ export function EditStudio({profileId,preview=false,initialExportId='',initialTe
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
   <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{renderProgress?.stage==='planning'?'Building your edit plan…':'Generate edit plan'}</button>
+  <button className="button" disabled={busy} onClick={()=>go('brand')}>Back to brand</button></>}
   {renderProgress?.stage==='planning'&&<div className="edit-planning-panel" role="status" aria-live="polite"><div className="edit-plan-heading"><div><span className="eyebrow">YOUR EDIT IS TAKING SHAPE</span><h2>{renderProgress.activity??'Building your edit plan'}</h2></div><strong className="edit-progress-number">{renderProgress.percent??0}%</strong></div><progress aria-label="Planning checkpoints completed" max={100} value={renderProgress.percent??0}/><ol className="edit-plan-steps">{planningSteps.map((step,i)=><li key={step.id} className={(renderProgress.percent??0)>i*20?'is-done':(renderProgress.percent??0)===i*20?'is-active':''}>{step.label}</li>)}</ol><p>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')} · Percentage shows completed steps, not time remaining. Speech analysis and scene design can take longer than other steps.</p></div>}
   {error&&<p role="alert">{error}</p>}
-  {plan&&<section className="edit-ready-panel" aria-label="Saved edit plan">
+  {step==='review'&&plan&&<section className="edit-ready-panel" aria-label="Saved edit plan">
    <div className="edit-plan-heading"><div><span className="eyebrow">{dirty?'CHANGES TO SAVE':'PLAN READY'}</span><h2>{editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}</h2><p>Your scenes are planned. Preview the edit, then export your video.</p></div><span className="edit-plan-badge">{plan.storyboard.length} scenes · {plan.proposal.aspectRatio??'9:16'}</span></div>
    <div className="edit-scene-summary" aria-label="Planned story">{plan.storyboard.map((scene,i)=><article key={i}><span>{String(i+1).padStart(2,'0')} · {Math.floor(scene.start)}–{Math.ceil(scene.end)}s</span><h3>{scene.headline}</h3><p>{scene.visual==='presenter'?'Presenter focus':scene.scene??'Animated explanation'}</p></article>)}</div>
    <details className="edit-plan-details"><summary>Brand and saved plan details</summary><p>{captionStyles.find(s=>s.id===planBrand.captionStyle)?.name} · Accent {planBrand.primary} · Background {planBrand.background} · Text {planBrand.text}</p><p>Saved {plan.savedAt?new Date(plan.savedAt).toLocaleString():''}. Your original speech is preserved.</p></details>
