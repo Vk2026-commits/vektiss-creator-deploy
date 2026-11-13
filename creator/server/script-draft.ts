@@ -25,7 +25,7 @@ export async function createSavedDraft(input:unknown,authorization:string,config
  async function ai(action:string,brief:ScriptBrief){
   const result=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body:JSON.stringify({action,profileId:next.content_profile_id,brief:{...brief,cost_project_id:brief.cost_project_id??request.script_id}}),signal:AbortSignal.timeout(150000)});
   const data=await result.json();
-  if(!result.ok)throw new DraftError(data?.code==='RATE_LIMIT'?'AI request limit reached. Your saved source is preserved; retry later.':data?.code==='SCRIPT_STYLE'?'The draft did not meet the profile’s style. Retry the draft using your saved source.':'AI could not finish. Your saved source and previous script are preserved.');
+  if(!result.ok)throw new DraftError(data?.code==='PROVIDER_QUOTA'?'The AI provider has no available quota. Ask the site administrator to check AI billing. Your source is saved.':data?.code==='PROVIDER_RATE_LIMIT'?'The AI provider is limiting requests. Retry your saved draft later; you do not need to import the clip again.':data?.code==='RATE_LIMIT'?'AI request limit reached. Your saved source is preserved; retry later.':data?.code==='SCRIPT_STYLE'?'The draft did not meet the profile’s style. Retry the draft using your saved source.':'AI could not finish. Your saved source and previous script are preserved.');
   return data;
  }
  let action:string=request.action;

@@ -1,7 +1,7 @@
 import {createReadStream} from 'node:fs';
-import {copyFile,writeFile} from 'node:fs/promises';
+import {copyFile,writeFile,readFile,rename} from 'node:fs/promises';
 import {resolve} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {z} from 'zod';
 import {prepareMedia} from './prepare-media';
 import {importVideo} from './social-video';
@@ -25,18 +25,29 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
  }
  const original=resolve(media,`${originalId}.video`);
  async function ai(action:string,frames?:unknown,transcript='',blob?:Buffer){
+  // Account-owned root; key includes exact media/evidence and profile, never URL alone.
+  const digest=createHash('sha256').update(JSON.stringify({version:1,profileId,action,frames,transcript})).update(blob??'').digest('hex');
+  const checkpoint=resolve(media,`analysis-${digest}.json`);
+  function valid(value:unknown){return action==='video-boundary'?boundarySchema.parse(value):z.object({text:z.string().min(1).max(40000)}).parse(value);}
+  try{const saved=JSON.parse(await readFile(checkpoint,'utf8'));if(typeof saved.at==='number'&&Date.now()-saved.at>=0&&Date.now()-saved.at<86400000)return valid(saved.result);}catch{/* No completed checkpoint. */}
   const body=new FormData();body.set('action',action);body.set('profileId',profileId);
   if(config.costProjectId)body.set('projectId',config.costProjectId);
   if(blob)body.set('file',new Blob([new Uint8Array(blob)],{type:'video/mp4'}),'source.mp4');
   if(frames){body.set('frames',JSON.stringify(frames));body.set('transcript',transcript);body.set('audioUnavailable',String(!transcript));}
   const response=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers:{Authorization:authorization,apikey:config.publicKey},body,signal:AbortSignal.timeout(150000)});
-  const result=await response.json();if(!response.ok)throw new DraftError('Source analysis could not finish. Your original clip is saved; retry from your source.');
-  return result;
+  const result=await response.json();if(!response.ok){
+   const message=result.code==='PROVIDER_QUOTA'?'The AI provider has no available quota. The site administrator must check AI billing before retrying.':result.code==='PROVIDER_RATE_LIMIT'||result.code==='RATE_LIMIT'?'The AI provider is limiting requests. Please retry later.':'Source analysis could not finish. Please retry.';
+   throw new DraftError(`${message} Your original clip and completed analysis are saved.`);
+  }
+  const validated=valid(result),temporary=`${checkpoint}.${randomUUID()}.tmp`;
+  await writeFile(temporary,JSON.stringify({at:Date.now(),result:validated}),{mode:0o600});
+  await rename(temporary,checkpoint);
+  return validated;
  }
  const coarse=await extractVideoFrames(createReadStream(original));
  async function transcript(path:string){
   const prepared=await prepareMedia(createReadStream(path));
-  try{return z.string().parse((await ai('transcribe',undefined,'',prepared.body)).text);}catch{return '';}
+  return z.object({text:z.string()}).parse(await ai('transcribe',undefined,'',prepared.body)).text;
  }
  let end=options.end,reason='Cut selected by you.';
  let speech='';
@@ -65,6 +76,6 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
  const frames=selectedId===originalId?coarse:await extractVideoFrames(createReadStream(selectedPath));
  if(selectedId!==originalId||!speech)speech=await transcript(selectedPath);
  const result=await ai('video-analysis',frames.frames,speech);
- const text=z.string().min(1).max(40000).parse(result.text);
+ const text=z.object({text:z.string().min(1).max(40000)}).parse(result).text;
  return {text,cut:{original_id:originalId,selected_id:selectedId,duration:coarse.duration,end,reason}};
 }

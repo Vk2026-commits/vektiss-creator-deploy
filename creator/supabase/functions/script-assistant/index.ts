@@ -89,7 +89,7 @@ Deno.serve(async request=>{
   async function trackedFetch(url:string,options:RequestInit){
    const response=await fetch(url,options);
    const data=await response.clone().json().catch(()=>null);
-   providerRequests.push({id:response.headers.get('x-request-id'),response_id:data?.id??null,status:response.status,at:new Date().toISOString()});
+   providerRequests.push({id:response.headers.get('x-request-id'),response_id:data?.id??null,status:response.status,error_code:typeof data?.error?.code==='string'?data.error.code:null,at:new Date().toISOString()});
    const requestSaved=await db.from('creator_ai_generations').update({provider_requests:providerRequests}).eq('id',generationId!);
    if(requestSaved.error)throw Error('PERSISTENCE');
    if(data?.usage){
@@ -97,6 +97,7 @@ Deno.serve(async request=>{
     const saved=await db.from('creator_ai_generations').update({usage:providerUsage,estimated_cost_usd:openAICost(usageModel,providerUsage),pricing_version:PRICING_VERSION}).eq('id',generationId!);
     if(saved.error)throw Error('PERSISTENCE');
    }
+   if(response.status===429)throw Error(data?.error?.code==='insufficient_quota'?'PROVIDER_QUOTA':'PROVIDER_RATE_LIMIT');
    return response;
   }
   async function persist(result:unknown,usage:unknown){
@@ -273,5 +274,5 @@ Deno.serve(async request=>{
   }
   const finalOutput={...output,...(!clarify&&approvedDelivery?{delivery_preferences:approvedDelivery}:{}),...(!clarify&&screenshot_story?{screenshot_story}:{})};
   await persist(finalOutput,totalUsage);return respond({...finalOutput,generationId});
- } catch(error) {const diagnostic={requestId,phase,name:error instanceof Error?error.name:'unknown',reason:error instanceof z.ZodError?error.issues.map(i=>({code:i.code,path:i.path})):error instanceof Error&&['PROVIDER','PERSISTENCE'].includes(error.message)?error.message:'OTHER'};console.error('creator-ai-failed',diagnostic);if(generationId)await db.from('creator_ai_generations').update({status:'error'}).eq('id',generationId);const code=error instanceof Error&&['SOURCE_URL','SOURCE_UNAVAILABLE','SOURCE_TOO_LONG','SCRIPT_STYLE'].includes(error.message)?error.message:'UNAVAILABLE';return respond({code},503);}
+ } catch(error) {const diagnostic={requestId,phase,name:error instanceof Error?error.name:'unknown',reason:error instanceof z.ZodError?error.issues.map(i=>({code:i.code,path:i.path})):error instanceof Error&&['PROVIDER','PERSISTENCE'].includes(error.message)?error.message:'OTHER'};console.error('creator-ai-failed',diagnostic);if(generationId)await db.from('creator_ai_generations').update({status:'error'}).eq('id',generationId);const code=error instanceof Error&&['SOURCE_URL','SOURCE_UNAVAILABLE','SOURCE_TOO_LONG','SCRIPT_STYLE','PROVIDER_QUOTA','PROVIDER_RATE_LIMIT'].includes(error.message)?error.message:'UNAVAILABLE';return respond({code},code==='PROVIDER_RATE_LIMIT'?429:503);}
 });

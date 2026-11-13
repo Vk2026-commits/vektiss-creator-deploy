@@ -11,6 +11,8 @@ export async function scriptAI(action: string, profileId: string, brief?: Script
     let code = '';
     let retryAt='';
     try { const failure=await error.context.json();code=failure.code??'';retryAt=failure.retryAt??''; } catch { /* no safe server response */ }
+    if(code==='PROVIDER_QUOTA')throw new Error('The AI provider has no available quota. Ask the site administrator to check AI billing. Your source is saved.');
+    if(code==='PROVIDER_RATE_LIMIT')throw new Error('The AI provider is temporarily limiting requests. Retry the draft later; your source is saved and does not need importing again.');
     if(code==='RATE_LIMIT'){
       const reset=new Date(retryAt);
       throw new Error(Number.isFinite(reset.getTime())?`AI testing/request limit reached. Retry after ${reset.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',second:'2-digit'})}. Your source is saved—retry the draft without importing again.`:'AI request limit reached. Your source is saved; please retry later.');

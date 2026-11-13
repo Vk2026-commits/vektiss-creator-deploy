@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {sourceWorkflow} from '../server/source-workflow';
 vi.mock('../server/prepare-media',()=>({prepareMedia:async(source:{path:string;destroy:()=>void},preserve?:(p:string)=>Promise<void>)=>{source.destroy();if(preserve)await preserve(source.path);return {body:Buffer.from('audio'),type:'video/mp4'};}}));
-vi.mock('../server/video-frames',()=>({extractVideoFrames:async(source:{destroy:()=>void})=>{source.destroy();return {duration:30,frames:[{time:0,image:'data:image/jpeg;base64,AAAA'}]};}}));
+vi.mock('../server/video-frames',()=>({extractVideoFrames:async(source:{destroy:()=>void},times?:number[])=>{source.destroy();return {duration:30,frames:(times??[0]).map(time=>({time,image:'data:image/jpeg;base64,AAAA'}))};}}));
 const profile='11111111-1111-4111-8111-111111111111';
 let root='';afterEach(async()=>{vi.restoreAllMocks();if(root)await rm(root,{recursive:true,force:true});});
 async function setup(){root=await mkdtemp(join(tmpdir(),'source-workflow-'));await mkdir(join(root,'.local-captures'));const input=join(root,'upload');await writeFile(input,'original');return input;}
@@ -46,4 +46,22 @@ it('persists a reviewable original and waits instead of guessing an uncertain re
  const result=await sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config);
  expect(result.waiting).toBe(true);expect(result.original_id).toMatch(/^[a-f0-9-]{36}$/);expect(result.end).toBe(12);
  expect(actions).not.toContain('video-analysis');
+});
+
+it('stops after a failed transcription instead of sending more provider requests',async()=>{
+ const input=await setup();const request=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json({code:'PROVIDER_RATE_LIMIT'},{status:429}));
+ await expect(sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config)).rejects.toThrow('limiting requests');
+ expect(request).toHaveBeenCalledTimes(1);
+});
+it('reuses completed evidence after an analysis failure',async()=>{
+ const input=await setup();const actions:string[]=[];let fail=true;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(_url,init)=>{
+  const action=(init!.body as FormData).get('action') as string;actions.push(action);
+  if(action==='video-analysis'&&fail)return Response.json({code:'PROVIDER_RATE_LIMIT'},{status:429});
+  return Response.json(action==='transcribe'?{text:'Speech'}:action==='video-boundary'?{status:'none',end:null,confidence:'high',reason:'Original'}:{text:'Completed analysis'});
+ });
+ await expect(sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config)).rejects.toThrow('limiting requests');
+ fail=false;
+ expect((await sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config)).text).toBe('Completed analysis');
+ expect(actions).toEqual(['transcribe','video-boundary','video-analysis','video-analysis']);
 });
