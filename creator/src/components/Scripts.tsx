@@ -1,3 +1,5 @@
+import {ScriptReference} from './ScriptReference';
+import {withCurrentDraft,completeRevision} from '../domain/script-editorial';
 import {rankingScriptError,type AvatarIntent} from '../domain/avatar-creation';
 import {AvatarIdeaIntake} from './AvatarIdeaIntake';
 import {ScriptProgress,type DraftProgress} from './ScriptProgress';
@@ -262,7 +264,7 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
         recoveryWrite(recoveryKey,snapshot.id);recoveryWrite(pendingDraftKey,body);
         await recoverDraft(body);return;
       }
-      let result=await scriptAI(action==='summary_only'?'summarize':action,draft.content_profile_id,{...snapshot.brief,questions:snapshot.brief.questions.filter(q=>q.answer.trim())});
+      let result=await scriptAI(action==='summary_only'?'summarize':action,draft.content_profile_id,{...withCurrentDraft(snapshot.brief,snapshot),questions:snapshot.brief.questions.filter(q=>q.answer.trim())});
       let next:ScriptInput;
       if(action==='summary_only') {
         next={...input,brief:{...input.brief,source_summary:result.summary}};
@@ -273,17 +275,18 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
           next.brief.stage='perspective';const approvedSource=await persist(next,snapshot);setCurrent(approvedSource);setDraft(approvedSource);setDirty(false);setSaved(items=>[approvedSource,...items.filter(s=>s.id!==approvedSource.id)]);return;
         }
         setMessage('');setDraftProgress({percent:85,label:'Writing your script and angle…'});
-        result=await scriptAI('generate',draft.content_profile_id,next.brief);
+        result=await scriptAI('generate',draft.content_profile_id,withCurrentDraft(next.brief,input));
         next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,review:result.review,stage:'review'}};
       } else if(action==='clarify') {
         const brief={...input.brief,summary:result.summary,questions:[...input.brief.questions.filter(q=>q.answer.trim()).slice(-4),...result.questions.slice(0,1).map((question:string)=>({question,answer:''}))],clarified:true,stage:'clarify' as const};
         next={...input,brief};
         if(result.questions.length===0){
           setMessage('Your point of view is clear. Writing your script…');
-          result=await scriptAI('generate',draft.content_profile_id,brief);
+          result=await scriptAI('generate',draft.content_profile_id,withCurrentDraft(brief,input));
           next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...brief,production:revisedPlan(input.brief.production),review:result.review,stage:'review'}};
         }
       } else next={...input,hook:result.hook,body:result.body,cta:result.cta,brief:{...input.brief,production:revisedPlan(input.brief.production),review:result.review,stage:'review'}};
+      if(action!=='summary_only'&&next.brief.stage==='review')next={...next,brief:completeRevision(next.brief)};
       if(result.screenshot_story&&next.brief.stage==='review')next={...next,brief:{...next.brief,screenshot_story:result.screenshot_story}}; setDraftProgress({percent:95,label:'Saving your draft…'});
       const item=await persist(next,snapshot);setCurrent(item);setDraft(item);setDirty(false);setSaved(items=>[item,...items.filter(s=>s.id!==item.id)]);setEditingScript(false);setDraftProgress({percent:100,label:'Your draft is ready'});setMessage(next.brief.stage==='review'?'AI script saved. Review facts before publishing.':'One detail about your perspective needs clarification.');
       if(action==='generate'&&next.brief.research_opportunity_id&&!preview)void researchFeedback(next.brief.research_opportunity_id,'script_created').catch(()=>{/* Conversion tracking must not interrupt a completed draft. */});
@@ -356,6 +359,8 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
           {!draft.brief.avatar_creation&&draft.brief.stage==='source'&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<label>Video style<select value={draft.brief.template_workflow?'explainer':'reaction'} onChange={e=>{setDraft(d=>({...d,brief:{...d.brief,template_workflow:e.target.value==='explainer'}}));setDirty(true);}}><option value="explainer">Original video · avatar or my footage</option><option value="reaction">Reaction · include the source on screen</option></select></label>}
           {draft.brief.stage==='review'&&<section className="review-script-first" aria-label="Your script">
             {draft.brief.screenshot_story?.sections.length?<StoryScriptReview story={draft.brief.screenshot_story} editing={editingScript} onChange={screenshot_story=>{setDraft(d=>({...d,hook:'',body:screenshot_story.sections.map(s=>s.text).join('\n\n'),cta:'',brief:{...d.brief,screenshot_story,production:d.brief.production?{...d.brief.production,screenshot_story,approved_at:null,step:'approve'}:undefined}}));setDirty(true);}}/>:!editingScript?<div className="ai-script-preview"><p>{draft.hook}</p><p>{draft.body}</p><p>{draft.cta}</p></div>:<><label>Hook<textarea rows={3} maxLength={2000} value={draft.hook} onChange={e=>change('hook',e.target.value)}/></label><label>Main message<textarea rows={10} maxLength={15000} value={draft.body} onChange={e=>change('body',e.target.value)}/></label><label>Call to action<textarea rows={3} maxLength={2000} value={draft.cta} onChange={e=>change('cta',e.target.value)}/></label></>}
+            <ScriptReference value={draft.brief.reference_script} disabled={busy||preview} onChange={reference_script=>updateBrief({...draft.brief,reference_script})}/>
+            <section aria-label="Script feedback"><h3>Refine your script</h3><p>Tell the writer what to change. Your current draft, profile, source and earlier feedback stay in context.</p><label>Your feedback<textarea rows={4} maxLength={5000} disabled={busy||preview} value={draft.brief.revision_request??''} onChange={e=>updateBrief({...draft.brief,revision_request:e.target.value})} placeholder="Use the example’s event → bigger problem → practical opportunity structure. Keep this topic and my offer."/></label><button type="button" className="button" disabled={busy||preview||!draft.brief.revision_request?.trim()} onClick={()=>void runAI('generate')}>{busy?'Revising…':'Revise my script'}</button>{!!draft.brief.revision_history?.length&&<details><summary>Earlier feedback</summary>{draft.brief.revision_history.map((feedback,index)=><p key={index}>{feedback}</p>)}</details>}</section>
             <div className="review-secondary"><button type="button" onClick={()=>setEditingScript(v=>!v)}>{editingScript?'Done editing':'Edit script'}</button><button type="button" disabled={busy||preview} onClick={()=>void runAI('generate')}>Rewrite script</button><button type="button" onClick={()=>updateBrief({...draft.brief,stage:'perspective'})}>Add an angle</button></div>
           </section>}
           <details className="audience-options" open={!profile}><summary><span className="audience-summary"><strong>Audience & call to action</strong><span>{profile?.name||'Choose your audience'}</span></span></summary>
@@ -365,7 +370,7 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
           {profile && <details><summary>Audience and voice details</summary><div className="script-direction"><p>{profile.primary_audience}</p><small>Tone: {profile.strategy.tone.join(' · ') || 'Your natural voice'}</small>{profile.strategy.things_to_avoid.length > 0 && <p>Avoid: {profile.strategy.things_to_avoid.join(' · ')}</p>}</div></details>}
           <details><summary>{draft.title&&!draft.title.startsWith('Untitled')?'Edit video title':'AI will name your video after reading the source'}</summary><label>Video title (optional)<input maxLength={200} value={draft.title.startsWith('Untitled')?'':draft.title} onChange={e => change('title', e.target.value)} placeholder="Leave blank for an AI title" /></label></details>
           </details>
-          {profile&&!preview&&<details className="script-context"><summary>Ask for a change</summary><ProfileChat key={`${profile.id}:${current?.id??'new'}`} profileId={profile.id} allowVideo onApply={async proposal=>{
+          {profile&&!preview&&<details className="script-context"><summary>Update content profile</summary><ProfileChat key={`${profile.id}:${current?.id??'new'}`} profileId={profile.id} allowVideo onApply={async proposal=>{
             if(!supabase)throw Error('Please sign in again.');
             if(proposal.scope==='video'){
               if(!proposal.cta)throw Error('Add a CTA first.');

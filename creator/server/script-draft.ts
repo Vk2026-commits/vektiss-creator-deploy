@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {withCurrentDraft,completeRevision} from '../src/domain/script-editorial';
 import {scriptSchema,type Script,type ScriptInput} from '../src/domain/scripts';
 import {suggestedVideoTitle} from '../src/domain/video-title';
 import type {ScriptBrief} from '../src/domain/script-brief';
@@ -23,6 +24,7 @@ export async function createSavedDraft(input:unknown,authorization:string,config
   snapshot=items[0];
  }
  async function ai(action:string,brief:ScriptBrief){
+  if(action==='generate')brief=withCurrentDraft(brief,next);
   const result=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body:JSON.stringify({action,profileId:next.content_profile_id,brief:{...brief,cost_project_id:brief.cost_project_id??request.script_id}}),signal:AbortSignal.timeout(150000)});
   const data=await result.json();
   if(!result.ok)throw new DraftError(data?.code==='PROVIDER_QUOTA'?'The AI provider has no available quota. Ask the site administrator to check AI billing. Your source is saved.':data?.code==='PROVIDER_RATE_LIMIT'?'The AI provider is limiting requests. Retry your saved draft later; you do not need to import the clip again.':data?.code==='RATE_LIMIT'?'AI request limit reached. Your saved source is preserved; retry later.':data?.code==='SCRIPT_STYLE'?'The draft did not meet the profile’s style. Retry the draft using your saved source.':'AI could not finish. Your saved source and previous script are preserved.');
@@ -45,6 +47,6 @@ export async function createSavedDraft(input:unknown,authorization:string,config
   if(questions.length){await save();return snapshot;}
   if(!snapshot.body.trim())await save();action='generate';result=await ai(action,next.brief);
  }
- next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...next.brief,...(result.screenshot_story?{screenshot_story:result.screenshot_story}:{}),production:undefined,review:result.review,stage:'review'}};
+ next={...next,hook:result.hook,body:result.body,cta:result.cta,brief:{...completeRevision(next.brief),...(result.screenshot_story?{screenshot_story:result.screenshot_story}:{}),production:undefined,review:result.review,stage:'review'}};
  await save();return snapshot;
 }

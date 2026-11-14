@@ -23,8 +23,8 @@ export function reactionIssues(draft:{hook:string;body:string}):string[]{
  if(/maintain a level of awareness|remaining vigilant|layers of uncertainty|it.s essential to recognize/i.test(draft.body))issues.push('Replace essay language with short, direct spoken advice.');
  return issues;
 }
-export function reactionEvidence(brief:{source:string;notes:string;questions:{question:string;answer:string}[]}){
- return {source:brief.source,creatorNotes:brief.notes,creatorAnswers:brief.questions.filter(q=>q.answer.trim())};
+export function reactionEvidence(brief:{source:string;notes:string;questions:{question:string;answer:string}[];reference_script?:string;revision_request?:string;revision_history?:string[];current_draft?:{hook:string;body:string;cta:string}}){
+ return {reference_script:brief.reference_script,revision_request:brief.revision_request,revision_history:brief.revision_history,current_draft:brief.current_draft,source:brief.source,creatorNotes:brief.notes,creatorAnswers:brief.questions.filter(q=>q.answer.trim())};
 }
 export const reactionDirection=`Always spell the emergency number 9-1-1, never 911, in Stephen's spoken script for voice pronunciation. For a screenshot or graphic, react to its supported advice or claim; do not invent filmed actions.
 For this profile, write REACTION COMMENTARY, not a source summary. The viewer is already watching the source. Open with an actual position: approval, concern about a specific decision, a respectful challenge, or reinforcement of a boundary. At most one short sentence of scene setup; most words must explain the position and one useful takeaway. Use direct, conversational, varied sentences.
