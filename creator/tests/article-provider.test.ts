@@ -73,7 +73,7 @@ it('overfetches articles and excludes prior stories while keeping the publicatio
  const fetcher=mock({id:'refill',status:'queued'});
  await startDeepResearch({brief,requestedCount:2,candidateMultiplier:2,excludeUrls:['https://www.reuters.com/example']});
  const body=JSON.parse((fetcher.mock.calls[0] as unknown as [string,RequestInit])[1].body as string);
- expect(body.input).toContain('Find up to 4');
+ expect(body.input).toContain('Find up to 8');
  expect(body.input).toContain('https://www.reuters.com/example');
  expect(body.input).toContain('Keep the original publication window');
  expect(body.tools[0].filters.search_after_date_filter).toBe('09/28/2026');
