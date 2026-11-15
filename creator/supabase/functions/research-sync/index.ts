@@ -777,7 +777,7 @@ Deno.serve(async (request) => {
     if (brief.data.sourceMode === 'articles' && ranked.length < requestedCount && currentRound < 3 && !providerMetadata.unavailableRound) {
       try {
         const excludeUrls = [...new Set([...duplicateHistory.flatMap(item => item.sourceSnapshot.map(source => source.url)), ...providerRun.sources.map(source => source.url)])];
-        const run = await startDeepResearch({brief:brief.data,requestedCount:requestedCount-ranked.length,candidateMultiplier:2,excludeUrls});
+        const run = await startDeepResearch({brief:brief.data,requestedCount:requestedCount-ranked.length,candidateMultiplier:3,articleRound:currentRound+1,excludeUrls});
         const saved = await db.from('creator_research_jobs').update({
           status:'researching',provider_response_id:run.id,
           phase:`${ranked.length} of ${requestedCount} articles found; finding the remaining stories…`,
@@ -801,7 +801,7 @@ Deno.serve(async (request) => {
         : providerMetadata.unavailableRound
           ? `No strong, distinct clips found after ${currentRound} rounds. The provider could not start round ${providerMetadata.unavailableRound}. Try again later.`
           : brief.data.discoveryFilters?filteredSearchPhase():completedSearchPhase(0,Number(job.requested_count),currentRound);
-      const result=await db.from('creator_research_jobs').update({status:brief.data.sourceMode==='articles'?'failed':'ready',interruption_reason:brief.data.sourceMode==='articles'?'retrieval_limit':null,reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
+      const result=await db.from('creator_research_jobs').update({status:brief.data.sourceMode==='articles'?'failed':'ready',interruption_reason:brief.data.sourceMode==='articles'?(providerMetadata.unavailableRound?'provider_unavailable':'matching_sources_exhausted'):null,reserved_count:0,phase,delivered_count:0,candidate_count:providerRun.candidates.length,
         provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
         completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',job.id).eq('status','reviewing_sources').select('*').maybeSingle();
       if(result.error)throw Error('PERSISTENCE');
@@ -866,7 +866,7 @@ Deno.serve(async (request) => {
 
     const usage = providerRun.usage;
     const finalJob = await db.from("creator_research_jobs").update({
-      status: brief.data.sourceMode==='articles'&&delivered<Number(job.requested_count)?"failed":"ready", interruption_reason:brief.data.sourceMode==='articles'&&delivered<Number(job.requested_count)?"retrieval_limit":null, reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} of ${job.requested_count} articles ready.${delivered<Number(job.requested_count)?' Search limit reached; results saved.':' Search complete.'}`:completedSearchPhase(delivered,Number(job.requested_count),currentRound,Number(providerMetadata.unavailableRound)||undefined), delivered_count: delivered, candidate_count: providerRun.candidates.length,
+      status: "ready", interruption_reason:brief.data.sourceMode==='articles'&&delivered<Number(job.requested_count)?(providerMetadata.unavailableRound?'provider_unavailable':'matching_sources_exhausted'):null, reserved_count:0, phase: brief.data.sourceMode==='articles'?`${delivered} of ${job.requested_count} articles ready.${delivered<Number(job.requested_count)?' Matching articles saved. Unused article allowance released.':' Search complete.'}`:completedSearchPhase(delivered,Number(job.requested_count),currentRound,Number(providerMetadata.unavailableRound)||undefined), delivered_count: delivered, candidate_count: providerRun.candidates.length,
       provider_metadata:{...providerMetadata,roundReports,accumulatedSources:undefined,accumulatedCandidates:undefined,retainedCandidates:undefined},
       completed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", job.id).eq("status", "ranking").select("*").maybeSingle();

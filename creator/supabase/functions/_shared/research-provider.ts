@@ -1,3 +1,4 @@
+import {articleCandidateTarget,articleRoundDirection} from '../../../src/domain/article-retrieval.ts';
 import {ARTICLE_NEWS_DOMAINS,articleReviewSchema} from '../../../src/domain/article-policy.ts';
 import {screeningDecisionSchema,type ScreeningDecision} from '../../../src/domain/pilot-screening.ts';
 import { z } from "zod";
@@ -230,17 +231,18 @@ export async function startDeepResearch(input: {
   brief: ResearchBrief;
   requestedCount: number;
   candidateMultiplier: number;
+  articleRound?:number;
   queryHints?:string[];
   excludeUrls?:string[];
 }): Promise<ProviderRun> {
   const brief = researchBriefSchema.parse(input.brief);
-  const candidateTarget = Math.min(20,input.requestedCount*Math.max(1,input.candidateMultiplier));
+  const candidateTarget = brief.sourceMode === 'articles' ? articleCandidateTarget(input.requestedCount) : Math.min(20,input.requestedCount*Math.max(1,input.candidateMultiplier));
   const domains = platformSearchDomains(brief.researchSourcePlatforms);
   const response = await requestPerplexity("/v1/agent", {
     method: "POST",
     body: JSON.stringify({
       model: Deno.env.get("CREATOR_PERPLEXITY_RESEARCH_MODEL") ?? "openai/gpt-5.6-sol",
-      input: researchInstructions(brief, input.requestedCount, candidateTarget)+(brief.sourceMode==='videos'?`\nSearch for direct video links, not popular-keyword landing pages, profiles, articles or compilations. Try distinct concrete queries from these hints: ${JSON.stringify(input.queryHints??brief.sourceTopics)}. Rotate situations rather than repeating an unproductive keyword. Exclude previously retrieved URLs: ${JSON.stringify((input.excludeUrls??[]).slice(0,90))}. The approved search criteria are authoritative. ${actionEvidenceInstruction(brief)}`:`\nFind additional distinct stories using alternate relevant topic wording. Exclude previously retrieved URLs: ${JSON.stringify((input.excludeUrls??[]).slice(0,90))}. Keep the original publication window and relevance requirements unchanged.`),
+      input: researchInstructions(brief, input.requestedCount, candidateTarget)+(brief.sourceMode==='videos'?`\nSearch for direct video links, not popular-keyword landing pages, profiles, articles or compilations. Try distinct concrete queries from these hints: ${JSON.stringify(input.queryHints??brief.sourceTopics)}. Rotate situations rather than repeating an unproductive keyword. Exclude previously retrieved URLs: ${JSON.stringify((input.excludeUrls??[]).slice(-200))}. The approved search criteria are authoritative. ${actionEvidenceInstruction(brief)}`:`\n${articleRoundDirection(input.articleRound??1,brief.sourceTopics)} Exclude previously retrieved URLs: ${JSON.stringify((input.excludeUrls??[]).slice(-200))}. Keep the original publication window and relevance requirements unchanged.`),
       tools: [{ type: "web_search", ...(brief.sourceMode==='articles'&&brief.articleWindow?{filters:{...articleSearchFilters(brief.articleWindow),search_domain_filter:[...ARTICLE_NEWS_DOMAINS]}}:domains.length ? { filters: { search_domain_filter: domains } } : {}) }],
       background: true,
       ...(brief.sourceMode==='videos'?{max_steps:5}:{}),
