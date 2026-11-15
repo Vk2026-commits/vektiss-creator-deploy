@@ -25,8 +25,10 @@ export const creatorContextSchema = z
     additional_context: text(5000),
   })
   .strict();
+import {languageLevelSchema} from './language-level.ts';
 export const strategySchema = z
   .object({
+    language_level:languageLevelSchema.optional(),
     research_screening_criteria:text(5000).optional(),
     research_source_platforms:items.optional(),
     research_reference_urls:z.array(z.string().max(2000)).max(20).optional(),

@@ -7,9 +7,11 @@ import { videoPlanSchema,graphicCaptureSchema } from './video-plan.ts';
 import {sourceCutSchema} from './source-cut.ts';
 import {resolvedSourceSchema} from './resolved-source.ts';
 import {researchSourceSchema} from './research.ts';
+import {languageLevelSchema} from './language-level.ts';
 import {editorialFields} from './script-editorial.ts';
 export const briefSchema = z.object({
   ...editorialFields,
+  language_level:languageLevelSchema.optional(),
   avatar_creation:avatarCreationSchema.optional(),
   template_workflow:z.boolean().optional(),
   delivery_preferences:deliveryProfileSchema.optional(),

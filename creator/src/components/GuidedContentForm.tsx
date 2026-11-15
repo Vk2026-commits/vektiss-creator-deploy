@@ -1,3 +1,4 @@
+import {LanguageLevelSelect} from './LanguageLevelSelect';
 import {useRef,useState} from 'react';
 import {ZodError} from 'zod';
 import {contentInputSchema,emptyContent,explainError,type ContentInput,type CreatorInput} from '../domain/strategy';
@@ -37,6 +38,7 @@ export function ContentForm({initial=emptyContent,creator,profileId,preview=fals
    <p className="muted">Question {step+1} of {questions.length} · Your own words are welcome</p>
    <progress value={step+1} max={questions.length} aria-label="Profile setup progress" />
    <h3>{question.title}</h3>
+   {question.key==='tone'&&<LanguageLevelSelect value={draft.strategy.language_level} onChange={language_level=>setDraft(old=>({...old,strategy:{...old.strategy,language_level}}))}/>}
    {question.key==='cta'&&<p>This becomes the audience’s default CTA. After saving, use chat to set a temporary CTA for your next posts.</p>}
    <label className="field"><span>{question.key==='name'||question.key==='primary_audience'?'Your answer':'Your answer (optional)'}</span><textarea key={question.key} autoFocus rows={3} value={value(question.key)} maxLength={question.key==='name'?100:question.key==='primary_audience'?1000:question.key==='cta'?500:3220} onChange={e=>change(question.key,e.target.value)} placeholder="Type your answer or choose an example below…" /></label>
    <div className="profile-examples" aria-label="Examples you can edit">{suggestedProfileExamples(question.key as ProfileQuestionKey,creator).map(example=><button type="button" key={example} onClick={()=>change(question.key,['name','primary_audience','cta'].includes(question.key)?example:[value(question.key),example].filter(Boolean).join('\n'))}>{example}</button>)}</div>
@@ -44,6 +46,7 @@ export function ContentForm({initial=emptyContent,creator,profileId,preview=fals
    <div className="profile-actions"><button type="button" className="button secondary" disabled={step===0} onClick={()=>setStep(s=>s-1)}>Back</button><button type="button" className="button primary" disabled={['name','primary_audience'].includes(question.key)&&!value(question.key).trim()} onClick={()=>setStep(s=>s+1)}>{step===questions.length-1?'Review profile':'Next'} →</button></div>
    {question.key==='cta'&&<CtaWording value={draft.cta_default?.wording} onChange={wording=>setDraft(old=>({...old,cta_default:{text:value('cta'),keyword:'',offer:'',delivery:'',...old.cta_default,wording}}))}/>}
   </>:<>
+   <LanguageLevelSelect value={draft.strategy.language_level} disabled={busy} onChange={language_level=>setDraft(old=>({...old,strategy:{...old.strategy,language_level}}))}/>
    {profileId&&!preview&&<ProfileChat profileId={profileId} onApply={async proposal=>{await onSave(applyProfileProposal(draft,proposal));onClose();}} />}
    <details open={!profileId}><summary>{profileId?'Review or edit individual answers':'Your answers'}</summary>
    <h3>Review your audience profile</h3>
