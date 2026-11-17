@@ -1,3 +1,4 @@
+import {aiRequestBucket} from '../../../src/domain/ai-request-bucket.ts';
 import {languageLevelInstruction,resolveLanguageLevel} from '../../../src/domain/language-level.ts';
 import {editorialDirection,needsEditorialRebuild,editorialRebuildDirection} from '../../../src/domain/script-editorial.ts';
 import {providerLimitCode} from '../../../src/domain/provider-limit.ts';
@@ -73,9 +74,10 @@ Deno.serve(async request=>{
   const safetyProfile=profileId===steveReactionProfile||isSafetyReactionProfile(profile);
   const inputError=input?scriptInputError(input.action,input.brief):null;
   if(inputError)return respond({code:inputError},400);
-  const {data:allowed,error:rateError}=await db.rpc('creator_ai_allow',{p_user:auth.user.id});
+  const bucket=aiRequestBucket(Boolean(form),String(form?.get('action')??''));
+  const {data:limit,error:rateError}=await db.rpc('creator_ai_allow_scoped',{p_user:auth.user.id,p_bucket:bucket});
   if(rateError)throw Error('PERSISTENCE');
-  if(!allowed){const {data:retryAt}=await db.rpc('creator_ai_retry_at',{p_user:auth.user.id});return respond({code:'RATE_LIMIT',retryAt},429);}
+  if(!limit?.allowed)return respond({code:'RATE_LIMIT',retryAt:limit?.retryAt,bucket},429);
   generationId=crypto.randomUUID();
   const boundary=form?.get('action')==='video-boundary';
   const graphic=form?.get('action')==='graphic-analysis';

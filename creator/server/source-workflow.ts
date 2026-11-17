@@ -36,7 +36,7 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
   if(frames){body.set('frames',JSON.stringify(frames));body.set('transcript',transcript);body.set('audioUnavailable',String(!transcript));}
   const response=await fetch(`${config.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers:{Authorization:authorization,apikey:config.publicKey},body,signal:AbortSignal.timeout(150000)});
   const result=await response.json();if(!response.ok){
-   const message=result.code==='PROVIDER_QUOTA'?'The AI provider has no available quota. The site administrator must check AI billing before retrying.':result.code==='PROVIDER_RATE_LIMIT'||result.code==='RATE_LIMIT'?'The AI provider is limiting requests. Please retry later.':'Source analysis could not finish. Please retry.';
+   const message=result.code==='PROVIDER_QUOTA'?'The AI provider has no available quota. The site administrator must check AI billing before retrying.':result.code==='RATE_LIMIT'?'Creator’s hourly video-analysis limit was reached. Script writing has a separate allowance. Please retry analysis later.':result.code==='PROVIDER_RATE_LIMIT'?'The AI provider is limiting requests. Please retry later.':'Source analysis could not finish. Please retry.';
    throw new DraftError(`${message} Your original clip and completed analysis are saved.`);
   }
   const validated=valid(result),temporary=`${checkpoint}.${randomUUID()}.tmp`;
