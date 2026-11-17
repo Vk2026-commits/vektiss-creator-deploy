@@ -28,7 +28,7 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
   // Account-owned root; key includes exact media/evidence and profile, never URL alone.
   const digest=createHash('sha256').update(JSON.stringify({version:1,profileId,action,frames,transcript})).update(blob??'').digest('hex');
   const checkpoint=resolve(media,`analysis-${digest}.json`);
-  function valid(value:unknown){return action==='video-boundary'?boundarySchema.parse(value):z.object({text:z.string().min(1).max(40000)}).parse(value);}
+  function valid(value:unknown){return action==='video-boundary'?boundarySchema.parse(value):z.object({text:action==='transcribe'?z.string().max(40000):z.string().min(1).max(40000)}).parse(value);}
   try{const saved=JSON.parse(await readFile(checkpoint,'utf8'));if(typeof saved.at==='number'&&Date.now()-saved.at>=0&&Date.now()-saved.at<86400000)return valid(saved.result);}catch{/* No completed checkpoint. */}
   const body=new FormData();body.set('action',action);body.set('profileId',profileId);
   if(config.costProjectId)body.set('projectId',config.costProjectId);
@@ -51,8 +51,9 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
  }
  let end=options.end,reason='Cut selected by you.';
  let speech='';
+ let transcribed=false;
  if(end===undefined){
-  speech=await transcript(original);
+  speech=await transcript(original);transcribed=true;
   let boundary=boundarySchema.parse(await ai('video-boundary',coarse.frames,speech));
   const candidate=automaticEnd(boundary,coarse.duration);
   if(boundary.status==='separate'&&candidate!==null){
@@ -74,7 +75,7 @@ export async function sourceWorkflow(root:string,file:string,type:string,input:u
  }
  const selectedPath=resolve(media,`${selectedId}.video`);
  const frames=selectedId===originalId?coarse:await extractVideoFrames(createReadStream(selectedPath));
- if(selectedId!==originalId||!speech)speech=await transcript(selectedPath);
+ if(selectedId!==originalId||!transcribed)speech=await transcript(selectedPath);
  const result=await ai('video-analysis',frames.frames,speech);
  const text=z.object({text:z.string().min(1).max(40000)}).parse(result).text;
  return {text,cut:{original_id:originalId,selected_id:selectedId,duration:coarse.duration,end,reason}};

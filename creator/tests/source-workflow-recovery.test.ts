@@ -65,3 +65,20 @@ it('reuses completed evidence after an analysis failure',async()=>{
  expect((await sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config)).text).toBe('Completed analysis');
  expect(actions).toEqual(['transcribe','video-boundary','video-analysis','video-analysis']);
 });
+
+it('accepts action-only footage and caches an empty successful transcript',async()=>{
+ const input=await setup();const actions:string[]=[];let fail=true;
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(_url,init)=>{
+  const form=init!.body as FormData;const action=form.get('action') as string;actions.push(action);
+  if(action==='transcribe')return Response.json({text:''});
+  expect(form.get('audioUnavailable')).toBe('true');
+  if(action==='video-boundary')return Response.json({status:'none',end:null,confidence:'high',reason:'Action only.'});
+  if(fail)return Response.json({code:'PROVIDER_RATE_LIMIT'},{status:429});
+  return Response.json({text:'Visible actions, without inferred speech.'});
+ });
+ await expect(sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config)).rejects.toThrow('limiting requests');
+ fail=false;
+ const result=await sourceWorkflow(root,input,'video/mp4',{},profile,'Bearer user',config);
+ expect(result.text).toBe('Visible actions, without inferred speech.');
+ expect(actions).toEqual(['transcribe','video-boundary','video-analysis','video-analysis']);
+});
