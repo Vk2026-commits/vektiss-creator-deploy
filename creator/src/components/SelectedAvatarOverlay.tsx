@@ -26,6 +26,7 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
  useEffect(()=>{let live=true,objectUrl:string|null=null;const controller=new AbortController();setPreviewError(false);setImage(null);
   if(plan.avatar_id)void avatarRepository.library().then(async lib=>{
    const avatar=lib.avatars.find(a=>a.id===plan.avatar_id);
+   if(live&&avatar?.thumbnail_url)setImage({id:plan.avatar_id!,url:avatar.thumbnail_url});
    const aspect=plan.format==='portrait'?'9:16':plan.format==='square'?'1:1':'16:9';
    const verified=avatar?.verified_previews?.find(v=>v.engine===(plan.avatar_engine??'avatar_iv')&&v.aspect_ratio===aspect);
    if(verified&&!avatarFraming(plan.avatar_id,plan.format)){const response=await mediaFetch(`/api/local-capture/avatar-preview/${verified.test_id}`,{signal:controller.signal});if(!response.ok)throw Error('Preview unavailable');const blob=await response.blob();if(!live)return;objectUrl=URL.createObjectURL(blob);setImage({id:plan.avatar_id!,url:objectUrl,verified:true});}
@@ -39,7 +40,7 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
     setImage({id:plan.avatar_id!,url:objectUrl,placement:true,aspect:prepared.aspect});
     if(prepared.aspect)aspectCallback.current?.(prepared.aspect);
    }
-  }).catch(()=>{if(live){setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}});
+  }).catch(()=>{if(live){setPreviewError(true);}});
   return()=>{live=false;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[plan.avatar_id,plan.avatar_engine,plan.format,plan.presenter_sizing,epoch]);
  const baseAspect=image?.aspect??previewAspect(plan);
@@ -53,5 +54,5 @@ function AvatarOverlay({plan,onAspect}:{plan:VideoPlan;onAspect?:(aspect:number)
 	 // editor show the same vertical source crop as FFmpeg, including for wide
 	 // provider thumbnails where object-fit:cover would otherwise only crop sides.
 	 const frameStyle=framed?framingPreviewStyle(plan.presenter_framing,plan.presenter_framing_amount,plan.presenter_framing_position):verified||image?.placement?{objectFit:'contain' as const,objectPosition:'center bottom'}:undefined;
-	 return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={frameStyle} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{previewError?'Clean preview unavailable':'Preparing clean preview…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
+	 return <div className={`selected-avatar-overlay${cutout||verified||image?.placement?' avatar-cutout':''}`} aria-label={`${plan.avatar_name}, ${plan.presenter_placement?'custom placement':plan.presenter_position.replaceAll('-',' ')}, size ${Math.round(plan.presenter_placement?.width??plan.presenter_size)}%`} style={{left:`${layout.x/layout.w*100}%`,top:`${layout.y/layout.h*100}%`,width:`${layout.width/layout.w*100}%`,height:`${layout.height/layout.h*100}%`}}>{url?<img src={url} alt={`${plan.avatar_name} — ${verified?'verified video frame':'placement preview'}`} style={frameStyle} draggable={false} referrerPolicy="no-referrer" onError={()=>{setImage({id:plan.avatar_id!,url:null});setPreviewError(true);}}/>:<span role="status">{!plan.avatar_id?'Choose your avatar':previewError?'Preview unavailable':'Loading avatar…'}<br/>{plan.avatar_name}{previewError&&<button type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setEpoch(n=>n+1);}}>Retry preview</button>}</span>}{image?.placement&&<small className="avatar-preview-label">Placement preview · video not verified</small>}</div>;
 }

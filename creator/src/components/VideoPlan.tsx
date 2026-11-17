@@ -1,3 +1,5 @@
+import { recentAvatarPlan } from '../domain/recent-avatar';
+import type { Script } from '../domain/scripts';
 import { PresenterPlacement } from './PresenterPlacement';
 import {sameAvatarPreview} from '../domain/render-preview-update';
 import {PlacementShortcuts} from './FreePresenter';
@@ -20,7 +22,7 @@ import {EditStudio} from './EditStudio';
 import {defaultEditBrand,editBrandSchema} from '../domain/edit-brand';
 import {mediaFetch} from '../lib/media-fetch';
 
-export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit,editFocus}:{script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void;editFocus?:'voice'|'avatar'|'framing'|null}) {
+export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit,editFocus,previousScripts=[]}:{previousScripts?:Script[];script:ScriptInput;plan:Plan;preview:boolean;busy:boolean;onChange:(p:Plan)=>void;onSave:()=>void;onEdit:()=>void;editFocus?:'voice'|'avatar'|'framing'|null}) {
  const section=useRef<HTMLElement>(null);
  useEffect(()=>{
   if(!editFocus)return;
@@ -55,6 +57,14 @@ export function VideoPlan({script,plan,preview,busy,onChange,onSave,onEdit,editF
   const avatar_preview={avatar_id:selectedAvatar.id,engine:plan.avatar_engine??'avatar_iv',format:plan.format,aspect:verified.crop.width/verified.crop.height};
   if(!sameAvatarPreview(plan.avatar_preview,avatar_preview))onChange({...plan,avatar_preview});
  },[choosing,busy,selectedAvatar,plan,onChange]);
+ useEffect(()=>{
+  if(preview||busy||!choosing||plan.presenter!=='avatar'||plan.avatar_id||loading)return;
+  const recent=recentAvatarPlan(previousScripts,avatars.map(a=>a.id));
+  const avatar=avatars.find(a=>a.id===recent?.avatar_id);
+  if(!avatar||!recent)return;
+  onChange({...plan,avatar_id:avatar.id,avatar_name:avatar.name,avatar_engine:recent.avatar_engine,
+   voice:recent.voice,voice_engine:recent.voice_engine,voice_speed:recent.voice_speed});
+ },[preview,busy,choosing,plan,loading,previousScripts,avatars,onChange]);
 	 const videoSource=script.brief.kind==='video';
 	 const graphicSource=script.brief.kind==='graphic';
 	 const backgroundReady=Boolean(plan.article_capture&&plan.article_capture.source_url===script.brief.url);
