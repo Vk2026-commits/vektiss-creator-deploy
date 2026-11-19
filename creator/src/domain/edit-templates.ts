@@ -42,6 +42,7 @@ const beat=z.object({
 }).strict();
 export const editProposalSchema=z.object({
  rankingStyle:z.literal('creator-ranking-v1').optional(),
+ showRankingTitle:z.boolean().optional(),
  animation:templateAnimation.optional(),
  aspectRatio:editAspectRatio.optional(),
  rendererVersion:z.literal(2).optional(),

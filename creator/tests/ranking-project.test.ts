@@ -31,3 +31,12 @@ it('keeps the approved default identical for saved plans and new versioned plans
  expect(templateOpeningInstruction('tier-list')).toContain('Start the spoken script immediately');
  expect(plan).not.toHaveProperty('rankingStyle');
 });
+
+it('toggles only the title while preserving ranks, captions and original footage',()=>{
+ const plan=templateSample('tier-list');
+ const on=rankingProject(templateSampleSource,{...plan,showRankingTitle:true},defaultEditBrand);
+ const off=rankingProject(templateSampleSource,{...plan,showRankingTitle:false},defaultEditBrand);
+ expect(on).toContain('<h1>');expect(off).not.toContain('<h1>');
+ expect(on.replace(/<h1>.*?<\/h1>/,'')).toBe(off);
+ expect(rankingProject(templateSampleSource,plan,defaultEditBrand)).toBe(on);
+});

@@ -93,7 +93,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  output=await response.json();
  }
  phase='plan-validation';onProgress?.(planningProgress('validation'));
- const proposal=editProposalSchema.parse({...output.proposal,...(output.proposal?.templateId==='tier-list'?{rankingStyle:rankingDefault.id}:{}),rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
+ const proposal=editProposalSchema.parse({...output.proposal,...(output.proposal?.templateId==='tier-list'?{rankingStyle:rankingDefault.id,showRankingTitle:false}:{}),rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:resolvedStyle.brand,resolvedStyle,instructions:options.instructions??'',proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};

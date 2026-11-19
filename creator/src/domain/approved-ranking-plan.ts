@@ -15,5 +15,5 @@ export function approvedRankingPlan(raw:unknown,source:EditSource){
   previous=hits[0].revealWord;
   return {label:item.label,tier:item.rating,shape:'box' as const,x:50,y:50,...hits[0]};
  });
- return validateEditProposal(editProposalSchema.parse({version:1,rendererVersion:2,rankingStyle:rankingDefault.id,templateId:'tier-list',sourceRevision:source.revision,beats:[{firstWord:0,lastWord:source.words.length-1,layout:'presenter',visual:'tier-board',headline:project.title,purpose:'Reveal the approved rankings in spoken order; preserve the complete recording and closing.',illustration:'',motion:'Creator Ranking default timed reveals',graphics:{nodes,links:[]}}]}),source,'tier-list');
+ return validateEditProposal(editProposalSchema.parse({version:1,rendererVersion:2,rankingStyle:rankingDefault.id,showRankingTitle:false,templateId:'tier-list',sourceRevision:source.revision,beats:[{firstWord:0,lastWord:source.words.length-1,layout:'presenter',visual:'tier-board',headline:project.title,purpose:'Reveal the approved rankings in spoken order; preserve the complete recording and closing.',illustration:'',motion:'Creator Ranking default timed reveals',graphics:{nodes,links:[]}}]}),source,'tier-list');
 }
