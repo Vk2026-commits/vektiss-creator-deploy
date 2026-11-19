@@ -1,3 +1,4 @@
+import {applyCaptionLayout} from './caption-layout.ts';
 import {applyTemplateAnimation} from './template-animation.ts';
 import type {RenderIllustration} from './edit-illustrations.ts';
 import {rankingProject} from './ranking-project.ts';
@@ -98,5 +99,5 @@ export function talkingHeadProject(source:EditSource,plan:EditProposal,brand:Edi
 
 export function hyperframesProject(source:EditSource,raw:EditProposal,brand:EditBrand,sample=false,logos:RenderLogo[]=[],illustrations:RenderIllustration[]=[]){
  const html=baseHyperframesProject(source,raw,brand,sample,logos,illustrations);
- return applyTemplateAnimation(html,raw.animation,raw.templateId,raw.aspectRatio==='16:9');
+ return applyCaptionLayout(applyTemplateAnimation(html,raw.animation,raw.templateId,raw.aspectRatio==='16:9'),brand);
 }

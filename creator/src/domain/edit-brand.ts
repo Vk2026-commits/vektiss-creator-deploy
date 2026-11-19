@@ -4,6 +4,8 @@ const color=z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color, su
 export const editBrandSchema=z.object({
  primary:color,background:color,text:color,
  captionStyle:z.enum(['highlight','clean','bold','none']),
+ captionScale:z.number().min(.6).max(1.5).optional(),
+ captionOffsetY:z.number().min(-30).max(30).optional(),
  fontFamily:z.enum(['Arial','Georgia','Verdana']).optional(),
  presenterTreatment:z.enum(['head-pop','cutout','window']).optional(),
  motionStyle:z.enum(['calm','balanced','snappy']).optional(),

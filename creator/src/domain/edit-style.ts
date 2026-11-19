@@ -2,7 +2,7 @@ import {defaultEditBrand,editBrandSchema,type EditBrand} from './edit-brand';
 export type StyleOrigin='video'|'campaign'|'creator'|'fallback';
 /** Snapshot identity per video. Saving a plan never writes back to the creator. */
 export function resolveEditStyle(creator:Partial<EditBrand>={},campaign:Partial<EditBrand>={},video:Partial<EditBrand>={}){
- const fallback={...defaultEditBrand,fontFamily:'Arial' as const,presenterTreatment:'head-pop' as const,motionStyle:'balanced' as const};
+ const fallback={...defaultEditBrand,captionScale:1,captionOffsetY:0,fontFamily:'Arial' as const,presenterTreatment:'head-pop' as const,motionStyle:'balanced' as const};
  const values={...fallback},origins={} as Record<keyof EditBrand,StyleOrigin>;
  for(const key of Object.keys(fallback) as (keyof EditBrand)[]){
   const layer=video[key]!==undefined?'video':campaign[key]!==undefined?'campaign':creator[key]!==undefined?'creator':'fallback';

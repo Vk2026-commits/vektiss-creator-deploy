@@ -1,3 +1,4 @@
+import {CaptionControls} from './CaptionControls';
 import {ExportProgress} from './ExportProgress';
 import {TemplateWorkshop} from './TemplateWorkshop';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
@@ -159,6 +160,7 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
    {!brandValid&&<p role="alert">Complete each color with six hexadecimal digits (0–9 or A–F) before saving.</p>}
    <label>Caption style<select value={brand.captionStyle} onChange={e=>setBrand({...brand,captionStyle:e.target.value as EditBrand['captionStyle']})}>{captionStyles.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
    <p>{captionStyles.find(s=>s.id===brand.captionStyle)?.description}</p>
+   <CaptionControls brand={brand} onChange={setBrand} disabled={busy}/>
    <div className={`edit-caption-sample caption-${brand.captionStyle}`} style={{background:displayedBrand.background,color:displayedBrand.text,borderColor:displayedBrand.primary}} aria-label="Caption style sample">{brand.captionStyle==='none'?'Captions turned off':<>Create <span style={{color:brand.captionStyle==='highlight'?displayedBrand.primary:displayedBrand.text}}>real value</span> with your ideas.</>}</div>
    <button className="button primary" disabled={preview||!brandDirty||!brandValid} onClick={()=>void saveBrand()}>Save brand defaults</button>
    <p role="status">{brandDirty?'Unsaved brand changes':brandRecord.savedAt?`Brand defaults saved at ${new Date(brandRecord.savedAt).toLocaleString()}`:'Default colors — customize and save your brand.'} Saving does not make an AI call or start a render.</p>
@@ -182,6 +184,7 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
   {error&&<p role="alert">{error}</p>}
   {step==='review'&&plan&&<section className="edit-ready-panel" aria-label="Saved edit plan">
    <div className="edit-plan-heading"><div><span className="eyebrow">{dirty?'CHANGES TO SAVE':'PLAN READY'}</span><h2>{editTemplates.find(t=>t.id===plan.proposal.templateId)?.name}</h2><p>Your scenes are planned. Preview the edit, then export your video.</p></div><span className="edit-plan-badge">{plan.storyboard.length} scenes · {plan.proposal.aspectRatio??'9:16'}</span></div>
+   <CaptionControls brand={planBrand} disabled={busy} onChange={next=>{setPlan({...plan,brand:next});setDirty(true);setRendered(null);}}/>
    {plan.proposal.templateId==='tier-list'&&<div className="edit-plan-details"><label><input type="checkbox" checked={plan.proposal.showRankingTitle!==false} disabled={busy} onChange={e=>{setPlan({...plan,proposal:{...plan.proposal,showRankingTitle:e.target.checked}});setDirty(true);setRendered(null);}}/> Show on-screen title</label><p>Display the topic above the presenter. Ranking labels and captions stay visible either way. Save and export to apply; no new AI or avatar generation is needed.</p></div>}
    <div className="edit-scene-summary" aria-label="Planned story">{plan.storyboard.map((scene,i)=><article key={i}><span>{String(i+1).padStart(2,'0')} · {Math.floor(scene.start)}–{Math.ceil(scene.end)}s</span><h3>{scene.headline}</h3><p>{scene.visual==='presenter'?'Presenter focus':scene.scene??'Animated explanation'}</p></article>)}</div>
    <details className="edit-plan-details"><summary>Brand and saved plan details</summary><p>{captionStyles.find(s=>s.id===planBrand.captionStyle)?.name} · Accent {planBrand.primary} · Background {planBrand.background} · Text {planBrand.text}</p><p>Saved {plan.savedAt?new Date(plan.savedAt).toLocaleString():''}. Your original speech is preserved.</p></details>
