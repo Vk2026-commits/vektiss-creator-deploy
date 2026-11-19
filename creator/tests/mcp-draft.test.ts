@@ -23,3 +23,6 @@ it('rejects connector tokens at normal paid endpoints',()=>{
  expect(isConnectorToken('Bearer '+token({client_id:'c',role:'authenticated'}))).toBe(true);expect(isConnectorToken(token({role:'creator_mcp'}))).toBe(true);expect(isConnectorToken(token({role:'authenticated'}))).toBe(false);
 });
 it('returns same-origin project deep links',()=>expect(mcpProjectLink('https://creator.vektiss.com','abc')).toBe('https://creator.vektiss.com/?project=abc'));
+
+import {videoStep} from '../src/domain/video-workflow';
+it('keeps connector drafts at Script until the creator approves',()=>{const d=prepareMcpDraft(undefined,{body:'Draft'},'p');expect(videoStep(d.brief,true)).toBe(2);d.brief.mcp_review_pending=false;expect(videoStep(d.brief,true)).toBe(2);d.brief.production!.approved_at=new Date().toISOString();d.brief.production!.step='presenter';expect(videoStep(d.brief,true)).toBe(3);});
