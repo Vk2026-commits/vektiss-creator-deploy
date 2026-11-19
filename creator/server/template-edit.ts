@@ -1,3 +1,4 @@
+import {approvedRankingPlan} from '../src/domain/approved-ranking-plan';
 import {rankingDefault} from '../src/domain/ranking-default';
 import {publishedTemplateAnimations} from './template-workshop';
 import {hydrateEditSource,readEditSource} from './edit-source';
@@ -24,7 +25,7 @@ import {discoverLogos} from './logo-assets';
 import {logoBrands,logoSuggestionSchema} from '../src/domain/logo-assets';
 const exec=promisify(execFile);
 const exportId=z.string().regex(/^(?:[a-f0-9-]{36}|[a-f0-9]{64})$/);
-export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional(),instructions:z.string().max(2000).optional()}).strict();
+export const templateEditOptions=z.object({template:z.union([editTemplateId,z.literal('recommend')]),profileId:z.string().uuid(),exportId:exportId.optional(),brand:editBrandSchema.optional(),aspectRatio:editAspectRatio.optional(),instructions:z.string().max(2000).optional(),approvedRankingOnly:z.boolean().optional()}).strict();
 
 // root is supplied by the authenticated hosted router, never by the caller.
 export async function templateEdit(root:string,file:string,type:string,raw:unknown,authorization:string,c:{supabaseUrl:string;publicKey:string},onProgress?:(progress:EditProgress)=>void){
@@ -44,6 +45,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  const sourceFile=resolve(folder,`${revision}.mp4`),sourceCache=resolve(folder,`${revision}.source.json`);
  let source;
  try{source=editSourceSchema.parse(JSON.parse(await readFile(sourceCache,'utf8')));}catch{
+  if(options.approvedRankingOnly)throw new DraftError('Saved speech timing is required for recovery. No AI call was made.');
   phase='media';
   const media=await prepareMedia(createReadStream(original),p=>copyFile(p,sourceFile));
   if(!media.hasAudio)throw new DraftError('This video has no audio track to plan from. Choose a recording with speech.');
@@ -72,15 +74,26 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
  const resolvedStyle=resolveEditStyle((await readEditBrand(root)).brand,{},options.brand??{});
  const animations=await publishedTemplateAnimations(root);
- const key=createHash('sha256').update(JSON.stringify([revision,animations,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
+ const key=createHash('sha256').update(JSON.stringify([revision,animations,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??'',options.approvedRankingOnly??false])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
+ let output:any;
+ if(options.approvedRankingOnly){
+  if(options.template!=='tier-list'||!options.exportId)throw new DraftError('Choose the completed avatar Ranking video. No AI call was made.');
+  const query=new URLSearchParams({select:'title,brief',content_profile_id:`eq.${options.profileId}`,'brief->production->render->>export_id':`eq.${options.exportId}`,limit:'2'});
+  const response=await fetch(`${c.supabaseUrl}/rest/v1/creator_scripts?${query}`,{headers,signal:AbortSignal.timeout(15000)});
+  const projects=response.ok?await response.json():[];
+  if(projects.length!==1)throw new DraftError('Could not identify one approved Ranking project for this video. No AI call was made.');
+  try{output={proposal:approvedRankingPlan(projects[0],source)};}catch{throw new DraftError('The approved rankings do not match the saved speech. No AI call was made.');}
+ }else{
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));body.set('instructions',options.instructions??'');body.set('style',JSON.stringify(resolvedStyle.brand));
  phase='planning';onProgress?.(planningProgress('planning'));
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
+ output=await response.json();
+ }
  phase='plan-validation';onProgress?.(planningProgress('validation'));
- const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,...(output.proposal?.templateId==='tier-list'?{rankingStyle:rankingDefault.id}:{}),rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
+ const proposal=editProposalSchema.parse({...output.proposal,...(output.proposal?.templateId==='tier-list'?{rankingStyle:rankingDefault.id}:{}),rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:resolvedStyle.brand,resolvedStyle,instructions:options.instructions??'',proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};

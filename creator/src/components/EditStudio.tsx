@@ -71,14 +71,14 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
  useEffect(()=>{setRendered(null);},[plan?.id,plan?.version]);
  useEffect(()=>()=>{if(rendered)URL.revokeObjectURL(rendered.url);},[rendered]);
  useEffect(()=>{if(preview)return;let live=true;void mediaFetch('/api/local-capture/exports').then(async r=>{if(!r.ok)throw Error('Completed videos could not load.');const data=await r.json();if(live)setExports(data);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[preview]);
- async function generate(){
+ async function generate(approvedRankingOnly=false){
   if(preview||pending.current||!profileId||(!file&&!exportId))return;
   pending.current=true;setBusy(true);setError('');setPlan(null);setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'planning',percent:0,activity:'Preparing your upload'});
   try{
    const headers:Record<string,string>=file?{'Content-Type':editVideoUploadType(file),'X-Edit-Template':template,'X-Edit-Aspect-Ratio':aspectRatio,'X-Edit-Brand':JSON.stringify(brand),'X-Profile-Id':profileId,'X-Edit-Instructions':encodeURIComponent(instructions)}:{'Content-Type':'application/json'};
    // Byte identity prevents a different upload with the same filename from resuming an old job.
    const identity=file?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):exportId;
-   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio,instructions})},`edit:planner${EDIT_PLANNER_VERSION}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}:${instructions}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created)setRenderStarted(Date.parse(status.created));});
+   const r=await mediaFetch('/api/local-capture/template-edit',{method:'POST',headers,body:file??JSON.stringify({profileId,template,exportId,brand,aspectRatio,instructions,approvedRankingOnly})},`edit:planner${EDIT_PLANNER_VERSION}:${approvedRankingOnly}:${profileId}:${identity}:${template}:${aspectRatio}:${JSON.stringify(brand)}:${instructions}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created)setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'The edit plan could not finish.');
    const latest=await mediaFetch(`/api/local-capture/template-plans/${result.id}`);if(!latest.ok)throw Error('The plan is saved, but could not reload. Retry to recover it.');setPlan(await latest.json());setDirty(false);go('review');
   }catch(e){setError(e instanceof Error?e.message:'The edit plan could not finish.');}
@@ -169,6 +169,7 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
   {preview&&<p>Local sample mode: planning and rendering are disabled. No charges will be made.</p>}
   {brandDirty&&<p>Save your brand defaults before generating a new plan.</p>}
   <button className="button primary" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId||(!file&&!exportId)} onClick={()=>void generate()}>{renderProgress?.stage==='planning'?'Building your edit plan…':'Generate edit plan'}</button>
+  {template==='tier-list'&&exportId&&!file&&<><p>Recover from saved speech timing using your approved rankings and the default layout. This does not use AI or apply custom planning instructions.</p><button className="button" disabled={preview||busy||!brandLoaded||brandDirty||!brandValid||!profileId} onClick={()=>void generate(true)}>Use approved rankings · no AI charge</button></>}
   <button className="button" disabled={busy} onClick={()=>go('style')}>Back to template</button></>}
   {step==='style'&&<><fieldset disabled={busy}><legend>2. Choose your template</legend>
    <label>Video format<select value={plan?.proposal.aspectRatio??aspectRatio} onChange={e=>{const ratio=e.target.value as EditAspectRatio;setAspectRatio(ratio);if(plan){setPlan({...plan,proposal:{...plan.proposal,rendererVersion:2,aspectRatio:ratio}});setDirty(true);setRendered(null);}}}><option value="9:16">Vertical · 9:16 · 1080 × 1920</option><option value="16:9">Widescreen · 16:9 · 1920 × 1080</option></select></label>
