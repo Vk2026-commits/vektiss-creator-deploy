@@ -23,6 +23,8 @@ export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,
  if(input.version!==plan.version)throw Error('The edit plan changed. Reload the current version before exporting.');
 }
 export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(progress:EditProgress)=>void){
+ const started=Date.now();let stageStarted=started;
+ const timing=(stage:string)=>{const now=Date.now();console.info(JSON.stringify({event:'template-render-timing',stage,elapsedMs:now-stageStarted,totalMs:now-started}));stageStarted=now;};
  onProgress?.({stage:'preparing'});
  const input=templateRenderRequest.parse(raw),plan=await readTemplatePlan(root,input.id);
  const folder=resolve(root,'edit/template-plans');
@@ -58,12 +60,14 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   const size=editDimensions(proposal.aspectRatio);
   if(html&&input.mode==='preview')html=previewHtml(html,size.width,size.height,cuts);
   await writeFile(jobFile,JSON.stringify({source,proposal,brand,illustrations,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html}:{})}),{mode:0o600});
+  timing('preparation');
   const rendering=exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:8*1024*1024});
   let pending='';rendering.child.stdout?.on('data',chunk=>{pending+=String(chunk);const lines=pending.split('\n');pending=lines.pop()??'';for(const line of lines){const p=parseEditProgress(line);if(p)onProgress?.(p);}});
-  await rendering;
+  await rendering;timing('render');
   onProgress?.({stage:'finishing'});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
+  timing('audio-mux');
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);
   const video=probe.streams.find((s:{codec_type:string})=>s.codec_type==='video');
   const dimensions=editDimensions(proposal.aspectRatio),scale=input.mode==='preview'?.5:1;
@@ -81,6 +85,7 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   await writeFile(resolve(outputFolder,`${id}.project.json`),JSON.stringify(project,null,2),{mode:0o600});
   await rename(muxed,output);
   if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});
+  timing('validation-and-save');
   return result;
  }finally{await Promise.all([jobFile,silent,muxed,quickFile].map(p=>unlink(p).catch(()=>{})));}
 }
