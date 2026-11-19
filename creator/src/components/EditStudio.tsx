@@ -1,3 +1,4 @@
+import {ExportProgress} from './ExportProgress';
 import {TemplateWorkshop} from './TemplateWorkshop';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {restoreStudioFile,saveStudioFile} from '../lib/studio-file-recovery';
@@ -7,7 +8,7 @@ import {illustrationScenes,ILLUSTRATION_OUTPUT_ESTIMATE,type SavedIllustration} 
 import {loadMediaBlob} from '../lib/load-media-blob';
 import {EDIT_PLANNER_VERSION,EDIT_RENDER_VERSION} from '../domain/edit-planner-version';
 import {planningSteps} from '../domain/edit-planning-progress';
-import {editStageLabels,type EditProgress} from '../domain/edit-progress';
+import {type EditProgress} from '../domain/edit-progress';
 import {useEffect,useRef,useState} from 'react';
 import {TemplateChooser} from './TemplateChooser';
 import {editTemplates,type EditProposal, type editStoryboard} from '../domain/edit-templates';
@@ -121,8 +122,8 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
    const body=JSON.stringify({id:plan.id,version:plan.version,mode,...(mode==='preview'?{previewScope}:{})});
    const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},`render:v${EDIT_RENDER_VERSION}:${body}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
-   setRenderProgress({stage:'finishing'});
-   const blob=await loadMediaBlob(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`,mediaFetch,percent=>setRenderProgress({stage:'finishing',percent}));
+   setRenderProgress({stage:'loading'});
+   const blob=await loadMediaBlob(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`,mediaFetch,percent=>setRenderProgress({stage:'loading',percent}));
    setRendered({url:URL.createObjectURL(blob),id:result.id,mode,previewScope,version:plan.version});
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
@@ -186,7 +187,7 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
    {plan.proposal.templateId==='clean-tech'&&<LogoReview logos={plan.logos??[]} busy={busy} onChange={logos=>{setPlan({...plan,logos});setDirty(true);setRendered(null);}}/>}
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
    {dirty&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save asset choices'}</button><p>Save your asset choices before exporting.</p></>}
-   {renderProgress&&renderProgress.stage!=='planning'&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='illustrating'?'Progress counts completed images. Each image can take a minute or more.':renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
+   {renderProgress&&renderProgress.stage!=='planning'&&<ExportProgress progress={renderProgress} elapsed={elapsed}/>}
    {plan.proposal.templateId==='tier-list'&&<button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview','quick')}>Quick preview · up to 9 seconds</button>}
    <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>

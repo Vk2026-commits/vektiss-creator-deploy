@@ -18,3 +18,16 @@ it('introduces an option before its verdict and uses three-word mobile captions'
  p.beats[0].graphics!.nodes[0].introducedWord=9;
  expect(()=>rankingProject(templateSampleSource,p,defaultEditBrand)).toThrow('EDIT_INTRODUCED_WORD');
 });
+
+import {rankingDefault} from '../src/domain/ranking-default';
+import {templateOpeningInstruction} from '../src/domain/social-opening';
+it('keeps the approved default identical for saved plans and new versioned plans',()=>{
+ const plan=templateSample('tier-list');
+ const existing=rankingProject(templateSampleSource,plan,defaultEditBrand);
+ const fresh=rankingProject(templateSampleSource,{...plan,rankingStyle:rankingDefault.id},defaultEditBrand);
+ expect(fresh).toBe(existing);
+ expect(fresh).toContain('top:59%;height:31%');
+ expect(fresh).toContain('top:49%');
+ expect(templateOpeningInstruction('tier-list')).toContain('Start the spoken script immediately');
+ expect(plan).not.toHaveProperty('rankingStyle');
+});

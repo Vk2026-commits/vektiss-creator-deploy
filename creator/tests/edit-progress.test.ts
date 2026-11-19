@@ -17,3 +17,15 @@ it('reports completed planning checkpoints without simulating a time estimate',(
  expect(planningProgress('planning').activity).toBe('Designing the scenes');
  expect(parseEditProgress('{"stage":"planning","percent":40}')).toEqual({stage:'planning',percent:40});
 });
+
+import {exportStepIndex,exportStageDetail,exportSteps} from '../src/domain/edit-progress';
+it('distinguishes render completion from audio, validation and playback loading',()=>{
+ expect(exportSteps.map(s=>exportStepIndex(s.id))).toEqual([0,1,2,3,4]);
+ for(const stage of ['audio','checking','loading'] as const){
+  expect(parseEditProgress(JSON.stringify({stage}))).toEqual({stage});
+  expect(exportStageDetail(stage).length).toBeGreaterThan(20);
+ }
+ expect(exportStepIndex('separating')).toBe(0);
+ expect(exportStepIndex('finishing')).toBe(2);
+ expect(exportStageDetail('rendering')).toContain('not time remaining');
+});

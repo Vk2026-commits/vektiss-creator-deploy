@@ -64,10 +64,11 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   const rendering=exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:8*1024*1024});
   let pending='';rendering.child.stdout?.on('data',chunk=>{pending+=String(chunk);const lines=pending.split('\n');pending=lines.pop()??'';for(const line of lines){const p=parseEditProgress(line);if(p)onProgress?.(p);}});
   await rendering;timing('render');
-  onProgress?.({stage:'finishing'});
+  onProgress?.({stage:'audio'});
   // Keep the original audio; never ask an avatar or voice provider to re-create it.
   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-protocol_whitelist','file,pipe','-i',silent,'-protocol_whitelist','file,pipe','-i',sourceFile,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','192k','-t',String(result.duration),'-movflags','+faststart',muxed],{timeout:120000,maxBuffer:1024*1024});
   timing('audio-mux');
+  onProgress?.({stage:'checking'});
   const probe=JSON.parse((await exec(mediaBinary('ffprobe'),['-v','error','-show_format','-show_streams','-of','json',muxed],{timeout:30000})).stdout);
   const video=probe.streams.find((s:{codec_type:string})=>s.codec_type==='video');
   const dimensions=editDimensions(proposal.aspectRatio),scale=input.mode==='preview'?.5:1;

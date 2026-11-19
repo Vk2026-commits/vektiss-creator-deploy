@@ -1,3 +1,4 @@
+import {rankingDefault} from '../src/domain/ranking-default';
 import {publishedTemplateAnimations} from './template-workshop';
 import {hydrateEditSource,readEditSource} from './edit-source';
 import {resolveEditStyle} from '../src/domain/edit-style';
@@ -79,7 +80,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
  phase='plan-validation';onProgress?.(planningProgress('validation'));
- const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
+ const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,...(output.proposal?.templateId==='tier-list'?{rankingStyle:rankingDefault.id}:{}),rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:resolvedStyle.brand,resolvedStyle,instructions:options.instructions??'',proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};
