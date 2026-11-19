@@ -12,6 +12,18 @@ export function editPlanDiagnostic(error:unknown){
 export function repairEditPlan(raw:unknown,source:EditSource,template:EditProposal['templateId']){
  const plan=editProposalSchema.parse(normalizeEditResponse(raw));
  if(plan.sourceRevision!==source.revision||plan.templateId!==template)throw Error('EDIT_SOURCE_CHANGED');
+ // Recover ranking anchors only from an unambiguous spoken label followed by
+ // its exact rating and "tier". Never infer or change the rating itself.
+ if(template==='tier-list'){
+  const tokens=source.words.flatMap((w,index)=>(w.text.toLowerCase().match(/[a-z0-9]+/g)??[]).map(text=>({text,index})));
+  for(const beat of plan.beats)for(const node of beat.graphics?.nodes??[]){
+   if(!node.tier)continue;
+   const label=node.label.toLowerCase().match(/[a-z0-9]+/g)??[];
+   const matches=tokens.flatMap((token,i)=>label.length&&label.every((s,j)=>tokens[i+j]?.text===s)&&tokens[i+label.length]?.text===node.tier!.toLowerCase()&&tokens[i+label.length+1]?.text==='tier'?[{start:token.index,reveal:tokens[i+label.length].index}]:[]);
+   if(matches.length!==1)throw Error('EDIT_REVEAL_WORD');
+   node.introducedWord=matches[0].start;node.revealWord=matches[0].reveal;
+  }
+ }
  // A source attribution may be reused later as context. If its anchor points
  // to an earlier spoken mention, reveal it at this scene's start only when the
  // actual transcript verifies every meaningful label word. Never move figures.
@@ -44,14 +56,21 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
  if(!starts.length||starts.some((s,i)=>s>=source.words.length||i>0&&s<=starts[i-1]))throw Error('EDIT_SPEECH_COVERAGE');
  // Keep every explicit word anchor and the scene order. Adjust only a shared
  // boundary when adjacent scenes' anchors leave an unambiguous valid interval.
- if(template==='popout-explainer'){
+ if(template==='popout-explainer'||template==='tier-list'){
   for(let i=1;i<starts.length;i++){
    const prior=plan.beats[i-1].graphics?.nodes.flatMap(n=>n.revealWord===undefined?[]:[n.revealWord])??[];
    const current=plan.beats[i].graphics?.nodes.flatMap(n=>n.revealWord===undefined?[]:[n.revealWord])??[];
    const lower=Math.max(starts[i-1]+1,...prior.map(w=>w+1));
    const upper=Math.min(source.words.length-1,...current);
    if(lower>upper)throw Error('EDIT_REVEAL_WORD');
-   starts[i]=Math.max(lower,Math.min(upper,starts[i]));
+   if(template==='tier-list'&&starts[i]<lower){
+    // An empty closing presenter beat may begin at an explicit spoken CTA.
+    // Require one unique cue after all ranked items; otherwise ask for review.
+    const beat=plan.beats[i];
+    const cues=source.words.flatMap((w,j)=>j>=lower&&j<=upper&&/^comment[.!?,:]?$/i.test(w.text)?[j]:[]);
+    if(beat.visual!=='presenter'||beat.headline.trim()||beat.graphics?.nodes.length||!/call to action/i.test(beat.purpose)||cues.length!==1)throw Error('EDIT_REVEAL_WORD');
+    starts[i]=cues[0];
+   }else starts[i]=Math.max(lower,Math.min(upper,starts[i]));
   }
  }
  const repaired={...plan,beats:plan.beats.map((beat,i)=>{
@@ -74,7 +93,7 @@ export function repairEditPlan(raw:unknown,source:EditSource,template:EditPropos
    b.graphics={nodes:b.graphics.nodes.map(n=>{
     const copy={...n};
     if(copy.revealWord!==undefined&&(copy.revealWord<firstWord||copy.revealWord>lastWord)){
-     if(template==='popout-explainer')throw Error('EDIT_REVEAL_WORD');
+     if(template==='popout-explainer'||template==='tier-list')throw Error('EDIT_REVEAL_WORD');
      delete copy.revealWord;
     }
     return copy;
