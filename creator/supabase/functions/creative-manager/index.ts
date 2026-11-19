@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { creativeCommandSchema } from "../_shared/creative-contract.ts";
@@ -58,6 +59,7 @@ Deno.serve(async (request) => {
     const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token)
       throw new PublicError("AUTH", "Sign in to use creative tools.", 401);
+    if(isConnectorToken(token))throw new PublicError('AUTH','Use Creator to approve paid operations.',403);
     const auth = await db.auth.getUser(token);
     if (auth.error || !auth.data.user)
       throw new PublicError("AUTH", "Sign in again to continue.", 401);

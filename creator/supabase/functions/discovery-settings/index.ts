@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {createClient} from '@supabase/supabase-js';
 import {z} from 'zod';
 import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
@@ -11,6 +12,7 @@ Deno.serve(async request=>{
  if(origin&&!isAllowedAppOrigin(origin,Deno.env.get('APP_ORIGIN'),Deno.env.get('CREATOR_ADDITIONAL_ORIGINS')))return reply({code:'ORIGIN'},403);if(origin)headers['access-control-allow-origin']=origin;
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});if(request.method!=='POST')return reply({code:'METHOD'},405);
  try{const token=request.headers.get('authorization')?.replace(/^Bearer /,'');if(!token)return reply({code:'AUTH'},401);
+ if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
  const {data:auth,error:ae}=await db.auth.getUser(token);if(ae||!auth.user)return reply({code:'AUTH'},401);
  const body=await request.text();if(body.length>4096)return reply({code:'INPUT'},400);const input=schema.parse(JSON.parse(body));
  const profile=await db.from('content_profiles').select('id').eq('id',input.profileId).eq('user_id',auth.user.id).is('archived_at',null).maybeSingle();if(profile.error||!profile.data)return reply({code:'PROFILE'},403);

@@ -4,13 +4,44 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/local-capture/:path*", "destination": "https://mc-zdnmms5ls0.bunny.run/api/local-capture/:path*" },
-    { "source": "/healthz", "destination": "https://mc-zdnmms5ls0.bunny.run/healthz" }
+    {
+      "source": "/api/mcp",
+      "destination": "https://mc-zdnmms5ls0.bunny.run/api/mcp"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/:path*",
+      "destination": "https://mc-zdnmms5ls0.bunny.run/.well-known/oauth-protected-resource/:path*"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource",
+      "destination": "https://mc-zdnmms5ls0.bunny.run/.well-known/oauth-protected-resource"
+    },
+    {
+      "source": "/api/local-capture/:path*",
+      "destination": "https://mc-zdnmms5ls0.bunny.run/api/local-capture/:path*"
+    },
+    {
+      "source": "/healthz",
+      "destination": "https://mc-zdnmms5ls0.bunny.run/healthz"
+    },
+    {
+      "source": "/oauth/consent",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
-    { "source": "/api/local-capture/:path*", "headers": [
-      { "key": "Cache-Control", "value": "private, no-store" },
-      { "key": "x-vercel-enable-rewrite-caching", "value": "0" }
-    ] }
+    {
+      "source": "/api/local-capture/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    }
   ]
 }

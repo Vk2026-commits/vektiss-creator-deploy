@@ -1,3 +1,5 @@
+import {isConnectorToken} from '../supabase/functions/_shared/oauth-guard';
+import {mcpRoutes} from './mcp/routes';
 import {mediaQuotaCount,mediaQuotaMessage} from './media-quota';
 import {importCreativeVideo} from './creative-import';
 import {generateTemplateIllustrations} from './template-illustrations';
@@ -61,6 +63,7 @@ export function hostedHandler(c:HostingConfig){
   res.setHeader('Cache-Control','private, no-store');
   const path=new URL(req.url??'/',c.origin).pathname;
   try{
+   if(await mcpRoutes(req,res,c))return;
    if(path==='/healthz'&&req.method==='GET')return json(res,200,{ok:true});
    if(!path.startsWith('/api/')){
     if(!['GET','HEAD'].includes(req.method??''))return json(res,405,{error:'Method not allowed'});
@@ -72,6 +75,7 @@ export function hostedHandler(c:HostingConfig){
    }
    if(!path.startsWith(prefix)||req.headers['x-creator-capture']!=='1'||(req.headers.origin&&req.headers.origin!==c.origin&&req.headers.origin!==c.webOrigin))return json(res,403,{error:'Request not allowed'});
    const authorization=req.headers.authorization??'';
+   if(isConnectorToken(authorization))return json(res,403,{error:'Use the MCP preparation endpoint. Paid operations require Creator approval.'});
    if(!authorization.startsWith('Bearer '))return json(res,401,{error:'Sign in to access your media.'});
    const auth=await fetch(`${c.supabaseUrl}/auth/v1/user`,{headers:{Authorization:authorization,apikey:c.publicKey},signal:AbortSignal.timeout(15000)});
    if(!auth.ok)return json(res,401,{error:'Your session expired. Sign in again.'});

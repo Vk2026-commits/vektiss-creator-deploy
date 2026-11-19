@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {fastClipCandidates} from '../../../src/domain/fast-discovery.ts';
 import {wantsVisibleAction} from '../../../src/domain/search-intent.ts';
 import {createSearchCache,searchCacheKey} from '../_shared/search-cache.ts';
@@ -102,6 +103,7 @@ Deno.serve(async (request) => {
   try {
     const token = request.headers.get("authorization")?.replace(/^Bearer /, "");
     if (!token) return reply(headers, { code: "AUTH" }, 401);
+    if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
     const { data: auth, error: authError } = await db.auth.getUser(token);
     if (authError || !auth.user) return reply(headers, { code: "AUTH" }, 401);
     const input = requestSchema.parse(await request.json());

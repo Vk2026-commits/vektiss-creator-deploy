@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import { createClient } from "@supabase/supabase-js";
 import { createAvatarHandler } from "../_shared/avatar-handler.ts";
 import { createAvatarService } from "../_shared/avatar-service.ts";
@@ -27,6 +28,7 @@ const handler = createAvatarHandler({
   appOrigin: new URL(required("APP_ORIGIN")).origin,
   additionalOrigins: Deno.env.get("CREATOR_ADDITIONAL_ORIGINS"),
   authenticate: async (token) => {
+    if(isConnectorToken(token))return null;
     const { data, error } = await db.auth.getUser(token);
     return error ? null : (data.user?.id ?? null);
   },

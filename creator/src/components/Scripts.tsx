@@ -1,3 +1,4 @@
+import {McpDraftReview} from './McpDraftReview';
 import {LanguageLevelSelect} from './LanguageLevelSelect';
 import {resolveLanguageLevel,languageRevisionRequest,languageLevels} from '../domain/language-level';
 import {ScriptReference} from './ScriptReference';
@@ -40,7 +41,7 @@ import {watchRender} from '../lib/watch-render';
 import {fullCompositionInput} from '../lib/full-composition-input';
 import {rebaseRenderState,saveScriptWithRebase} from '../lib/script-save';
 
-export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProject,onLeaveStudio,studioMode=false, creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null, onAvatarIntentHandled }: { newVideoRequest?:number;onNewVideoHandled?:()=>void;onOpenStudioProject?:(id:string)=>void;onLeaveStudio?:()=>void;studioMode?:boolean; creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null; onAvatarIntentHandled?:()=>void }) {
+export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProject,onOpenReactionProject,onLeaveStudio,studioMode=false, creativeEnabled=false, profiles, selectedId, userId, preview, onAddAudience, audienceChoice, researchIntent, onResearchIntentHandled, onProfileUpdated, avatarIntent=null, onAvatarIntentHandled }: { newVideoRequest?:number;onNewVideoHandled?:()=>void;onOpenStudioProject?:(id:string)=>void;onOpenReactionProject?:()=>void;onLeaveStudio?:()=>void;studioMode?:boolean; creativeEnabled?:boolean; profiles: ContentProfile[]; selectedId: string | null; userId: string; preview: boolean; onAddAudience?:()=>void; audienceChoice?:{id:string;version:number}|null; researchIntent?:ResearchIntent|null; onResearchIntentHandled?:()=>void; onProfileUpdated?:(profile:ContentProfile)=>void; avatarIntent?:AvatarIntent|null; onAvatarIntentHandled?:()=>void }) {
   const repo = useMemo(() => scriptRepository(userId, preview), [userId, preview]);
   const recoveryKey=`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}${studioMode?':studio':''}`;
   const [workspaceId,setWorkspaceId]=useState(()=>recoveryRead(`${recoveryKey}:workspace`)??crypto.randomUUID());
@@ -156,6 +157,15 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
     let active = true;
     repo.list().then(items => { if (active) {
       setSaved(items);
+      const target=new URL(window.location.href).searchParams.get('project');
+      const linked=target?items.find(item=>item.id===target):null;
+      if(linked){
+        if(Boolean(linked.brief.avatar_creation)!==studioMode){if(linked.brief.avatar_creation&&onOpenStudioProject)onOpenStudioProject(linked.id);else onOpenReactionProject?.();return;}
+        if(!linked.brief.avatar_creation)onOpenReactionProject?.();
+        const url=new URL(window.location.href);url.searchParams.delete('project');window.history.replaceState(null,'',url);
+        setCurrent(linked);setDraft(linked);setPlanning(Boolean(linked.brief.production));setDirty(false);setLibraryView(false);return;
+      }
+
       const restored=items.find(item=>item.id===recoveryRead(recoveryKey)&& (studioMode?Boolean(item.brief.avatar_creation):!item.brief.avatar_creation));
       if(restored){setCurrent(restored);setDraft({...restored,brief:{...restored.brief,cost_project_id:restored.brief.cost_project_id??restored.id}});setPlanning(Boolean(restored.brief.production));}
       const local=recoveryRead(`${recoveryKey}:draft`);
@@ -356,7 +366,7 @@ export function Scripts({ newVideoRequest=0,onNewVideoHandled,onOpenStudioProjec
         <p className="save-status" role="status">{dirty?(busy?'Saving your progress…':'Saving shortly…'):current?(preview?'Saved on this device':'All changes saved'):'Your progress saves as you go.'}</p>
         {error && <p role="alert">{error}{dirty&&<button disabled={busy} onClick={()=>{lastAutoAttempt.current=null;setError('');setDraft(d=>({...d}));}}>Retry saving</button>}</p>}{message && <p role="status">{message}</p>}
         {!planning&&draftProgress&&!draftProgress.failed&&draftProgress.percent<100&&<ScriptProgress progress={draftProgress}/>}
-        {planning&&draft.brief.production?<VideoPlan previousScripts={saved} editFocus={versionIntent} script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
+        {draft.brief.mcp_review_pending?<McpDraftReview draft={draft} onChange={next=>{setDraft(next);setDirty(true);setPlanning(true);}}/>:planning&&draft.brief.production?<VideoPlan previousScripts={saved} editFocus={versionIntent} script={draft} plan={draft.brief.production} preview={preview} busy={busy} onChange={production=>{setDraft(d=>({...d,brief:{...d.brief,production}}));setDirty(true);setMessage('');}} onSave={()=>void save({...draft.brief.production!,step:'saved'})} onEdit={()=>{setPlanning(false);setDraft(d=>({...d,brief:{...d.brief,production:{...d.brief.production!,approved_at:null,step:'approve'}}}));setDirty(true);}}/>:<>
         <fieldset disabled={loading||busy||sourceProcessing}>
           {!draft.brief.avatar_creation&&draft.brief.stage==='source'&&import.meta.env.VITE_EDIT_STUDIO==='true'&&<label>Video style<select value={draft.brief.template_workflow?'explainer':'reaction'} onChange={e=>{setDraft(d=>({...d,brief:{...d.brief,template_workflow:e.target.value==='explainer'}}));setDirty(true);}}><option value="explainer">Original video · avatar or my footage</option><option value="reaction">Reaction · include the source on screen</option></select></label>}
           {draft.brief.stage==='review'&&<section className="review-script-first" aria-label="Your script">

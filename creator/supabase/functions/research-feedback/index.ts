@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import { createClient } from "@supabase/supabase-js";
 import { isAllowedAppOrigin } from "../_shared/app-origins.ts";
 import { researchFeedbackRequestSchema } from "../../../src/domain/research.ts";
@@ -14,6 +15,7 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return reply(headers, { code: "METHOD" }, 405);
   try {
     const token = request.headers.get("authorization")?.replace(/^Bearer /, ""); if (!token) return reply(headers, { code: "AUTH" }, 401);
+    if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
     const { data: auth, error: authError } = await db.auth.getUser(token); if (authError || !auth.user) return reply(headers, { code: "AUTH" }, 401);
     const input = researchFeedbackRequestSchema.parse(await request.json());
     const { data: opportunity, error: opportunityError } = await db.from("creator_research_opportunities").select("id,status").eq("id", input.opportunityId).eq("user_id", auth.user.id).maybeSingle();

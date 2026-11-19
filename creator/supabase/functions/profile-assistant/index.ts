@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {createClient} from '@supabase/supabase-js';
 import {z} from 'zod';
 import {isAllowedAppOrigin} from '../_shared/app-origins.ts';
@@ -17,6 +18,7 @@ Deno.serve(async req=>{
  try{
   const token=req.headers.get('authorization')?.replace(/^Bearer /,'');
   if(!token)return reply({code:'AUTH'},401);
+  if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
   const {data:{user},error}=await db.auth.getUser(token);if(error||!user)return reply({code:'AUTH'},401);
   const raw=await req.text();if(raw.length>15000)return reply({code:'INPUT'},400);
   const input=z.object({profileId:z.string().uuid(),message:z.string().trim().min(1).max(5000),allowVideo:z.boolean().default(false)}).strict().parse(JSON.parse(raw));

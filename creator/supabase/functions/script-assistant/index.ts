@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {aiRequestBucket} from '../../../src/domain/ai-request-bucket.ts';
 import {languageLevelInstruction,resolveLanguageLevel} from '../../../src/domain/language-level.ts';
 import {editorialDirection,needsEditorialRebuild,editorialRebuildDirection} from '../../../src/domain/script-editorial.ts';
@@ -56,6 +57,7 @@ Deno.serve(async request=>{
   progress('auth');
   const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
   if(!token)return respond({code:'AUTH'},401);
+  if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
   const {data:auth,error:authError}=await db.auth.getUser(token);
   if(authError||!auth.user)return respond({code:'AUTH'},401);
   const key=Deno.env.get('CREATOR_OPENAI_API_KEY');

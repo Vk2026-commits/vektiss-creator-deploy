@@ -14,15 +14,16 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "hyperframes": "0.8.206",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@remotion/bundler": "4.0.534",
     "@remotion/renderer": "4.0.534",
-    "remotion": "4.0.534",
     "@supabase/supabase-js": "2.106.0",
+    "hyperframes": "0.8.206",
     "lucide-react": "0.575.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "zod": "3.24.2"
+    "remotion": "4.0.534",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",

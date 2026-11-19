@@ -11,6 +11,7 @@ import {languageLevelSchema} from './language-level.ts';
 import {editorialFields} from './script-editorial.ts';
 export const briefSchema = z.object({
   ...editorialFields,
+  mcp_review_pending:z.boolean().optional(),
   language_level:languageLevelSchema.optional(),
   avatar_creation:avatarCreationSchema.optional(),
   template_workflow:z.boolean().optional(),

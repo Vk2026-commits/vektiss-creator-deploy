@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {createClient} from '@supabase/supabase-js';
 import {credentialVault} from '../_shared/credential-crypto.ts';
 import {providerVideo} from '../_shared/presenter-test.ts';
@@ -18,6 +19,7 @@ Deno.serve(async request=>{
  const token=request.headers.get('authorization')?.replace(/^Bearer /,'');
  let serviceClaim:{data:any;error:any}|null=null;
  if(token!==env('SUPABASE_SERVICE_ROLE_KEY')){
+  if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
   const {data}=await db.auth.getUser(token??'');
   if(!data.user){
    if(!token)return reply({},401);

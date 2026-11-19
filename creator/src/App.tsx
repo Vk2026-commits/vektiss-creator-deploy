@@ -1,3 +1,4 @@
+import {AIConnections,AIConsent} from './components/AIConnections';
 import type {AvatarIntent} from './domain/avatar-creation';
 import {
   useCallback,
@@ -72,6 +73,27 @@ function Brand() {
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [destinationReady,setDestinationReady]=useState(false);
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const project=params.get('project');
+    const authorization=params.get('authorization_id');
+    if(project&&/^[a-f0-9-]{36}$/i.test(project))sessionStorage.setItem('creator:project:pending',project);
+    if(window.location.pathname==='/oauth/consent'&&authorization&&/^[a-zA-Z0-9_-]{1,200}$/.test(authorization))sessionStorage.setItem('creator:oauth:pending',authorization);
+  },[]);
+  useEffect(()=>{
+    if(!session){setDestinationReady(false);return;}
+    const authorization=sessionStorage.getItem('creator:oauth:pending');
+    if(authorization&&window.location.pathname!=='/oauth/consent'){
+      window.location.replace('/oauth/consent?authorization_id='+encodeURIComponent(authorization));return;
+    }
+    const project=sessionStorage.getItem('creator:project:pending');
+    if(project){
+      sessionStorage.removeItem('creator:project:pending');
+      const url=new URL(window.location.href);url.searchParams.set('project',project);window.history.replaceState(null,'',url);
+    }
+    setDestinationReady(true);
+  },[session?.user.id]);
   const [recovering, setRecovering] = useState(false);
   const [loading, setLoading] = useState(Boolean(supabase));
   const [authError, setAuthError] = useState(() =>
@@ -171,6 +193,8 @@ export function App() {
       />
     );
   if (session && recovering) return <PasswordSetup onDone={() => setRecovering(false)} />;
+  if(session&&!destinationReady)return <p role="status">Opening your project…</p>;
+  if(session&&window.location.pathname==='/oauth/consent')return <AIConsent userId={session.user.id}/>;
   if (session && repo)
     return (
       <CreatorWorkspace
@@ -952,6 +976,7 @@ function CreatorWorkspace({
                       {creator ? "Edit creator profile" : "Set up my profile"}
                     </button>
                   </div>
+                  {!preview&&<AIConnections userId={userId}/>}
                   {creator ? (
                     <div className="creator-layout">
                       <article className="identity-card">
@@ -1001,7 +1026,7 @@ function CreatorWorkspace({
                   )}
                 </>
               )}
-              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts onNewVideoHandled={()=>setNewVideoRequest(0)} newVideoRequest={page==='create'?newVideoRequest:0} onOpenStudioProject={id=>{recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio:draft`,null);recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio`,id);setStudioAvatar(true);setPage('edit-studio');}} onLeaveStudio={()=>setStudioAvatar(false)} onAvatarIntentHandled={()=>setAvatarIntent(null)} key={page==='edit-studio'&&studioAvatar?'studio-avatar':'video-library'} studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={page==='edit-studio'&&studioAvatar?avatarIntent:null} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={page==='edit-studio'&&studioAvatar?null:researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
+              <div hidden={page !== 'create' && !(page==='edit-studio'&&studioAvatar)}><Scripts onOpenReactionProject={()=>{setStudioAvatar(false);setPage('create');}} onNewVideoHandled={()=>setNewVideoRequest(0)} newVideoRequest={page==='create'?newVideoRequest:0} onOpenStudioProject={id=>{recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio:draft`,null);recoveryWrite(`vektiss:active-video:v1:${preview?'preview':'account'}:${userId}:studio`,id);setStudioAvatar(true);setPage('edit-studio');}} onLeaveStudio={()=>setStudioAvatar(false)} onAvatarIntentHandled={()=>setAvatarIntent(null)} key={page==='edit-studio'&&studioAvatar?'studio-avatar':'video-library'} studioMode={page==='edit-studio'&&studioAvatar} creativeEnabled={creativeEnabled} avatarIntent={page==='edit-studio'&&studioAvatar?avatarIntent:null} profiles={data?.profiles ?? []} selectedId={selected?.id ?? null} userId={userId} preview={preview} audienceChoice={audienceChoice} researchIntent={page==='edit-studio'&&studioAvatar?null:researchIntent} onProfileUpdated={profile=>setData(current=>current?{...current,profiles:current.profiles.map(p=>p.id===profile.id?profile:p)}:current)} onResearchIntentHandled={() => setResearchIntent(null)} onAddAudience={()=>{setChoosingAudience(true);setShowArchived(false);setQuery('');setPage('profiles');document.getElementById('main')?.scrollIntoView({block:'start'});}} /></div>
             </>
           )}
         </main>

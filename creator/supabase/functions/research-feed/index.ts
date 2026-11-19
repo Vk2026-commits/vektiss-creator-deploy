@@ -1,3 +1,4 @@
+import {isConnectorToken} from '../_shared/oauth-guard.ts';
 import {filterLibraryPlatform} from '../../../src/domain/discovery-engagement.ts';
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -30,6 +31,7 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return reply(headers, { code: "METHOD" }, 405);
   try {
     const token = request.headers.get("authorization")?.replace(/^Bearer /, ""); if (!token) return reply(headers, { code: "AUTH" }, 401);
+    if(isConnectorToken(token))return new Response(JSON.stringify({error:'Use Creator to approve paid operations.'}),{status:403,headers:{'content-type':'application/json'}});
     const { data: auth, error: authError } = await db.auth.getUser(token); if (authError || !auth.user) return reply(headers, { code: "AUTH" }, 401);
     const input = inputSchema.parse(await request.json());
     const { data: entitlement } = await db.from("creator_research_entitlements").select("enabled,monthly_opportunity_limit,delivered_count,reserved_count,period_start").eq("user_id", auth.user.id).maybeSingle();
