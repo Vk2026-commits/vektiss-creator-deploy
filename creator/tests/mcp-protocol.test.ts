@@ -7,7 +7,7 @@ it('exposes only preparation tools over the real MCP protocol',async()=>{
  const server=creatorMcpServer(db as never,'u','c','/tmp/mcp-test','https://creator.vektiss.com');
  const client=new Client({name:'mock-client',version:'1'});
  const [a,b]=InMemoryTransport.createLinkedPair();await server.connect(a);await client.connect(b);
- try{const {tools}=await client.listTools();expect(tools.map(t=>t.name).sort()).toEqual(['create_draft','get_project','list_avatars','list_profiles','list_projects','list_templates','update_draft']);
+ try{const {tools}=await client.listTools();expect(tools.map(t=>t.name).sort()).toEqual(['create_draft','get_project','list_avatars','list_profiles','list_projects','list_templates','update_draft','list_template_designs','get_template_design','create_template_design','update_template_design','preview_template_design'].sort());
  const result=await client.callTool({name:'list_templates',arguments:{}});expect(JSON.stringify(result)).toContain('tier-list');
  expect(tools.some(t=>/render|generate|approve|delete/.test(t.name))).toBe(false);
  }finally{await client.close();await server.close();}

@@ -406,8 +406,8 @@ function CreatorWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const routeKey=`vektiss:workflow:v1:${userId}`;
-  const [page, setPage] = useState<Page>(()=>recoveryRead(routeKey)?.startsWith('studio')?'edit-studio':'create');
-  const [studioAvatar,setStudioAvatar]=useState(()=>recoveryRead(routeKey)==='studio');
+  const [page, setPage] = useState<Page>(()=>new URLSearchParams(location.search).has('templateDesign')||recoveryRead(routeKey)?.startsWith('studio')?'edit-studio':'create');
+  const [studioAvatar,setStudioAvatar]=useState(()=>!new URLSearchParams(location.search).has('templateDesign')&&recoveryRead(routeKey)==='studio');
   const [newVideoRequest,setNewVideoRequest]=useState(0);
   useEffect(()=>recoveryWrite(routeKey,page==='edit-studio'?(studioAvatar?'studio':'studio-footage'):null),[routeKey,page,studioAvatar]);
   const startReaction=()=>{setPage("create");setNewVideoRequest(n=>n+1);};

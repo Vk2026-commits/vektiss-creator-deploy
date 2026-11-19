@@ -1,3 +1,4 @@
+import {applyTemplateAnimation} from './template-animation.ts';
 import type {RenderIllustration} from './edit-illustrations.ts';
 import {rankingProject} from './ranking-project.ts';
 import {popoutExplainerProject} from './popout-explainer-project.ts';
@@ -16,7 +17,7 @@ import type {RenderLogo} from './logo-assets.ts';
 // Local authoring bridge only. Never accept executable HTML or URLs from the model.
 export const HYPERFRAMES_VERSION='0.8.206';
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function hyperframesProject(source:EditSource,raw:EditProposal,rawBrand:EditBrand,sample=false,logos:RenderLogo[]=[],illustrations:RenderIllustration[]=[]){
+function baseHyperframesProject(source:EditSource,raw:EditProposal,rawBrand:EditBrand,sample=false,logos:RenderLogo[]=[],illustrations:RenderIllustration[]=[]){
  const plan=validateEditProposal(raw,source,raw.templateId);
  const brand=editBrandSchema.parse(rawBrand);
  const {width,height}=editDimensions(plan.aspectRatio);
@@ -93,4 +94,9 @@ export function talkingHeadProject(source:EditSource,plan:EditProposal,brand:Edi
  window.__timelines={vektiss:{duration:()=>${source.duration},seek:t=>{seek(t);return window.__timelines.vektiss},pause:()=>{}}};seek(0);
  ${sample?`window.addEventListener('message',event=>{if(event.source===parent&&event.data?.type==='vektiss-seek'&&Number.isFinite(event.data.time))seek(event.data.time);});`:''}
  </script></body></html>`;
+}
+
+export function hyperframesProject(source:EditSource,raw:EditProposal,brand:EditBrand,sample=false,logos:RenderLogo[]=[],illustrations:RenderIllustration[]=[]){
+ const html=baseHyperframesProject(source,raw,brand,sample,logos,illustrations);
+ return applyTemplateAnimation(html,raw.animation,raw.templateId,raw.aspectRatio==='16:9');
 }

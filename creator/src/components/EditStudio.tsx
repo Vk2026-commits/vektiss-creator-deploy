@@ -1,3 +1,4 @@
+import {TemplateWorkshop} from './TemplateWorkshop';
 import {recoveryRead,recoveryWrite} from '../lib/recovery-storage';
 import {restoreStudioFile,saveStudioFile} from '../lib/studio-file-recovery';
 import {avatarCreationSchema,type AvatarCreation} from '../domain/avatar-creation';
@@ -19,6 +20,7 @@ import {LogoReview,type LogoChoice} from './LogoReview';
 
 type Plan={id:string;version:number;savedAt:string;brand?:EditBrand;logos?:LogoChoice[];illustrations?:SavedIllustration[];instructions?:string;proposal:EditProposal;storyboard:ReturnType<typeof editStoryboard>};
 export function EditStudio({recoveryScope,profileId,preview=false,initialExportId='',initialTemplate='recommend',initialBrand,onCreateAvatar}:{recoveryScope?:string;profileId:string|null;preview?:boolean;initialExportId?:string;initialTemplate?:string;initialBrand?:EditBrand;onCreateAvatar?:(creation:AvatarCreation)=>void}){
+ const [workshop,setWorkshop]=useState(()=>new URLSearchParams(location.search).has('templateDesign'));
  const recoveryKey=recoveryScope?`vektiss:studio-footage:v1:${recoveryScope}:${profileId??'none'}`:null;
  const [restored]=useState(()=>{try{return recoveryKey?JSON.parse(recoveryRead(recoveryKey)??'null'):null;}catch{return null;}});
  const [fileReady,setFileReady]=useState(!recoveryKey);
@@ -125,11 +127,12 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
+ if(workshop)return <TemplateWorkshop onClose={()=>{setWorkshop(false);const url=new URL(location.href);url.searchParams.delete('templateDesign');history.replaceState(null,'',url);}}/>;
  return <section className="edit-studio">
   <span className="eyebrow">EDIT STUDIO</span><h1 ref={stageTop} tabIndex={-1}>{step==='start'?'How would you like to create?':step==='source'?'Choose your footage.':step==='brand'?'Make it yours.':step==='style'?'Choose the look.':'Review your edit.'}</h1>
   <p>Use your own recording or an avatar video. The templates add graphics and captions while preserving the recorded speech and approved setting.</p>
   {step!=='start'&&<nav className="studio-steps" aria-label="Editing stages">{(['source','style','brand','review'] as const).map((stage,i)=><button key={stage} type="button" aria-current={step===stage?'step':undefined} disabled={busy||(stage==='review'?!plan:stage!=='source'&&!file&&!exportId)} onClick={()=>go(stage)}>{i+1}. {stage==='source'?'Footage':stage==='brand'?'Brand & captions':stage==='style'?'Template':'Review'}</button>)}</nav>}
-  {step==='start'&&<><div className="studio-entry">
+  {step==='start'&&<><button className="button" onClick={()=>setWorkshop(true)}>Template workshop</button><div className="studio-entry">
   {onCreateAvatar&&<article><h2>Create with my avatar</h2><p>Start with your profile and an idea. Approve a script, then bring it to life with your avatar.</p><button type="button" className="button primary" disabled={!profileId||!brandLoaded||!brandValid} onClick={()=>onCreateAvatar(avatarCreationSchema.parse({template:template==='recommend'?'tier-list':template,brand,format:aspectRatio==='16:9'?'landscape':'portrait'}))}>Create with my avatar →</button></article>}
   <article><h2>Edit existing footage</h2><p>Upload your recording or choose a completed video, then add your brand and a visual style.</p><button className="button primary" onClick={()=>go('source')}>Choose footage →</button></article></div>
   <details className="studio-saved"><summary>Saved edits ({savedEdits.length})</summary><section aria-label="Saved edits"><p>Reopen an edit from this account on any device. Opening it does not generate a plan or start a render.</p>

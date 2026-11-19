@@ -1,3 +1,4 @@
+import {publishedTemplateAnimations} from './template-workshop';
 import {hydrateEditSource,readEditSource} from './edit-source';
 import {resolveEditStyle} from '../src/domain/edit-style';
 import {planningProgress} from '../src/domain/edit-planning-progress';
@@ -69,7 +70,8 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  source=await hydrateEditSource(folder,source);
  source={...source,kind:options.exportId?'avatar' as const:'upload' as const};
  const resolvedStyle=resolveEditStyle((await readEditBrand(root)).brand,{},options.brand??{});
- const key=createHash('sha256').update(JSON.stringify([revision,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
+ const animations=await publishedTemplateAnimations(root);
+ const key=createHash('sha256').update(JSON.stringify([revision,animations,options.template,options.profileId,profiles[0],EDIT_PLANNER_VERSION,options.aspectRatio??'9:16',resolvedStyle,options.instructions??''])).digest('hex');
  const saved=resolve(folder,`${key}.json`);
  try{const cached=JSON.parse(await readFile(saved,'utf8'));validateEditProposal(cached.proposal,source,cached.proposal.templateId);return cached;}catch{/* No usable saved plan. */}
  const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));body.set('instructions',options.instructions??'');body.set('style',JSON.stringify(resolvedStyle.brand));
@@ -77,7 +79,7 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
  phase='plan-validation';onProgress?.(planningProgress('validation'));
- const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16'});
+ const output=await response.json(),proposal=editProposalSchema.parse({...output.proposal,rendererVersion:2,aspectRatio:options.aspectRatio??'9:16',...(animations[output.proposal?.templateId]?{animation:animations[output.proposal.templateId]}:{})});
  validateEditProposal(proposal,source,options.template==='recommend'?proposal.templateId:options.template);
  const logos=proposal.templateId==='clean-tech'?await discoverLogos(root,source.words):[];
  const result={id:key,status:'proposal',version:1,savedAt:new Date().toISOString(),brand:resolvedStyle.brand,resolvedStyle,instructions:options.instructions??'',proposal,logos,storyboard:editStoryboard(proposal,source),sourceKind:source.kind,duration:source.duration,generationId:output.generationId};

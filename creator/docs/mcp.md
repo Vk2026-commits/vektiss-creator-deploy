@@ -38,3 +38,15 @@ Disable quickly: set `CREATOR_MCP_ENABLED=false` or disable an account in `creat
 `tests/mcp-database.sql` runs transactional SQL assertions and rolls back. Unit/protocol/HTTP tests: `npx vitest run tests/mcp-*.test.ts tests/video-versions.test.ts`.
 
 Audit records contain account, client, tool, project ID and outcome, never script contents or credentials. Requests are limited to 60 tool calls/account/minute and 128 KiB per HTTP body. Concurrency uses revision checks and account-scoped transaction locks; draft retries use an idempotency key.
+
+## Animation workshop
+
+MCP now exposes `list_template_designs`, `get_template_design`, `create_template_design`, `update_template_design`, and `preview_template_design`.
+
+Start with `list_templates`, then create a design using a stable UUID as `idempotency_key`. Read the returned revision before updates. Preview returns 1–4 JPEG frames from the trusted renderer plus a Creator review link. Inspect entrance, readable hold, and subsequent reveal before iterating. Previews are five-second illustrative samples with placeholder presenters, not final customer footage. They use local Chromium and make no AI/HeyGen calls. No arbitrary code, URLs, HTML or CSS is accepted.
+
+Supported templates: Tier List, HyperFrames Motion, Animated Explainer, Charts & Comparisons, Glass Cards, Clean Tech. Unsupported templates still work normally but need a code change to support workshop controls. Controls include entrance, duration, distance, easing, exit fade, headline scale and card radius. Board and caption placement apply only to portrait Tier List; reveal times and ranking order remain anchored to the actual speech.
+
+Review animated playback under **Edit Studio → Template workshop** (or the tool's deep link). Only the signed-in Creator user can publish or restore built-in animation. Publication is **account-specific**, not global. Future edit plans snapshot the approved animation. Existing plans/exports are unchanged. Revising a published design preserves its published snapshot until separately approved. MCP has no publish tool.
+
+Rendering validation: `CREATOR_CHROMIUM_PATH=/path/to/chromium pnpm exec vitest run tests/template-animation-browser.test.ts`. Server environments already provide Chromium. File storage is under the authenticated account root, revision-checked with atomic writes and a filesystem lock. A crash during an edit may leave `edit/template-designs/.lock`; after confirming no workshop operation is running, an operator may remove this empty lock directory. Designs are capped at 100/account; at most two frame-preview jobs run concurrently per worker.

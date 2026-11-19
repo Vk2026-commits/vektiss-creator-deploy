@@ -1,3 +1,4 @@
+import {listTemplateDesigns,readTemplateDesign,publishTemplateDesign,templateDesignPreview,publishedTemplateAnimations} from './template-workshop';
 import {isConnectorToken} from '../supabase/functions/_shared/oauth-guard';
 import {mcpRoutes} from './mcp/routes';
 import {mediaQuotaCount,mediaQuotaMessage} from './media-quota';
@@ -137,6 +138,19 @@ export function hostedHandler(c:HostingConfig){
    }
    if(req.method==='GET'&&path===`${prefix}/exports`){const folder=resolve(root,'edit/compositions');const names=await readdir(folder).catch(()=>[]);return json(res,200,await Promise.all(names.filter(n=>/^(?:[a-f0-9-]{36}|[a-f0-9]{64})\.mp4$/.test(n)).map(async n=>({id:n.slice(0,-4),created_at:(await stat(resolve(folder,n))).mtime.toISOString()}))));}
    if(path.startsWith(`${prefix}/template-`)&&process.env.CREATOR_EDIT_STUDIO!=='true')return json(res,503,{error:'Edit Studio is not enabled on this server.'});
+   if(req.method==='GET'&&path===`${prefix}/template-designs`)return json(res,200,await listTemplateDesigns(root));
+   if(req.method==='GET'&&path===`${prefix}/template-animation-defaults`)return json(res,200,await publishedTemplateAnimations(root));
+   const designPath=path.match(/^\/api\/local-capture\/template-designs\/([a-f0-9-]{36})(\/preview|\/publish)?$/);
+   if(designPath){
+    const id=designPath[1];
+    if(req.method==='GET'&&!designPath[2])return json(res,200,await readTemplateDesign(root,id));
+    if(req.method==='GET'&&designPath[2]==='/preview'){const query=new URL(req.url!,c.origin).searchParams;const ratio=query.get('aspectRatio')??'9:16';if(!['9:16','16:9'].includes(ratio))return json(res,400,{error:'Invalid orientation'});return json(res,200,await templateDesignPreview(root,id,Number(query.get('revision')),ratio as '9:16'|'16:9'));}
+    if(req.method==='PUT'&&designPath[2]==='/publish'){
+     let size=0;const chunks:Buffer[]=[];for await(const chunk of req){size+=chunk.length;if(size>2048)return json(res,413,{error:'Request too large'});chunks.push(chunk);}
+     try{return json(res,200,await publishTemplateDesign(root,{...JSON.parse(Buffer.concat(chunks).toString()),id}));}catch(e){return json(res,409,{error:e instanceof Error?e.message:'Could not publish template'});}
+    }
+    return json(res,405,{error:'Method not allowed'});
+   }
    if(path===`${prefix}/template-studio`){
     if(req.method==='GET')return json(res,200,await readStudio(root));
     if(req.method==='PUT'){const chunks:Buffer[]=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>8192)return json(res,413,{error:'Studio settings are too large.'});chunks.push(chunk);}try{return json(res,200,await saveStudio(root,JSON.parse(Buffer.concat(chunks).toString())));}catch{return json(res,400,{error:'Studio could not save. Reload and select an uploaded image owned by this account.'});}}

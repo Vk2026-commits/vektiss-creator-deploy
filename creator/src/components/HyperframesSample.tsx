@@ -1,3 +1,4 @@
+import type {TemplateAnimation} from '../domain/template-animation';
 import {alphaSample} from '../domain/alpha-sample';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {hyperframesProject} from '../domain/hyperframes-project';
@@ -6,7 +7,7 @@ import {editDimensions,type EditAspectRatio} from '../domain/edit-format';
 import type {EditBrand} from '../domain/edit-brand';
 import type {RenderLogo} from '../domain/logo-assets';
 import type {EditProposal} from '../domain/edit-templates';
-export function HyperframesSample({brand,frame,aspectRatio,mediaUrl,templateId='hyperframes-motion'}:{brand:EditBrand;frame:number;aspectRatio:EditAspectRatio;mediaUrl?:string|null;templateId?:EditProposal['templateId']}){
+export function HyperframesSample({brand,frame,aspectRatio,mediaUrl,animation,templateId='hyperframes-motion'}:{animation?:TemplateAnimation;brand:EditBrand;frame:number;aspectRatio:EditAspectRatio;mediaUrl?:string|null;templateId?:EditProposal['templateId']}){
  // Segmentation is prepared at export; gallery uses the ready-made aligned sample.
  if(templateId==='popout-explainer'||templateId==='paper-cutout')mediaUrl=null;
  const suppliedMedia=mediaUrl;
@@ -19,7 +20,7 @@ export function HyperframesSample({brand,frame,aspectRatio,mediaUrl,templateId='
  const localMedia=useRef<Blob|null>(null);
  useEffect(()=>{localMedia.current=null;if(!mediaUrl)return;const abort=new AbortController();fetch(mediaUrl,{signal:abort.signal}).then(r=>r.blob()).then(blob=>{if(abort.signal.aborted)return;localMedia.current=blob;ref.current?.contentWindow?.postMessage({type:'vektiss-local-media',blob},'*');}).catch(()=>{});return()=>abort.abort();},[mediaUrl,templateId]);
  const html=useMemo(()=>{const previewSource=templateId==='charts-comparisons'?{...templateSampleSource,words:'Example data before 12 hours after 3 hours saved time'.split(' ').map((text,i)=>({text,start:i*.5,end:(i+1)*.5}))}:templateSampleSource;
-  const previewPlan={...templateSample(templateId),aspectRatio};
+  const previewPlan={...templateSample(templateId),aspectRatio,...(animation?{animation}:{})};
   if(templateId==='charts-comparisons'){previewPlan.beats[0].headline='Time spent';previewPlan.beats[0].graphics!.chart={unit:'hours',items:[{label:'Before',value:12,sourceWord:3},{label:'After',value:3,sourceWord:6}]};}
   let sample=hyperframesProject(previewSource,previewPlan,!suppliedMedia?{...brand,captionStyle:'none'}:brand,true,sampleLogos);
   if(templateId==='paper-cutout'&&suppliedMedia)return sample;
@@ -28,7 +29,7 @@ export function HyperframesSample({brand,frame,aspectRatio,mediaUrl,templateId='
   if(['popout-explainer','paper-cutout'].includes(templateId))sample=alphaSample(sample,templateId==='paper-cutout');
   const sync=(parameter:string)=>`window.sampleTime=${parameter};for(const sampleVideo of document.querySelectorAll('video')){if(sampleVideo?.readyState>=1&&Number.isFinite(${parameter})&&Math.abs(sampleVideo.currentTime-${parameter})>.03)sampleVideo.currentTime=Math.max(0,Math.min(${parameter},sampleVideo.duration-.04));}`;
   return sample.replace('function seek(t){','function seek(t){'+sync('t')).replace('function seek(raw){','function seek(raw){'+sync('raw')).replace('</script>',`window.addEventListener('message',event=>{if(event.source!==parent||event.data?.type!=='vektiss-local-media'||!(event.data.blob instanceof Blob))return;const media=document.querySelector(event.data.type==='vektiss-local-matte'?'#cutout':'video');if(!media)return;if(media.dataset.blobUrl)URL.revokeObjectURL(media.dataset.blobUrl);media.dataset.blobUrl=URL.createObjectURL(event.data.blob);media.muted=true;media.playsInline=true;media.src=media.dataset.blobUrl;media.onloadedmetadata=()=>seek(window.sampleTime??1.5);});</script>`);
- },[brand,aspectRatio,mediaUrl,suppliedMedia,templateId,sampleLogos]);
+ },[brand,aspectRatio,mediaUrl,suppliedMedia,templateId,sampleLogos,animation]);
  const seek=()=>ref.current?.contentWindow?.postMessage({type:'vektiss-seek',time:frame/30},'*');
  const loaded=()=>{seek();if(matteMedia.current)ref.current?.contentWindow?.postMessage({type:'vektiss-local-matte',blob:matteMedia.current},'*');if(localMedia.current)ref.current?.contentWindow?.postMessage({type:'vektiss-local-media',blob:localMedia.current},'*');};
  useEffect(seek,[frame,html]);

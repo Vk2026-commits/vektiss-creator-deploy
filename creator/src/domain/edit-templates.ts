@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {templateAnimation,animationTemplate} from './template-animation.ts';
 import {editorialAssetIds} from './editorial-assets.ts';
 import {editAspectRatio} from './edit-format.ts';
 
@@ -40,6 +41,7 @@ const beat=z.object({
  }).strict().optional(),
 }).strict();
 export const editProposalSchema=z.object({
+ animation:templateAnimation.optional(),
  aspectRatio:editAspectRatio.optional(),
  rendererVersion:z.literal(2).optional(),
  version:z.literal(1),templateId:editTemplateId,sourceRevision:z.string().min(1).max(200),
@@ -52,6 +54,7 @@ export type EditProposal=z.infer<typeof editProposalSchema>;
 export function validateEditProposal(raw:unknown,source:EditSource,templateId:z.infer<typeof editTemplateId>):EditProposal {
  editSourceSchema.parse(source);
  const plan=editProposalSchema.parse(raw);
+ if(plan.animation)animationTemplate.parse(plan.templateId);
  if(plan.aspectRatio==='16:9'&&plan.rendererVersion!==2)throw Error('EDIT_FORMAT_VERSION');
  if(plan.templateId!==templateId||plan.sourceRevision!==source.revision)throw Error('EDIT_SOURCE_CHANGED');
  let next=0;
