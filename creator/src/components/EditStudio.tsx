@@ -34,7 +34,7 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
  const [aspectRatio,setAspectRatio]=useState<EditAspectRatio>(restored?.aspectRatio??'9:16');
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
  const [dirty,setDirty]=useState(false);
- const [rendered,setRendered]=useState<{url:string;id:string;mode:string;version:number}|null>(null);
+ const [rendered,setRendered]=useState<{url:string;id:string;mode:string;previewScope?:string;version:number}|null>(null);
  const [renderProgress,setRenderProgress]=useState<EditProgress|null>(null),[renderStarted,setRenderStarted]=useState(0),[elapsed,setElapsed]=useState(0);
  useEffect(()=>{if(!renderStarted)return;const update=()=>setElapsed(Math.max(0,Math.floor((Date.now()-renderStarted)/1000)));update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[renderStarted]);
  const pending=useRef(false);
@@ -113,17 +113,17 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vektiss-edit-project.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(e){setError(e instanceof Error?e.message:'Project download failed.');}
  }
- async function render(mode:'preview'|'final'){
+ async function render(mode:'preview'|'final',previewScope:'quick'|'full'='full'){
   if(!plan||dirty||pending.current||plan.logos?.some(l=>l.status==='pending'))return;
   pending.current=true;setBusy(true);setError('');
   setRenderStarted(Date.now());setElapsed(0);setRenderProgress({stage:'preparing'});
   try{
-   const body=JSON.stringify({id:plan.id,version:plan.version,mode});
+   const body=JSON.stringify({id:plan.id,version:plan.version,mode,...(mode==='preview'?{previewScope}:{})});
    const r=await mediaFetch('/api/local-capture/template-render',{method:'POST',headers:{'Content-Type':'application/json'},body},`render:v${EDIT_RENDER_VERSION}:${body}`,false,undefined,status=>{if(status.progress)setRenderProgress(status.progress);if(status.created&&Number.isFinite(Date.parse(status.created)))setRenderStarted(Date.parse(status.created));});
    const result=await r.json();if(!r.ok)throw Error(result.error??'Could not render this edit.');
    setRenderProgress({stage:'finishing'});
    const blob=await loadMediaBlob(`/api/local-capture/${mode==='preview'?'template-previews':'exports'}/${result.id}`,mediaFetch,percent=>setRenderProgress({stage:'finishing',percent}));
-   setRendered({url:URL.createObjectURL(blob),id:result.id,mode,version:plan.version});
+   setRendered({url:URL.createObjectURL(blob),id:result.id,mode,previewScope,version:plan.version});
   }catch(e){setError(e instanceof Error?e.message:'Could not render this edit.');}
   finally{pending.current=false;setBusy(false);setRenderStarted(0);setRenderProgress(null);}
  }
@@ -187,10 +187,11 @@ export function EditStudio({recoveryScope,profileId,preview=false,initialExportI
    {plan.logos?.some(l=>l.status==='pending')&&<p>Review each suggested logo and save before exporting.</p>}
    {dirty&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy&&!renderProgress?'Saving…':'Save asset choices'}</button><p>Save your asset choices before exporting.</p></>}
    {renderProgress&&renderProgress.stage!=='planning'&&<div className="edit-render-progress" role="status" aria-live="polite"><strong>{editStageLabels[renderProgress.stage]}{renderProgress.percent!==undefined?` · ${renderProgress.percent}% of this stage`:''}</strong><progress aria-label={editStageLabels[renderProgress.stage]} max={100} value={renderProgress.percent}/><span>Elapsed {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,'0')}</span><p>{renderProgress.stage==='illustrating'?'Progress counts completed images. Each image can take a minute or more.':renderProgress.stage==='separating'?'Background separation is the extra step for Pop-out and Paper Cutout.':renderProgress.stage==='finishing'?'Adding your original audio, checking the video, and preparing the download.':'Progress comes from the renderer. Some preparation steps do not report a percentage.'}</p></div>}
-   <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview my edit</button>
+   {plan.proposal.templateId==='tier-list'&&<button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview','quick')}>Quick preview · up to 9 seconds</button>}
+   <button className="button" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('preview')}>Preview full video</button>
    <button className="button primary" disabled={busy||dirty||plan.logos?.some(l=>l.status==='pending')} onClick={()=>void render('final')}>Export full video</button>
    <p>Uses your original recording. Server processing uses resources, but no new avatar or AI generation is requested.</p>
-   {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?'Full-video draft preview · reduced resolution':`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='final'&&<><p>Technical export checks passed. Audiovisual review has not been completed.</p><button className="button" onClick={downloadProject}>Download editing project</button><a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a></>}</>}
+   {rendered&&<><video controls src={rendered.url} style={{maxWidth:plan.proposal.aspectRatio==='16:9'?800:360,width:'100%'}}/><p>{rendered.mode==='preview'?(rendered.previewScope==='quick'?'Quick sample · opening, reveal, completed board · reduced resolution':'Full-video draft preview · reduced resolution'):`Finished ${editDimensions(plan.proposal.aspectRatio).width} × ${editDimensions(plan.proposal.aspectRatio).height} MP4`}</p>{rendered.mode==='final'&&<><p>Technical export checks passed. Audiovisual review has not been completed.</p><button className="button" onClick={downloadProject}>Download editing project</button><a className="button primary" href={rendered.url} download="vektiss-edited-video.mp4">Download edited video</a></>}</>}
   </section>}
  </section>;
 }

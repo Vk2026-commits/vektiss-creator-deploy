@@ -1,3 +1,4 @@
+import {rankingPreviewCuts,previewDuration,previewHtml} from '../src/domain/edit-preview';
 import {readEditSource} from './edit-source';
 import {editRenderer} from '../src/domain/edit-renderer';
 import {repairEditPlan} from '../src/domain/edit-plan-repair';
@@ -17,7 +18,7 @@ import {editDimensions} from '../src/domain/edit-format';
 import {hyperframesProject} from '../src/domain/hyperframes-project';
 import {approvedRenderLogos} from './logo-assets';
 const exec=promisify(execFile);
-export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),approvePreview:z.literal(true).optional()}).strict();
+export const templateRenderRequest=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),mode:z.enum(['preview','final']),previewScope:z.enum(['quick','full']).optional(),approvePreview:z.literal(true).optional()}).strict();
 export function checkRenderApproval(input:z.infer<typeof templateRenderRequest>,plan:{version:number},_receipt?:{version:number}|null){
  if(input.version!==plan.version)throw Error('The edit plan changed. Reload the current version before exporting.');
 }
@@ -31,19 +32,32 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
  const proposal=repairEditPlan(plan.proposal,source,plan.proposal.templateId);
  if(proposal.beats.some(b=>b.visual!=='presenter'&&!b.graphics?.nodes.length&&!b.graphics?.chart&&!(b.visual==='typography'&&b.headline.trim())))throw Error('This plan needs renderable graphics. Generate a new edit plan before previewing.');
  if(proposal.beats.some(b=>b.visual==='tier-board'&&b.graphics?.nodes.some(n=>!n.tier||b.graphics!.nodes.filter(other=>other.tier===n.tier).length>3)))throw Error('Tier scenes need explicit rankings and at most three items per row. Revise this plan before rendering.');
+ if(input.previewScope==='quick'&&(input.mode!=='preview'||proposal.templateId!=='tier-list'))throw Error('Quick previews are available for Ranking previews only.');
+ const cuts=input.mode==='preview'&&input.previewScope==='quick'?rankingPreviewCuts(source,proposal):undefined;
  const brand=editBrandSchema.parse(plan.brand??defaultEditBrand);
  const illustrations=await renderIllustrations(root,plan);
  const logos=proposal.templateId==='clean-tech'?await approvedRenderLogos(root,plan.logos):[];
- const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,proposal,brand,plan.logos??[],plan.illustrations??[],EDIT_RENDER_VERSION])).digest('hex');
+ const id=createHash('sha256').update(JSON.stringify([input.id,input.version,input.mode,cuts??null,proposal,brand,plan.logos??[],plan.illustrations??[],EDIT_RENDER_VERSION])).digest('hex');
  const outputFolder=resolve(root,input.mode==='preview'?'edit/template-previews':'edit/compositions');await mkdir(outputFolder,{recursive:true});
  const output=resolve(outputFolder,`${id}.mp4`);
- const result={id,planId:input.id,version:input.version,mode:input.mode,duration:source.duration};
+ const result={id,planId:input.id,version:input.version,mode:input.mode,...(input.mode==='preview'?{previewScope:input.previewScope??'full'}:{}),duration:cuts?previewDuration(cuts):source.duration};
  try{await stat(output);if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});return result;}catch{/* Not rendered yet. */}
  const work=randomUUID(),silent=resolve(folder,`${work}.silent.mp4`),muxed=resolve(folder,`${work}.mp4`),jobFile=resolve(folder,`${work}.job.json`);
- const sourceFile=resolve(folder,`${revision}.mp4`);
+ const quickFile=resolve(folder,`${work}.quick.mp4`);
+ const originalFile=resolve(folder,`${revision}.mp4`);
  try{
+  let sourceFile=originalFile;
+  if(cuts){
+   const filters=cuts.flatMap((c,i)=>[`[0:v]trim=start=${c.sourceStart}:end=${c.sourceEnd},setpts=PTS-STARTPTS[v${i}]`,`[0:a]atrim=start=${c.sourceStart}:end=${c.sourceEnd},asetpts=PTS-STARTPTS[a${i}]`]);
+   filters.push(cuts.map((_,i)=>`[v${i}][a${i}]`).join('')+`concat=n=${cuts.length}:v=1:a=1[v][a]`);
+   await exec(mediaBinary('ffmpeg'),['-v','error','-y','-i',originalFile,'-filter_complex',filters.join(';'),'-map','[v]','-map','[a]','-c:v','libx264','-preset','ultrafast','-crf','23','-pix_fmt','yuv420p','-c:a','aac',quickFile],{timeout:120000,maxBuffer:1024*1024});
+   sourceFile=quickFile;
+  }
   const hyperframes=editRenderer(proposal.templateId,proposal.aspectRatio)==='hyperframes';
-  await writeFile(jobFile,JSON.stringify({source,proposal,brand,illustrations,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html:hyperframesProject(source,proposal,brand,false,logos,illustrations)}:{})}),{mode:0o600});
+  let html=hyperframes?hyperframesProject(source,proposal,brand,false,logos,illustrations):undefined;
+  const size=editDimensions(proposal.aspectRatio);
+  if(html&&input.mode==='preview')html=previewHtml(html,size.width,size.height,cuts);
+  await writeFile(jobFile,JSON.stringify({source,proposal,brand,illustrations,sourceFile,preview:input.mode==='preview',output:silent,...(hyperframes?{html}:{})}),{mode:0o600});
   const rendering=exec(process.execPath,[resolve(process.cwd(),hyperframes?'render/run-hyperframes.mjs':'render/run.mjs'),jobFile],{timeout:['paper-cutout','popout-explainer'].includes(proposal.templateId)?2400000:1200000,maxBuffer:8*1024*1024});
   let pending='';rendering.child.stdout?.on('data',chunk=>{pending+=String(chunk);const lines=pending.split('\n');pending=lines.pop()??'';for(const line of lines){const p=parseEditProgress(line);if(p)onProgress?.(p);}});
   await rendering;
@@ -60,7 +74,7 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   const project={version:1,exportId:id,planId:input.id,planVersion:input.version,rendererVersion:EDIT_RENDER_VERSION,
    sourceRevision:revision,source,proposal,brand,resolvedStyle:plan.resolvedStyle??null,
    instructions:plan.instructions??'',logos:plan.logos??[],illustrations:plan.illustrations??[],
-   timeline:{fps:30,cuts:[{sourceStart:0,sourceEnd:source.duration,outputStart:0,speed:1}]},
+   timeline:{fps:30,cuts:cuts??[{sourceStart:0,sourceEnd:source.duration,outputStart:0,speed:1}]},
    review:{status:'review_incomplete',localChecks:['dimensions','duration','audio presence'],
     limitations:['Audiovisual provider review has not run.','No exhaustive frame or speech-continuity inspection.']},
    created:new Date().toISOString()};
@@ -68,5 +82,5 @@ export async function renderTemplatePlan(root:string,raw:unknown,onProgress?:(pr
   await rename(muxed,output);
   if(input.mode==='preview')await writeFile(resolve(folder,`${input.id}.preview.json`),JSON.stringify({version:input.version,exportId:id}),{mode:0o600});
   return result;
- }finally{await Promise.all([jobFile,silent,muxed].map(p=>unlink(p).catch(()=>{})));}
+ }finally{await Promise.all([jobFile,silent,muxed,quickFile].map(p=>unlink(p).catch(()=>{})));}
 }
