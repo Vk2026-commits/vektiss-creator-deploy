@@ -31,6 +31,19 @@
   ],
   "headers": [
     {
+      "source": "/api/mcp",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        },
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    },
+    {
       "source": "/api/local-capture/:path*",
       "headers": [
         {

@@ -8,7 +8,7 @@ Codex:
 
 ```
 codex mcp add vektiss --url https://creator.vektiss.com/api/mcp
-codex mcp login vektiss
+codex mcp login vektiss --scopes openid,offline_access
 ```
 
 Use the same Creator account that owns the profiles and projects. Disconnect under Creator profile → AI connections. A disconnected token is immediately denied; reconnecting requires a new grant.
