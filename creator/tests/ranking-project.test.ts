@@ -13,7 +13,7 @@ it('deduplicates repeated items across beats and escapes content',()=>{const p=t
 it('introduces an option before its verdict and uses three-word mobile captions',()=>{
  const p=templateSample('tier-list');p.beats[0].graphics!.nodes[0].introducedWord=0;
  const html=rankingProject(templateSampleSource,p,defaultEditBrand);
- expect(html).toContain('id="pending"');expect(html).toContain('"introduced":0');
+ expect(html).toContain('data-flight="0"');expect(html).toContain('"introduced":0');
  expect(html).toContain('Math.floor(at/3)');expect(html).toContain('font-size:78px');
  p.beats[0].graphics!.nodes[0].introducedWord=9;
  expect(()=>rankingProject(templateSampleSource,p,defaultEditBrand)).toThrow('EDIT_INTRODUCED_WORD');
