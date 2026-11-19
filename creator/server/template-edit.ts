@@ -86,7 +86,8 @@ export async function templateEdit(root:string,file:string,type:string,raw:unkno
   if(projects.length!==1)throw new DraftError('Could not identify one approved Ranking project for this video. No AI call was made.');
   try{output={proposal:approvedRankingPlan(projects[0],source)};}catch{throw new DraftError('The approved rankings do not match the saved speech. No AI call was made.');}
  }else{
- const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));body.set('instructions',options.instructions??'');body.set('style',JSON.stringify(resolvedStyle.brand));
+ const {captionScale:_captionScale,captionOffsetY:_captionOffsetY,...planningBrand}=resolvedStyle.brand;
+ const body=new FormData();body.set('action','edit-plan');body.set('profileId',options.profileId);body.set('template',options.template);body.set('source',JSON.stringify(source));body.set('instructions',options.instructions??'');body.set('style',JSON.stringify(planningBrand));
  phase='planning';onProgress?.(planningProgress('planning'));
  const response=await fetch(`${c.supabaseUrl}/functions/v1/script-assistant`,{method:'POST',headers,body,signal:AbortSignal.timeout(150000)});
  if(!response.ok)throw new DraftError('The edit plan could not finish. Retry with the same source; its transcript is saved.');
