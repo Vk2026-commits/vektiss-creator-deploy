@@ -23,7 +23,7 @@ import {boundarySchema,boundaryFormat,boundaryPrompt} from '../../../src/domain/
 import {openAICost,PRICING_VERSION} from '../../../src/domain/project-cost.ts';
 import {normalizeGraphicText} from '../../../src/domain/graphic-text.ts';
 import {ctaInstruction,ctaSelectionSchema,finalizeCta} from '../../../src/domain/cta.ts';
-import {socialOpeningInstruction,socialOpeningIssues} from '../../../src/domain/social-opening.ts';
+import {templateOpeningInstruction,socialOpeningIssues} from '../../../src/domain/social-opening.ts';
 import {deliveryInstruction} from '../../../src/domain/delivery.ts';
 import {storySectionsFromStarts} from '../../../src/domain/screenshot-story.ts';
 import {creatorContextSchema} from '../../../src/domain/strategy.ts';
@@ -239,7 +239,7 @@ Deno.serve(async request=>{
   const safetyRules=!clarify&&safetyProfile&&profileId!==steveReactionProfile?'\n'+safetyReactionDirection:'';
   const legacyRules=!clarify&&profileId===steveReactionProfile?'\n'+reactionDirection+'\n'+verdictDirection:'';
   const responseFormat=rebuild?{...scriptResponseFormat,json_schema:{...scriptResponseFormat.json_schema,schema:{...scriptResponseFormat.json_schema.schema,properties:{editorial_plan:{type:'string',description:'Concise reference-to-topic beat mapping and intended practical opportunity. Write this outline before the script.'},...scriptResponseFormat.json_schema.schema.properties},required:['editorial_plan',...scriptResponseFormat.json_schema.schema.required]}}}:scriptResponseFormat;
-  const ctaRules=languageLevelInstruction(resolveLanguageLevel(input!.brief.language_level,profile.strategy?.language_level))+'\n'+editorialDirection+'\n'+voiceRules+'\n'+socialOpeningInstruction+'\n'+deliveryInstruction+ctaInstruction(selectedCTA)+(input!.brief.screenshot_story?'\nWrite one continuous story discussing EACH screenshot in the supplied order. Give each image its own consecutive narration passage. Do not jump back to earlier screenshots. Opening belongs to first image, closing to last. Preserve the audience strategy and requested CTA.':'');
+  const ctaRules=languageLevelInstruction(resolveLanguageLevel(input!.brief.language_level,profile.strategy?.language_level))+'\n'+editorialDirection+'\n'+voiceRules+'\n'+templateOpeningInstruction(input!.brief.avatar_creation?.template??input!.brief.production?.edit_template)+'\n'+deliveryInstruction+ctaInstruction(selectedCTA)+(input!.brief.screenshot_story?'\nWrite one continuous story discussing EACH screenshot in the supplied order. Give each image its own consecutive narration passage. Do not jump back to earlier screenshots. Opening belongs to first image, closing to last. Preserve the audience strategy and requested CTA.':'');
   if(summarize){
    input!.brief.source=appendResearchEvidence(input!.brief.source,input!.brief.research_sources);
    if(input!.brief.source.trim().length<40)input!.brief.source=await readArticle(input!.brief.url);

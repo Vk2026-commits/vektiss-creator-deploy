@@ -8,3 +8,8 @@ export function socialOpeningIssues(draft:{hook:string;body:string}){
  if(/\*\*|__|^\s*#{1,6}\s/m.test(opening))issues.push('Remove Markdown formatting from spoken text.');
  return issues;
 }
+
+export function templateOpeningInstruction(template?:string){
+ if(template!=='tier-list')return socialOpeningInstruction;
+ return `RANKING FORMAT — OPENING OVERRIDE: The on-screen title introduces the topic. Start the spoken script immediately with the first approved ranking item's exact label and rating, then its explanation. Do not add a separate spoken hook, repeat the title, introduce the list, or say "here's how I'd rank", "today", or "let's rank". The hook field is a storage field: put the first item's label and rating there (for example, "Social posts—C tier."); begin the body with that item's explanation, without repeating it. Continue the remaining approved items in their approved reveal order and preserve the selected CTA. This ranking opening takes precedence over generic social-hook and reference-opening instructions; borrow the reference's explanation style, not its introductory hook. Only an explicit current creator request for a spoken introduction overrides this default. Keep the topic as the visual title, not narration. No Markdown headings in spoken fields.`;
+}
